@@ -1,0 +1,261 @@
+.notification-manager {
+  background: white;
+  padding: 2rem;
+  border-radius: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.notification-header {
+  margin-bottom: 2rem;
+}
+
+.notification-header h3 {
+  font-size: 1.5rem;
+  color: #333;
+  margin-bottom: 0.5rem;
+}
+
+.notification-header p {
+  color: #666;
+}
+
+.notification-permission {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: #f8f9fa;
+  border-radius: 12px;
+}
+
+.permission-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.permission-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.permission-info svg {
+  color: #999;
+}
+
+.permission-info svg.enabled {
+  color: #48bb78;
+}
+
+.permission-info svg.disabled {
+  color: #999;
+}
+
+.permission-info strong {
+  display: block;
+  color: #333;
+  margin-bottom: 0.25rem;
+}
+
+.permission-info p {
+  color: #666;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.enable-button {
+  padding: 0.75rem 1.5rem;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.enable-button:hover {
+  background: #5568d3;
+  transform: scale(1.05);
+}
+
+.reminders-section {
+  margin-top: 2rem;
+}
+
+.reminders-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.reminders-header h4 {
+  font-size: 1.25rem;
+  color: #333;
+}
+
+.add-reminder-btn {
+  padding: 0.5rem 1rem;
+  background: #f0f0f0;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.add-reminder-btn:hover {
+  background: #e0e0e0;
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.reminders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.reminder-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 2px solid #e0e0e0;
+  transition: all 0.3s;
+}
+
+.reminder-item:hover {
+  border-color: #667eea;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+}
+
+.reminder-content {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex: 1;
+}
+
+.reminder-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.reminder-toggle input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #667eea;
+}
+
+.reminder-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: 600;
+  color: #333;
+}
+
+.reminder-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.reminder-details strong {
+  color: #333;
+}
+
+.reminder-type {
+  font-size: 0.85rem;
+  color: #666;
+  text-transform: capitalize;
+}
+
+.delete-reminder {
+  background: transparent;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 6px;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-reminder:hover {
+  background: #ffe8e8;
+  color: #f56565;
+}
+
+.no-reminders {
+  text-align: center;
+  padding: 2rem;
+  color: #999;
+  font-style: italic;
+}
+
+.notification-info {
+  padding: 1.5rem;
+  background: #e8f4f8;
+  border-radius: 12px;
+  border-left: 4px solid #667eea;
+}
+
+.notification-info p {
+  color: #333;
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+.notification-info ul {
+  list-style: none;
+  padding-left: 0;
+}
+
+.notification-info li {
+  padding: 0.5rem 0;
+  padding-left: 1.5rem;
+  position: relative;
+  color: #666;
+}
+
+.notification-info li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: #667eea;
+  font-weight: bold;
+}
+
+@media (max-width: 768px) {
+  .notification-manager {
+    padding: 1.5rem;
+  }
+
+  .permission-status {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .reminders-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .reminder-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+}

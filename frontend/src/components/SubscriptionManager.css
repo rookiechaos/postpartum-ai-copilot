@@ -1,0 +1,192 @@
+.subscription-manager {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.subscription-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.subscription-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #333;
+}
+
+.current-subscription {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.plan-badge,
+.status-badge {
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.plan-badge {
+  background: #667eea;
+  color: white;
+  text-transform: capitalize;
+}
+
+.status-badge {
+  background: #48bb78;
+  color: white;
+  text-transform: capitalize;
+}
+
+.subscription-info {
+  background: #f7fafc;
+  padding: 1.5rem;
+  border-radius: 12px;
+  margin-bottom: 2rem;
+}
+
+.info-item {
+  margin-bottom: 0.75rem;
+  color: #4a5568;
+}
+
+.info-item.warning {
+  color: #c05621;
+}
+
+.cancel-button {
+  margin-top: 1rem;
+  padding: 0.75rem 1.5rem;
+  background: #f56565;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.cancel-button:hover:not(:disabled) {
+  background: #e53e3e;
+}
+
+.cancel-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+}
+
+.plan-card {
+  position: relative;
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 2rem;
+  transition: all 0.3s;
+}
+
+.plan-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+.plan-card.popular {
+  border-color: #667eea;
+  border-width: 3px;
+}
+
+.plan-card.current {
+  border-color: #48bb78;
+  background: #f0fff4;
+}
+
+.popular-badge,
+.current-badge {
+  position: absolute;
+  top: -12px;
+  right: 20px;
+  padding: 0.5rem 1rem;
+  background: #667eea;
+  color: white;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.current-badge {
+  background: #48bb78;
+}
+
+.plan-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.plan-icon {
+  margin-bottom: 1rem;
+}
+
+.plan-header h3 {
+  margin: 0.5rem 0;
+  color: #2d3748;
+  font-size: 1.5rem;
+}
+
+.plan-price {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #667eea;
+}
+
+.plan-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 2rem 0;
+}
+
+.plan-features li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  color: #4a5568;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.plan-features li:last-child {
+  border-bottom: none;
+}
+
+.subscribe-button {
+  width: 100%;
+  padding: 1rem;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.subscribe-button:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+.subscribe-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

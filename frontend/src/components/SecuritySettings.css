@@ -1,0 +1,231 @@
+.security-settings {
+  padding: 2rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.security-header {
+  margin-bottom: 2rem;
+}
+
+.security-header h2 {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.security-header p {
+  color: var(--text-secondary, #666);
+}
+
+.security-section {
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.section-header h3 {
+  font-size: 1.1rem;
+  margin-bottom: 0.25rem;
+}
+
+.section-header p {
+  font-size: 0.9rem;
+  color: var(--text-secondary, #666);
+}
+
+.security-status {
+  margin-top: 1rem;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.status-enabled {
+  color: #48bb78;
+}
+
+.status-disabled {
+  color: #f56565;
+}
+
+.two-fa-setup {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  background: white;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.two-fa-setup h4 {
+  margin-bottom: 1rem;
+}
+
+.qr-code {
+  max-width: 200px;
+  margin: 1rem auto;
+  display: block;
+}
+
+.verification-input {
+  width: 200px;
+  padding: 0.75rem;
+  font-size: 1.2rem;
+  text-align: center;
+  letter-spacing: 0.5rem;
+  border: 2px solid var(--border-color, #e0e0e0);
+  border-radius: 8px;
+  margin: 1rem 0;
+}
+
+.security-actions {
+  margin-top: 1rem;
+}
+
+.devices-list {
+  margin-top: 1rem;
+}
+
+.device-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: white;
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+}
+
+.device-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+}
+
+.device-info h4 {
+  margin-bottom: 0.25rem;
+}
+
+.device-meta {
+  font-size: 0.85rem;
+  color: var(--text-secondary, #666);
+}
+
+.device-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.trusted-badge {
+  background: #48bb78;
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+}
+
+.btn-danger {
+  background: #f56565;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.btn-danger:hover {
+  background: #e53e3e;
+}
+
+.login-history-list {
+  margin-top: 1rem;
+}
+
+.login-entry {
+  padding: 1rem;
+  background: white;
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+  border-left: 4px solid;
+}
+
+.login-entry.success {
+  border-left-color: #48bb78;
+}
+
+.login-entry.failed {
+  border-left-color: #f56565;
+}
+
+.login-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.status-success {
+  color: #48bb78;
+}
+
+.status-failed {
+  color: #f56565;
+}
+
+.login-meta {
+  font-size: 0.85rem;
+  color: var(--text-secondary, #666);
+  margin-top: 0.25rem;
+}
+
+.failure-reason {
+  font-size: 0.85rem;
+  color: #f56565;
+  margin-top: 0.5rem;
+  font-style: italic;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--text-secondary, #666);
+  padding: 2rem;
+}
+
+.security-settings-loading {
+  text-align: center;
+  padding: 3rem;
+  color: var(--text-secondary, #666);
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .security-section {
+    background: var(--bg-secondary-dark, #2a2a2a);
+  }
+
+  .two-fa-setup {
+    background: var(--bg-primary-dark, #1a1a1a);
+  }
+
+  .device-item {
+    background: var(--bg-primary-dark, #1a1a1a);
+  }
+
+  .login-entry {
+    background: var(--bg-primary-dark, #1a1a1a);
+  }
+}
