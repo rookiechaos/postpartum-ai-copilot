@@ -1,0 +1,27 @@
+{
+  "messages": {
+    "consecutive_low_sleep": "連続{days}日間、赤ちゃんの睡眠が不足しています。注意深く観察してください。",
+    "consecutive_long_intervals": "連続{count}回、授乳間隔が長すぎます。注意深く観察してください。",
+    "consecutive_low_mood": "連続{days}日間、気分が低い状態が続いています。メンタルヘルスに注意してください。",
+    "high_feeding_frequency": "授乳頻度が高く、平均間隔は{hours}時間です。",
+    "low_feeding_frequency": "授乳頻度が低く、平均間隔は{hours}時間です。注意深く観察してください。",
+    "weight_loss": "体重が{percent}%減少しています。回復状況を注意深く観察してください。",
+    "breast_condition": "乳房の状態の変化が頻繁です。医師または授乳コンサルタントに相談することを検討してください。"
+  },
+  "suggestions": {
+    "consecutive_low_sleep": [
+      "睡眠環境を確認してください",
+      "就寝時間のルーティンを確立してください",
+      "必要に応じて小児科医に相談してください"
+    ],
+    "consecutive_low_mood": [
+      "休息を取ってください",
+      "サポートネットワークに連絡してください",
+      "必要に応じてメンタルヘルス専門家に相談してください"
+    ],
+    "significant_weight_loss": [
+      "栄養摂取を確認してください",
+      "必要に応じて医師に相談してください"
+    ]
+  }
+}
