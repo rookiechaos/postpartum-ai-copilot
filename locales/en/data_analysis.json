@@ -1,0 +1,27 @@
+{
+  "messages": {
+    "consecutive_low_sleep": "Baby has had insufficient sleep for {days} consecutive days; please monitor closely.",
+    "consecutive_long_intervals": "Feeding intervals have been too long for {count} consecutive times; please monitor.",
+    "consecutive_low_mood": "Low mood detected for {days} consecutive days; please pay attention to mental health.",
+    "high_feeding_frequency": "Feeding frequency is high, average interval {hours} hours.",
+    "low_feeding_frequency": "Feeding frequency is low, average interval {hours} hours; please monitor.",
+    "weight_loss": "Weight decreased by {percent}%; please monitor recovery.",
+    "breast_condition": "Breast condition changes are frequent; consider consulting a doctor or lactation consultant."
+  },
+  "suggestions": {
+    "consecutive_low_sleep": [
+      "Check sleep environment",
+      "Establish a bedtime routine",
+      "Consult a pediatrician if needed"
+    ],
+    "consecutive_low_mood": [
+      "Take time to rest",
+      "Reach out to your support network",
+      "Consider consulting a mental health professional if needed"
+    ],
+    "significant_weight_loss": [
+      "Ensure adequate nutrition",
+      "Consult your doctor if needed"
+    ]
+  }
+}

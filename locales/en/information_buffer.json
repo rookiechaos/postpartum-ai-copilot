@@ -1,0 +1,7 @@
+{
+  "emergency_red_flag": "If this is a medical emergency, call emergency services immediately.",
+  "medical_advice_blocked": "I'm unable to provide specific medical advice. Please consult your healthcare provider for medical concerns.",
+  "companion_indicators": ["I understand", "You're doing", "That sounds", "I hear you"],
+  "baby_new_note": "Remember, your baby is very new - everything is still adjusting!",
+  "low_sleep_note": "I noticed sleep has been very limited. Please prioritize rest whenever possible."
+}
