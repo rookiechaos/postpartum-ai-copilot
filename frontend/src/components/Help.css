@@ -1,0 +1,160 @@
+.help-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.help-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.help-header h2 {
+  font-size: 2rem;
+  color: #333;
+  margin-bottom: 0.5rem;
+}
+
+.help-header p {
+  color: #666;
+  font-size: 1.1rem;
+}
+
+.help-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.help-section {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.help-section-header {
+  width: 100%;
+  padding: 1.5rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background 0.3s;
+}
+
+.help-section-header:hover {
+  background: #f8f9fa;
+}
+
+.help-section-title {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.help-icon {
+  color: #667eea;
+}
+
+.chevron {
+  color: #999;
+  transition: transform 0.3s;
+}
+
+.chevron.open {
+  transform: rotate(90deg);
+}
+
+.help-section-content {
+  padding: 0 1.5rem 1.5rem;
+  color: #666;
+  line-height: 1.8;
+}
+
+.help-section-content h4 {
+  color: #333;
+  margin-bottom: 0.75rem;
+  font-size: 1.2rem;
+}
+
+.help-section-content ul,
+.help-section-content ol {
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+}
+
+.help-section-content li {
+  margin: 0.5rem 0;
+}
+
+.help-section-content strong {
+  color: #333;
+}
+
+.help-note {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #fff3cd;
+  border-left: 4px solid #ffc107;
+  border-radius: 4px;
+  color: #856404;
+}
+
+.help-footer {
+  margin-top: 3rem;
+  padding-top: 2rem;
+  border-top: 2px solid #e0e0e0;
+}
+
+.help-contact {
+  background: #f8f9fa;
+  padding: 1.5rem;
+  border-radius: 12px;
+}
+
+.help-contact h4 {
+  color: #333;
+  margin-bottom: 1rem;
+}
+
+.help-contact p {
+  color: #666;
+  margin-bottom: 1rem;
+}
+
+.help-contact ul {
+  list-style: none;
+  padding-left: 0;
+}
+
+.help-contact li {
+  padding: 0.5rem 0;
+  color: #666;
+  padding-left: 1.5rem;
+  position: relative;
+}
+
+.help-contact li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: #667eea;
+  font-weight: bold;
+}
+
+@media (max-width: 768px) {
+  .help-container {
+    padding: 1rem;
+  }
+
+  .help-header h2 {
+    font-size: 1.5rem;
+  }
+}

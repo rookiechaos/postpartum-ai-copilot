@@ -1,0 +1,105 @@
+.export-data {
+  background: white;
+  padding: 2rem;
+  border-radius: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.export-header {
+  margin-bottom: 2rem;
+}
+
+.export-header h3 {
+  font-size: 1.5rem;
+  color: #333;
+  margin-bottom: 0.5rem;
+}
+
+.export-header p {
+  color: #666;
+  line-height: 1.6;
+}
+
+.export-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.export-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s;
+  text-align: center;
+}
+
+.export-button:hover:not(:disabled) {
+  border-color: #667eea;
+  background: linear-gradient(135deg, #e8f0ff 0%, #d4e8f0 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+}
+
+.export-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.export-button svg {
+  color: #667eea;
+}
+
+.export-button span {
+  font-weight: 600;
+  color: #333;
+  font-size: 1rem;
+}
+
+.export-button small {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.export-button .spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.export-info {
+  padding: 1rem;
+  background: #fff3cd;
+  border-left: 4px solid #ffc107;
+  border-radius: 8px;
+}
+
+.export-info p {
+  color: #666;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.export-info strong {
+  color: #333;
+}
+
+@media (max-width: 768px) {
+  .export-data {
+    padding: 1.5rem;
+  }
+
+  .export-options {
+    grid-template-columns: 1fr;
+  }
+}
