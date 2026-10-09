@@ -18,7 +18,7 @@ From the repository root (with backend dependencies installed and `.env` in `bac
 python workers/worker.py
 ```
 
-Workers add `backend/` to `sys.path` via `bootstrap.py` and load `backend/.env`.
+Workers add `core/` and `backend/` to `sys.path` via `bootstrap.py` and load `backend/.env`.
 
 ## Docker
 

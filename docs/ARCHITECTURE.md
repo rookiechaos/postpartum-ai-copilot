@@ -4,13 +4,14 @@ Postpartum AI Copilot uses a server-client architecture with an async task queue
 
 ## Overview
 
-| Component | Role | Technology |
-|-----------|------|------------|
-| API server | HTTP endpoints, auth, task submission | FastAPI |
-| Workers | Poll queue, run AI/tracking tasks | Python asyncio (`workers/`) |
-| Task queue | Priority queue, retries, timeouts | SQL-backed custom queue |
-| Database | Users, tracking, tasks | SQLite (dev) / PostgreSQL (prod) |
-| Frontend | Web UI | React + Vite |
+| Layer | Location | Role |
+|-------|----------|------|
+| API server | `backend/` | HTTP endpoints, auth middleware, models |
+| Domain logic | `core/services/` | Business services |
+| Workers | `workers/` | Async task processing |
+| Task queue | SQL-backed custom queue | Priority, retries, timeouts |
+| Database | SQLite (dev) / PostgreSQL (prod) | Users, tracking, tasks |
+| Frontend | React + Vite | Web UI |
 
 ## Core design
 

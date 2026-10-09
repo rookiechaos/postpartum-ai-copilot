@@ -1,0 +1,266 @@
+"""
+Tracking Routes - API endpoints for tracking data management
+"""
+
+from fastapi import APIRouter, Depends, Query, Request
+from typing import List, Dict, Any
+from datetime import datetime
+from sqlalchemy.orm import Session
+
+from dependencies.database import get_db
+from middleware.auth import get_current_user
+from middleware.authorization import check_user_authorization
+from middleware.rate_limit import rate_limit, RATE_LIMITS
+from models.schemas import User, TrackingEntry, TrackingSummary, EmotionalCheckIn
+from services.task_queue import TaskPriority
+from services.nsfw_detector import get_nsfw_detector
+from exceptions import (
+    PostpartumException,
+    DatabaseError,
+    AIServiceError,
+    TaskQueueError,
+    ValidationError
+)
+from config.settings import get_settings
+from dependencies.container import get_container
+from fastapi import HTTPException
+
+router = APIRouter(tags=["tracking"])
+
+container = get_container()
+settings = get_settings()
+
+
+@router.post("/api/tracking", response_model=Dict[str, Any])
+@rate_limit(RATE_LIMITS["tracking"])
+async def add_tracking_entry(
+    request: Request,
+    entry: TrackingEntry,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Add a new tracking entry (feeding, diaper, sleep, mood).
+
+    Requires authentication. user_id is always taken from the JWT token.
+    NSFW detection is applied to notes and mood_notes fields.
+    """
+    if entry.user_id and entry.user_id != current_user.user_id:
+        check_user_authorization(current_user, entry.user_id, "tracking entry")
+
+    user_id = current_user.user_id
+    entry_data = entry.model_copy(update={"user_id": user_id})
+    tracking_service = container.get("tracking_service")
+
+    try:
+        nsfw_detector = get_nsfw_detector()
+
+        if entry_data.notes:
+            notes_check = await nsfw_detector.check(entry_data.notes, check_type="input")
+            if nsfw_detector.should_block(notes_check):
+                raise ValidationError("Notes contain inappropriate content. Please use appropriate language.")
+
+        if entry_data.mood_notes:
+            mood_check = await nsfw_detector.check(entry_data.mood_notes, check_type="input")
+            if nsfw_detector.should_block(mood_check):
+                raise ValidationError("Mood notes contain inappropriate content. Please use appropriate language.")
+
+        result = await tracking_service.add_entry(entry_data, db)
+        return result
+    except PostpartumException:
+        raise
+    except Exception as e:
+        raise DatabaseError(f"Failed to add tracking entry: {str(e)}")
+
+
+@router.get("/api/tracking/{user_id}", response_model=List[TrackingEntry])
+@rate_limit(RATE_LIMITS["tracking"])
+async def get_tracking_entries(
+    request: Request,
+    user_id: str,
+    days: int = Query(7, ge=1, le=365),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get tracking entries for a user"""
+    check_user_authorization(current_user, user_id, "tracking entries")
+    tracking_service = container.get("tracking_service")
+
+    try:
+        entries = await tracking_service.get_entries(user_id, db, days=days)
+        return entries
+    except PostpartumException:
+        raise
+    except Exception as e:
+        raise DatabaseError(f"Failed to get tracking entries: {str(e)}")
+
+
+@router.get("/api/tracking/{user_id}/summary", response_model=TrackingSummary)
+@rate_limit(RATE_LIMITS["default"])
+async def get_tracking_summary(
+    request: Request,
+    user_id: str,
+    days: int = Query(7, ge=1, le=90),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get AI-generated summary and patterns from tracking data
+
+    Now uses async task queue for processing.
+    Returns task_id, client should poll /api/tasks/{task_id}
+    """
+    check_user_authorization(current_user, user_id, "user's tracking data")
+    tracking_service = container.get("tracking_service")
+    ai_service = container.get("ai_service")
+    task_queue = container.get("task_queue")
+
+    async_mode = settings.async_mode
+
+    if not async_mode:
+        try:
+            entries = await tracking_service.get_entries(user_id, db, days=days)
+            context = await tracking_service.get_user_context(user_id, db)
+            language = context.get("language", "en") or "en"
+
+            summary = await ai_service.analyze_tracking(
+                entries=entries,
+                context=context,
+                language=language
+            )
+
+            return TrackingSummary(
+                patterns=summary.get("patterns", []),
+                insights=summary.get("insights", []),
+                recommendations=summary.get("recommendations", []),
+                normalcy_checks=summary.get("normalcy_checks", []),
+                timestamp=datetime.now().isoformat()
+            )
+        except PostpartumException:
+            raise
+        except Exception as e:
+            raise AIServiceError(f"Failed to analyze tracking data: {str(e)}")
+
+    try:
+        task_data = {
+            "user_id": user_id,
+            "days": days
+        }
+
+        task_id = task_queue.create_task(
+            task_type="tracking_analysis",
+            task_data=task_data,
+            user_id=user_id,
+            db=db,
+            priority=TaskPriority.LOW,
+            timeout=600
+        )
+
+        raise HTTPException(
+            status_code=202,
+            detail={
+                "message": "Task created, please poll /api/tasks/{task_id} for result",
+                "task_id": task_id,
+                "status": "pending"
+            }
+        )
+    except HTTPException:
+        raise
+    except PostpartumException:
+        raise
+    except Exception as e:
+        raise TaskQueueError(f"Failed to create tracking analysis task: {str(e)}")
+
+
+@router.get("/api/tracking/{user_id}/daily-summary")
+@rate_limit(RATE_LIMITS["default"])
+async def get_daily_summary(
+    request: Request,
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get daily summary of tracking data"""
+    check_user_authorization(current_user, user_id, "tracking summary")
+    tracking_service = container.get("tracking_service")
+    ai_service = container.get("ai_service")
+
+    try:
+        summary = await tracking_service.generate_daily_summary(
+            user_id=user_id,
+            db=db,
+            ai_service=ai_service
+        )
+        return summary
+    except PostpartumException:
+        raise
+    except Exception as e:
+        raise DatabaseError(f"Failed to get daily summary: {str(e)}")
+
+
+@router.get("/api/tracking/{user_id}/weekly-summary")
+@rate_limit(RATE_LIMITS["default"])
+async def get_weekly_summary(
+    request: Request,
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get weekly summary of tracking data"""
+    check_user_authorization(current_user, user_id, "tracking summary")
+    tracking_service = container.get("tracking_service")
+    ai_service = container.get("ai_service")
+
+    try:
+        summary = await tracking_service.generate_weekly_summary(
+            user_id=user_id,
+            db=db,
+            ai_service=ai_service
+        )
+        return summary
+    except PostpartumException:
+        raise
+    except Exception as e:
+        raise DatabaseError(f"Failed to get weekly summary: {str(e)}")
+
+
+@router.post("/api/emotional-checkin")
+@rate_limit(RATE_LIMITS["tracking"])
+async def emotional_checkin(
+    request: Request,
+    checkin: EmotionalCheckIn,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Daily emotional check-in with risk detection.
+
+    Requires authentication. user_id is always taken from the JWT token.
+    """
+    if checkin.user_id and checkin.user_id != current_user.user_id:
+        check_user_authorization(current_user, checkin.user_id, "emotional check-in")
+
+    user_id = current_user.user_id
+    tracking_service = container.get("tracking_service")
+    ai_service = container.get("ai_service")
+
+    try:
+        recent_moods = await tracking_service.get_mood_history(user_id, db, days=7)
+
+        analysis = await ai_service.analyze_emotional_state(
+            current_checkin=checkin.model_copy(update={"user_id": user_id}),
+            mood_history=recent_moods
+        )
+
+        return {
+            "assessment": analysis.get("assessment", ""),
+            "risk_level": analysis.get("risk_level", "low"),
+            "suggestions": analysis.get("suggestions", []),
+            "escalation_needed": analysis.get("escalation_needed", False),
+            "resources": analysis.get("resources", []),
+            "timestamp": datetime.now().isoformat()
+        }
+    except PostpartumException:
+        raise
+    except Exception as e:
+        raise AIServiceError(f"Failed to process emotional check-in: {str(e)}")

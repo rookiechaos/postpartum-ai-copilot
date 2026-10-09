@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+*.egg-info/
+dist/
+build/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+backend/.env
+
+# Local-only folder (see do-not-upload/README.md)
+do-not-upload/local/*
+!do-not-upload/local/.gitkeep
+!do-not-upload/local/backend.env.example
+do-not-upload/data/*
+!do-not-upload/data/.gitkeep
+do-not-upload/logs/*
+!do-not-upload/logs/.gitkeep
+do-not-upload/vector_db/*
+!do-not-upload/vector_db/.gitkeep
+do-not-upload/private-docs/*
+!do-not-upload/private-docs/.gitkeep
+do-not-upload/scripts/*
+!do-not-upload/scripts/.gitkeep
+
+# Databases and runtime data (also kept under do-not-upload/)
+*.db
+*.sqlite
+*.sqlite3
+/vector_db/
+*.chroma
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs (legacy root path; runtime logs go to do-not-upload/logs/)
+/logs/
+*.log
+
+# Test caches
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Legacy local paths
+backend/logs/

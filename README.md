@@ -116,7 +116,8 @@ Set `AI_PROVIDER` in `backend/.env` to one of: `openai`, `claude`, `gemini`.
 
 ```
 Postpartum/
-├── backend/           # FastAPI API, services, models
+├── backend/           # FastAPI API layer (~56 files)
+├── core/              # Business services (~40 files)
 ├── workers/           # Background AI / notification workers
 ├── frontend/          # React web app
 ├── tests/             # Unit, integration, and internal tests

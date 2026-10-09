@@ -16,6 +16,7 @@ Last updated: 2026-07-04
 | `backend/tests/`, `backend/test_*_internal.py` | `tests/` | Centralized testing |
 | `backend/locales/` | `locales/` | Shared locale assets |
 | `backend/workers/` | `workers/` | Reduce backend file count |
+| `backend/services/` | `core/services/` | Split API layer from domain logic |
 | Root `ARCHITECTURE.md`, `PROJECT_STRUCTURE.md`, etc. | `docs/` | Cleaner repo root |
 | Root `test_*.py`, `stress_test.py` | `tests/integration/` | Test consolidation |
 | Local runtime / private files | `do-not-upload/` | Secrets, DB, logs (gitignored) |
@@ -23,7 +24,8 @@ Last updated: 2026-07-04
 ## Current layout
 
 ```
-backend/     API, services, models, middleware (~96 files)
+backend/     API, models, middleware, config (~56 files)
+core/        services/ — business logic (~40 files)
 workers/     AI + notification workers
 tests/       unit, integration, internal
 locales/     en/ and ja/ JSON + text
@@ -34,17 +36,23 @@ mobile/      React Native scaffold
 
 ## Backend (`backend/`)
 
-Application code only:
+HTTP/API layer only (target: ≤100 files):
 
 - `api/` — FastAPI routers (one module per feature area)
-- `services/` — business logic
 - `models/` — SQLAlchemy models + Pydantic schemas
 - `middleware/` — auth, rate limits, error handling
 - `dependencies/` — DB session + service container
 - `config/` — settings
 - `utils/` — helpers (e.g. `locale_loader.py`)
+- `main.py` — app entry (adds `core/` to `sys.path`)
 
-No tests, no markdown docs, no worker entry points inside `backend/`.
+## Core (`core/`)
+
+Domain / business logic:
+
+- `services/` — AI, tracking, auth, community, analytics, etc.
+
+Imports stay `from services.X import ...` when `core/` is on `PYTHONPATH` (handled by `main.py`, workers, and tests).
 
 ## Documentation (`docs/`)
 

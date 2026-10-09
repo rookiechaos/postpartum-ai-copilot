@@ -12,15 +12,17 @@ Postpartum/
 ├── docker-compose.yml
 ├── mypy.ini
 │
-├── backend/                  # FastAPI application (≤100 files target)
+├── backend/                  # FastAPI HTTP layer (~56 files, ≤100 target)
 │   ├── main.py               # App entry point
 │   ├── api/                  # Route modules by feature
 │   ├── config/               # Settings
 │   ├── dependencies/         # DI container, DB session
 │   ├── middleware/           # Auth, rate limit, errors
 │   ├── models/               # SQLAlchemy + Pydantic schemas
-│   ├── services/             # Business logic
 │   └── utils/                # Shared helpers
+│
+├── core/                     # Domain / business logic (~40 files)
+│   └── services/             # AI, tracking, auth, community, …
 │
 ├── workers/                  # Background workers (outside backend/)
 │   ├── worker.py             # AI worker entry point
@@ -66,7 +68,7 @@ Postpartum/
 
 ### Backend size limit
 
-`backend/` is capped at **100 files** (excluding `__pycache__`). Tests, docs, locales, and workers were moved out to stay under this limit.
+`backend/` is capped at **100 files**. Business logic lives in `core/services/`; workers, tests, docs, and locales stay outside `backend/`.
 
 ### Workers
 

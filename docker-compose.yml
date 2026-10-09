@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: postpartum_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postpartum_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postpartum_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-postpartum_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postpartum_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - postpartum_network
+
+  # API Server
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: postpartum_api
+    environment:
+      - PYTHONPATH=/app/core:/app/backend
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postpartum_user}:${POSTGRES_PASSWORD:-postpartum_pass}@postgres:5432/${POSTGRES_DB:-postpartum_db}
+      - AI_PROVIDER=${AI_PROVIDER:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      - ASYNC_MODE=${ASYNC_MODE:-true}
+      - RAG_ENABLED=${RAG_ENABLED:-true}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app/backend
+      - ./core:/app/core
+    working_dir: /app/backend
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - postpartum_network
+    restart: unless-stopped
+
+  # Worker Process
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: postpartum_worker
+    environment:
+      - PYTHONPATH=/app/core:/app/backend
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postpartum_user}:${POSTGRES_PASSWORD:-postpartum_pass}@postgres:5432/${POSTGRES_DB:-postpartum_db}
+      - AI_PROVIDER=${AI_PROVIDER:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - NUM_WORKERS=${NUM_WORKERS:-2}
+      - RAG_ENABLED=${RAG_ENABLED:-true}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app/backend
+      - ./core:/app/core
+      - ./workers:/workers
+    command: python /workers/worker.py
+    networks:
+      - postpartum_network
+    restart: unless-stopped
+    deploy:
+      replicas: 1
+
+volumes:
+  postgres_data:
+
+networks:
+  postpartum_network:
+    driver: bridge
