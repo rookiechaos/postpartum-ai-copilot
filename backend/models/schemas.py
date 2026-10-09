@@ -269,6 +269,7 @@ class UserLogin(BaseModel):
     """User login model"""
     email: str = Field(..., max_length=255)
     password: str = Field(..., max_length=128)
+    verification_token: Optional[str] = Field(default=None, min_length=6, max_length=64)
     
     @validator('email')
     def validate_email_format(cls, v):
@@ -293,7 +294,7 @@ class User(UserBase):
 
 class Token(BaseModel):
     """Token response"""
-    access_token: str
+    access_token: Optional[str] = None
     token_type: str = "bearer"
     refresh_token: Optional[str] = None
     requires_2fa: Optional[bool] = False
@@ -308,3 +309,4 @@ class TokenData(BaseModel):
     """Token data"""
     user_id: Optional[str] = None
     email: Optional[str] = None
+    mfa_version: Optional[str] = None

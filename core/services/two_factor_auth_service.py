@@ -38,6 +38,8 @@ class TwoFactorAuthService:
             existing = db.query(TwoFactorAuthDB).filter(
                 TwoFactorAuthDB.user_id == user_id
             ).first()
+            if existing and existing.is_enabled:
+                raise ValidationError("Disable the current authenticator before setting up another")
             
             # Generate secret key
             secret = pyotp.random_base32()
@@ -84,6 +86,8 @@ class TwoFactorAuthService:
             }
         except Exception as e:
             db.rollback()
+            if isinstance(e, ValidationError):
+                raise
             logger.log_error(e, context={"action": "setup_2fa", "user_id": user_id})
             raise DatabaseError(f"Failed to setup 2FA: {str(e)}")
     
@@ -108,7 +112,7 @@ class TwoFactorAuthService:
             two_fa = db.query(TwoFactorAuthDB).filter(
                 TwoFactorAuthDB.user_id == user_id,
                 TwoFactorAuthDB.is_enabled == True
-            ).first()
+            ).with_for_update().first()
             
             if not two_fa or not two_fa.secret_key:
                 return False
@@ -121,7 +125,7 @@ class TwoFactorAuthService:
             # Check backup codes
             if two_fa.backup_codes and token in two_fa.backup_codes:
                 # Remove used backup code
-                two_fa.backup_codes.remove(token)
+                two_fa.backup_codes = [code for code in two_fa.backup_codes if code != token]
                 db.commit()
                 return True
             
@@ -220,9 +224,5 @@ class TwoFactorAuthService:
             }
         except Exception as e:
             logger.log_error(e, context={"action": "get_2fa_status", "user_id": user_id})
-            return {
-                "is_enabled": False,
-                "is_setup": False,
-                "has_backup_codes": False
-            }
+            raise DatabaseError("Unable to check two-factor authentication") from e
 

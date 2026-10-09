@@ -23,6 +23,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         
         # Add custom security headers
         response.headers["X-Request-ID"] = request.headers.get("X-Request-ID", "unknown")
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Pragma"] = "no-cache"
         
         return response
 

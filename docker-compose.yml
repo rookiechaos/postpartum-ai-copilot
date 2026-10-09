@@ -27,17 +27,22 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     container_name: postpartum_api
-    environment:
-      - PYTHONPATH=/app/core:/app/backend
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postpartum_user}:${POSTGRES_PASSWORD:-postpartum_pass}@postgres:5432/${POSTGRES_DB:-postpartum_db}
-      - AI_PROVIDER=${AI_PROVIDER:-openai}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
-      - ASYNC_MODE=${ASYNC_MODE:-true}
-      - RAG_ENABLED=${RAG_ENABLED:-true}
+    environment: &backend_environment
+      PYTHONPATH: /app/core:/app/backend
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postpartum_user}:${POSTGRES_PASSWORD:-postpartum_pass}@postgres:5432/${POSTGRES_DB:-postpartum_db}
+      AI_PROVIDER: ${AI_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY before starting the services}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      ASYNC_MODE: ${ASYNC_MODE:-true}
+      RAG_ENABLED: ${RAG_ENABLED:-true}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      PAYPAL_WEBHOOK_ID: ${PAYPAL_WEBHOOK_ID:-}
+      PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID:-}
+      PAYPAL_CLIENT_SECRET: ${PAYPAL_CLIENT_SECRET:-}
+      PAYPAL_ENVIRONMENT: ${PAYPAL_ENVIRONMENT:-sandbox}
     ports:
       - "8000:8000"
     depends_on:
@@ -46,6 +51,7 @@ services:
     volumes:
       - ./backend:/app/backend
       - ./core:/app/core
+      - runtime_data:/app/do-not-upload
     working_dir: /app/backend
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     networks:
@@ -59,22 +65,17 @@ services:
       dockerfile: backend/Dockerfile
     container_name: postpartum_worker
     environment:
-      - PYTHONPATH=/app/core:/app/backend
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postpartum_user}:${POSTGRES_PASSWORD:-postpartum_pass}@postgres:5432/${POSTGRES_DB:-postpartum_db}
-      - AI_PROVIDER=${AI_PROVIDER:-openai}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - NUM_WORKERS=${NUM_WORKERS:-2}
-      - RAG_ENABLED=${RAG_ENABLED:-true}
+      <<: *backend_environment
+      NUM_WORKERS: ${NUM_WORKERS:-2}
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
       - ./backend:/app/backend
       - ./core:/app/core
-      - ./workers:/workers
-    command: python /workers/worker.py
+      - ./workers:/app/workers
+      - runtime_data:/app/do-not-upload
+    command: python /app/workers/worker.py
     networks:
       - postpartum_network
     restart: unless-stopped
@@ -83,6 +84,7 @@ services:
 
 volumes:
   postgres_data:
+  runtime_data:
 
 networks:
   postpartum_network:

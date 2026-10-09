@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from models.database import SubscriptionDB, UserDB
 from services.logging_service import logger
-from exceptions import ValidationError, NotFoundError
+from exceptions import ValidationError, NotFoundError, ServiceUnavailableError, ConflictError
 
 
 class PaymentService:
@@ -52,6 +52,8 @@ class PaymentService:
             valid_plans = ["free", "premium", "enterprise"]
             if plan not in valid_plans:
                 raise ValidationError(f"Invalid plan: {plan}. Must be one of {valid_plans}")
+            if plan != "free":
+                raise ServiceUnavailableError("Paid subscriptions are unavailable until verified checkout is configured")
             
             # Check if user already has an active subscription
             existing = db.query(SubscriptionDB).filter(
@@ -60,14 +62,8 @@ class PaymentService:
             ).first()
             
             if existing:
-                # Update existing subscription
-                existing.plan = plan
-                existing.payment_provider = payment_provider
-                if payment_provider_id:
-                    existing.payment_provider_id = payment_provider_id
-                existing.updated_at = datetime.utcnow()
-                db.commit()
-                db.refresh(existing)
+                if existing.plan != "free":
+                    raise ConflictError("Cancel the existing subscription before changing plans")
                 return self._subscription_to_dict(existing)
             
             # Create new subscription
@@ -76,8 +72,8 @@ class PaymentService:
                 user_id=user_id,
                 plan=plan,
                 status="active",
-                payment_provider=payment_provider,
-                payment_provider_id=payment_provider_id,
+                payment_provider=None,
+                payment_provider_id=None,
                 current_period_start=now,
                 current_period_end=now + timedelta(days=30)  # Default 30 days
             )
@@ -107,6 +103,8 @@ class PaymentService:
             ).first()
             
             if subscription:
+                if subscription.plan != "free" and not self._has_verified_payment(subscription):
+                    return None
                 return self._subscription_to_dict(subscription)
             return None
         except Exception as e:
@@ -160,12 +158,19 @@ class PaymentService:
         self,
         payment_provider_id: str,
         status: str,
-        db: Session
+        db: Session,
+        payment_provider: str,
     ) -> bool:
         """Update subscription status from webhook"""
         try:
+            if not payment_provider_id or payment_provider not in ("stripe", "paypal"):
+                raise ValidationError("Invalid payment subscription")
+            status = {"canceled": "cancelled"}.get(status, status)
+            if status not in {"active", "cancelled", "expired", "trial", "trialing", "suspended", "past_due", "unpaid", "incomplete", "incomplete_expired", "paused"}:
+                raise ValidationError("Invalid subscription status")
             subscription = db.query(SubscriptionDB).filter(
-                SubscriptionDB.payment_provider_id == payment_provider_id
+                SubscriptionDB.payment_provider_id == payment_provider_id,
+                SubscriptionDB.payment_provider == payment_provider,
             ).first()
             
             if not subscription:
@@ -182,7 +187,12 @@ class PaymentService:
         except Exception as e:
             db.rollback()
             logger.log_error(e, context={"action": "update_subscription_status"})
-            return False
+            raise
+
+    @staticmethod
+    def _has_verified_payment(subscription: SubscriptionDB) -> bool:
+        metadata = subscription.subscription_metadata or {}
+        return metadata.get("payment_verified") is True and metadata.get("verified_plan") == subscription.plan
     
     def check_subscription_access(
         self,

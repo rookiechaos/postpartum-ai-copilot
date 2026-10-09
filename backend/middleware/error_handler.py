@@ -19,7 +19,8 @@ async def postpartum_exception_handler(request: Request, exc: PostpartumExceptio
         AuthorizationError,
         ConflictError,
         RateLimitError,
-        ServiceUnavailableError
+        ServiceUnavailableError,
+        DatabaseError, AIServiceError, TaskQueueError,
     )
     
     logger.log_error(
@@ -47,15 +48,21 @@ async def postpartum_exception_handler(request: Request, exc: PostpartumExceptio
         status_code = status.HTTP_429_TOO_MANY_REQUESTS
     elif isinstance(exc, ServiceUnavailableError):
         status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    elif isinstance(exc, (DatabaseError, AIServiceError, TaskQueueError)):
+        status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+
+    from config.settings import get_settings
+    internal_error = isinstance(exc, (DatabaseError, AIServiceError, TaskQueueError, ServiceUnavailableError))
+    expose_details = get_settings().debug or not internal_error
     
     return JSONResponse(
         status_code=status_code,
         content={
             "error": {
                 "type": exc.__class__.__name__,
-                "message": exc.message,
+                "message": exc.message if expose_details else "Unable to complete the request. Please try again later.",
                 "code": exc.error_code,
-                "details": exc.details
+                "details": exc.details if expose_details else {}
             }
         }
     )
@@ -63,9 +70,13 @@ async def postpartum_exception_handler(request: Request, exc: PostpartumExceptio
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Handle validation errors"""
-    errors = exc.errors()
+    # Validation payloads can contain passwords, health text and non-JSON exception objects.
+    errors = [
+        {"type": item["type"], "loc": item["loc"], "msg": item["msg"]}
+        for item in exc.errors()
+    ]
     logger.log_error(
-        error=exc,
+        error=ValueError("Request validation failed"),
         context={
             "endpoint": request.url.path,
             "method": request.method,
@@ -91,6 +102,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     """Handle HTTP exceptions"""
+    from config.settings import get_settings
+
     logger.log_error(
         error=exc,
         context={
@@ -103,10 +116,14 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     
     return JSONResponse(
         status_code=exc.status_code,
+        headers=exc.headers,
         content={
             "error": {
                 "type": "HTTPException",
-                "message": exc.detail,
+                "message": (
+                    "Unable to complete the request. Please try again later."
+                    if exc.status_code >= 500 and not get_settings().debug else exc.detail
+                ),
                 "code": f"HTTP_{exc.status_code}",
                 "details": {}
             }

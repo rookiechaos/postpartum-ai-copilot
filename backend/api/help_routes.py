@@ -8,6 +8,7 @@ from typing import Optional, List
 from sqlalchemy.orm import Session
 from dependencies.database import get_db
 from middleware.auth import get_current_user, get_optional_user
+from middleware.admin import require_admin
 from models.schemas import User
 from dependencies.container import get_container
 from services.logging_service import logger

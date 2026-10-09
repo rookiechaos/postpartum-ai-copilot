@@ -15,6 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY backend/ /app/backend/
 COPY core/ /app/core/
+COPY workers/ /app/workers/
+COPY locales/ /app/locales/
+RUN mkdir -p /app/do-not-upload/logs /app/do-not-upload/data /app/do-not-upload/vector_db
 
 ENV PYTHONPATH=/app/core:/app/backend
 

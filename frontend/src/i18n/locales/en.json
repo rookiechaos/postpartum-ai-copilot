@@ -10,6 +10,7 @@
     "register": "Register",
     "email": "Email",
     "password": "Password",
+    "verificationCode": "Authenticator or backup code",
     "passwordHint": "At least 8 characters, with letters and numbers",
     "loginSubmit": "Log in",
     "registerSubmit": "Create account",

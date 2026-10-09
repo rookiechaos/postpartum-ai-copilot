@@ -11,7 +11,7 @@ from middleware.auth import get_current_user
 from models.schemas import User
 from dependencies.container import get_container
 from services.logging_service import logger
-from exceptions import ValidationError, NotFoundError, DatabaseError, ConflictError
+from exceptions import ValidationError, NotFoundError, DatabaseError, ConflictError, PostpartumException
 from utils.webhook_verification import verify_stripe_webhook, verify_paypal_webhook
 import json
 
@@ -57,7 +57,7 @@ async def create_subscription(
             db=db
         )
         return SubscriptionResponse(**created)
-    except (ValidationError, ConflictError):
+    except PostpartumException:
         raise
     except Exception as e:
         raise DatabaseError(
@@ -178,19 +178,21 @@ async def stripe_webhook(
             payment_service.update_subscription_status(
                 payment_provider_id=subscription_id,
                 status=status,
-                db=db
+                db=db,
+                payment_provider="stripe",
             )
         elif event_type == "customer.subscription.deleted":
             subscription_id = data.get("id")
             payment_service.update_subscription_status(
                 payment_provider_id=subscription_id,
                 status="cancelled",
-                db=db
+                db=db,
+                payment_provider="stripe",
             )
         
         logger.log_info(f"Stripe webhook processed: {event_type}")
         return {"status": "ok"}
-    except (ValidationError, NotFoundError):
+    except (PostpartumException, HTTPException):
         raise
     except Exception as e:
         logger.log_error(e, context={"action": "stripe_webhook"})
@@ -221,8 +223,7 @@ async def paypal_webhook(
         # Parse JSON payload
         payload = await request.json()
         
-        # Verify webhook (basic validation)
-        verify_paypal_webhook(payload=payload)
+        await verify_paypal_webhook(payload=payload, headers=request.headers)
         
         event_type = payload.get("event_type")
         resource = payload.get("resource", {})
@@ -235,12 +236,13 @@ async def paypal_webhook(
             payment_service.update_subscription_status(
                 payment_provider_id=subscription_id,
                 status=status.lower(),
-                db=db
+                db=db,
+                payment_provider="paypal",
             )
         
         logger.log_info(f"PayPal webhook processed: {event_type}")
         return {"status": "ok"}
-    except (ValidationError, NotFoundError):
+    except (PostpartumException, HTTPException):
         raise
     except Exception as e:
         logger.log_error(e, context={"action": "paypal_webhook"})

@@ -2,13 +2,13 @@
 
 **This folder holds local-only files that must not be pushed to GitHub.**
 
-Everything here is listed in `.gitignore`, except this README and `.gitkeep` placeholder files (so empty directories exist after clone).
+Everything here is listed in `.gitignore`, except this README, `.gitkeep` placeholder files, and the public `local/backend.env.example` template.
 
 ## Layout
 
 | Path | Purpose |
 |------|---------|
-| `local/backend.env` | Your real secrets (copy from `backend/env.example`) |
+| `local/backend.env` | Your real secrets (copy from `local/backend.env.example`) |
 | `local/frontend.env` | Optional frontend env overrides |
 | `data/` | SQLite databases and exports |
 | `logs/` | Application log files |
@@ -20,22 +20,22 @@ Everything here is listed in `.gitignore`, except this README and `.gitkeep` pla
 
 ```bash
 # Backend secrets (recommended location)
-cp backend/env.example do-not-upload/local/backend.env
+cp do-not-upload/local/backend.env.example do-not-upload/local/backend.env
 # Edit do-not-upload/local/backend.env with your API keys
 
 # Optional: symlink for tools that expect backend/.env
 ln -sf ../do-not-upload/local/backend.env backend/.env
 ```
 
-Default dev paths (when running from `backend/`):
+Default development storage lives under the project root, regardless of the process working directory:
 
-- Database: `../do-not-upload/data/postpartum.db`
-- Logs: `../do-not-upload/logs/`
-- Vector DB: `../do-not-upload/vector_db/`
+- Database: `do-not-upload/data/postpartum.db`
+- Logs: `do-not-upload/logs/`
+- Vector DB: `do-not-upload/vector_db/`
 
 ## GitHub
 
-The repository `.gitignore` excludes all contents of this folder except markers and this README. Before pushing, verify:
+The repository `.gitignore` excludes private contents of this folder. Before pushing, verify:
 
 ```bash
 git status

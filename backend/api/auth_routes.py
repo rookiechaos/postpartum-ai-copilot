@@ -107,6 +107,22 @@ async def login(
     
     # Check if 2FA is enabled
     two_fa_status = two_fa_service.get_2fa_status(user.user_id, db)
+    mfa_version = None
+    if two_fa_status.get("is_enabled", False):
+        if not credentials.verification_token:
+            return Token(requires_2fa=True)
+        mfa_version = auth_service.get_two_factor_version(user.user_id, db)
+        if not mfa_version:
+            raise HTTPException(status_code=401, detail="Please sign in again")
+        if not two_fa_service.verify_2fa(user.user_id, credentials.verification_token, db):
+            device_service.log_login(
+                user_id=user.user_id, ip_address=ip_address, user_agent=user_agent,
+                login_method="2fa", success=False,
+                failure_reason="Invalid second factor", db=db,
+            )
+            raise HTTPException(status_code=401, detail="Invalid two-factor authentication code")
+        if mfa_version != auth_service.get_two_factor_version(user.user_id, db):
+            raise HTTPException(status_code=401, detail="Please sign in again")
     
     # Register device
     device = device_service.register_device(
@@ -122,35 +138,30 @@ async def login(
         ip_address=ip_address,
         user_agent=user_agent,
         device_info={"device_id": device.get("device_id")},
-        login_method="password",
+        login_method="2fa" if mfa_version else "password",
         success=True,
         db=db
     )
     
-    # Create access token
+    token_claims = {"sub": user.user_id, "email": user.email, "mfa_version": mfa_version}
+    # Create access token only after all required factors have passed.
     access_token_expires = timedelta(minutes=auth_service.access_token_expire)
     access_token = auth_service.create_access_token(
-        data={"sub": user.user_id, "email": user.email},
+        data=token_claims,
         expires_delta=access_token_expires
     )
     
     # Create refresh token
     refresh_token = auth_service.create_refresh_token(
-        data={"sub": user.user_id, "email": user.email}
+        data=token_claims
     )
     
     response = Token(
         access_token=access_token,
         token_type="bearer",
         refresh_token=refresh_token,
-        requires_2fa=two_fa_status.get("is_enabled", False)
+        requires_2fa=False
     )
-    
-    # If 2FA is enabled, don't return tokens yet - require 2FA verification first
-    if two_fa_status.get("is_enabled", False):
-        # In a real implementation, you'd return a different response requiring 2FA
-        # For now, we'll still return tokens but indicate 2FA is required
-        pass
     
     return response
 
@@ -180,7 +191,7 @@ async def refresh_token(
         )
     
     auth_service = container.get("auth_service")
-    token_data = auth_service.verify_token(token, token_type="refresh")
+    token_data = auth_service.verify_token(token, token_type="refresh", db=db)
     
     if not token_data:
         raise HTTPException(
@@ -196,16 +207,17 @@ async def refresh_token(
             detail="User not found or inactive"
         )
     
-    # Create new access token
+    token_claims = {"sub": user.user_id, "email": user.email, "mfa_version": token_data.mfa_version}
+    # Preserve verified factors when refreshing the session.
     access_token_expires = timedelta(minutes=auth_service.access_token_expire)
     access_token = auth_service.create_access_token(
-        data={"sub": user.user_id, "email": user.email},
+        data=token_claims,
         expires_delta=access_token_expires
     )
     
     # Create new refresh token
     new_refresh_token = auth_service.create_refresh_token(
-        data={"sub": user.user_id, "email": user.email}
+        data=token_claims
     )
     
     return Token(

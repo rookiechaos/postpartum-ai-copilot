@@ -33,6 +33,12 @@ const setStoredUserId = (id) => {
 
 const getRefreshToken = () => localStorage.getItem('refresh_token')
 
+async function clearPrivateCaches() {
+  if (typeof caches === 'undefined') return
+  const names = await caches.keys()
+  await Promise.all(names.filter(name => name.startsWith('postpartum-runtime')).map(name => caches.delete(name)))
+}
+
 /** Parse backend error body: { error: { message } } or { detail } */
 async function parseErrorResponse(response) {
   const data = await response.json().catch(() => ({}))
@@ -136,7 +142,7 @@ export const api = {
         },
         body: JSON.stringify(data)
       })
-      if (response.status === 401 && !isRetry) {
+      if (response.status === 401 && !isRetry && !endpoint.startsWith('/api/auth/')) {
         const newToken = await refreshAccessToken()
         if (newToken) {
           return await this.post(endpoint, data, options, true)
@@ -210,8 +216,11 @@ export const api = {
   },
 
   // Authentication methods
-  async login(email, password) {
-    const response = await this.post('/api/auth/login', { email, password })
+  async login(email, password, verificationToken = null) {
+    await this.logout()
+    const response = await this.post('/api/auth/login', {
+      email, password, verification_token: verificationToken
+    })
     if (response.access_token) {
       setToken(response.access_token)
       if (response.refresh_token) {
@@ -234,6 +243,7 @@ export const api = {
     setToken(null)
     setStoredUserId(null)
     localStorage.removeItem('refresh_token')
+    return clearPrivateCaches().catch(() => {})
   },
 
   isAuthenticated() {
@@ -615,9 +625,12 @@ export const api = {
   },
 
   async enable2FA(verificationToken) {
-    return this.post('/api/security/2fa/enable', {
+    const response = await this.post('/api/security/2fa/enable', {
       verification_token: verificationToken
     })
+    await this.logout()
+    triggerUnauthorized()
+    return response
   },
 
   async disable2FA() {

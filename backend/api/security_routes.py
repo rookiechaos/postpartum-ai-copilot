@@ -40,7 +40,7 @@ async def setup_2fa(
             db=db
         )
         return {"setup": setup_data, "message": "2FA setup completed. Scan QR code with authenticator app."}
-    except DatabaseError:
+    except (ValidationError, DatabaseError):
         raise
     except Exception as e:
         logger.log_error(e, user_id=current_user.user_id)

@@ -26,6 +26,10 @@ class FamilyInvite(BaseModel):
     role: str = Field(default="member", pattern="^(owner|admin|member|viewer)$")
 
 
+class SharingPreferences(BaseModel):
+    share_tracking: bool
+
+
 class FamilyResponse(BaseModel):
     family_id: str
     name: str
@@ -177,6 +181,19 @@ async def get_shared_tracking_data(
             f"Failed to get shared tracking data: {str(e)}",
             details={"family_id": family_id, "user_id": current_user.user_id, "days": days, "original_error": str(e)}
         )
+
+
+@router.post("/{family_id}/sharing")
+async def set_sharing_preferences(
+    family_id: str,
+    preferences: SharingPreferences,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Set only the authenticated member's own sharing preference."""
+    return container.get("family_service").share_tracking_data(
+        family_id, current_user.user_id, preferences.share_tracking, db
+    )
 
 
 @router.delete("/{family_id}/members/{member_user_id}")

@@ -27,12 +27,9 @@ function SubscriptionManager({ userId }) {
   const createSubscription = async (plan, provider = 'stripe') => {
     setLoading(true)
     try {
-      // In production, this would redirect to payment provider
-      // For now, create subscription directly
       const data = await api.post('/api/payments/subscriptions', {
         plan,
-        payment_provider: provider,
-        payment_provider_id: `test_${Date.now()}`
+        payment_provider: provider
       })
       setSubscription(data)
       setSelectedPlan(null)
@@ -111,6 +108,7 @@ function SubscriptionManager({ userId }) {
     <div className="subscription-manager">
       <div className="subscription-header">
         <h2><CreditCard size={24} /> Subscription & Billing</h2>
+        <p>Paid subscriptions are currently unavailable.</p>
         {subscription && (
           <div className="current-subscription">
             <span className="plan-badge">{subscription.plan}</span>
@@ -179,10 +177,10 @@ function SubscriptionManager({ userId }) {
                   createSubscription(plan.id)
                 }}
                 className="subscribe-button"
-                disabled={loading || plan.id === 'enterprise'}
+                disabled={loading || plan.id !== 'free'}
                 style={{ backgroundColor: plan.color }}
               >
-                {plan.id === 'enterprise' ? 'Contact Sales' : 'Subscribe'}
+                {plan.id !== 'free' ? 'Unavailable' : 'Use Free Plan'}
               </button>
             )}
           </div>

@@ -1,6 +1,6 @@
 // Service Worker for Postpartum AI Copilot
-const CACHE_NAME = 'postpartum-copilot-v2'
-const RUNTIME_CACHE = 'postpartum-runtime-v2'
+const CACHE_NAME = 'postpartum-copilot-v3'
+const RUNTIME_CACHE = 'postpartum-runtime-v3'
 const urlsToCache = [
   '/',
   '/index.html',
@@ -40,7 +40,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME && cacheName !== RUNTIME_CACHE) {
+          if (cacheName.startsWith('postpartum-') && cacheName !== CACHE_NAME && cacheName !== RUNTIME_CACHE) {
             console.log('[SW] Deleting old cache:', cacheName)
             return caches.delete(cacheName)
           }
@@ -64,9 +64,9 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // API calls - network first with cache fallback
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(networkFirstStrategy(request))
+  // Private responses must never enter Cache Storage or fall back to another session.
+  if (url.pathname.startsWith('/api/') || request.headers.has('authorization')) {
+    event.respondWith(fetch(request, { cache: 'no-store' }))
     return
   }
 
@@ -77,7 +77,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // HTML pages - network first with cache fallback
-  if (request.headers.get('accept').includes('text/html')) {
+  if (request.headers.get('accept')?.includes('text/html')) {
     event.respondWith(networkFirstStrategy(request))
     return
   }
@@ -101,7 +101,7 @@ async function networkFirstStrategy(request) {
       return cachedResponse
     }
     // Return offline page for HTML requests
-    if (request.headers.get('accept').includes('text/html')) {
+    if (request.headers.get('accept')?.includes('text/html')) {
       return caches.match('/offline.html')
     }
     throw error

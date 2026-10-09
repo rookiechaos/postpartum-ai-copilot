@@ -44,7 +44,8 @@ function Settings({ userId, onContextUpdate, onLogout }) {
         notifications: context.notifications !== false,
         darkMode: context.darkMode || false,
         language: context.language || i18n.language
-      })Set language if available
+      })
+      // Set language if available.
       if (context.language && context.language !== i18n.language) {
         i18n.changeLanguage(context.language)
       }
@@ -55,7 +56,8 @@ function Settings({ userId, onContextUpdate, onLogout }) {
 
   const handleSave = async () => {
     setSaving(true)
-    try {Update language if changed
+    try {
+      // Update language if changed.
       if (settings.language !== i18n.language) {
         i18n.changeLanguage(settings.language)
         localStorage.setItem('preferred-language', settings.language)
@@ -96,49 +98,49 @@ function Settings({ userId, onContextUpdate, onLogout }) {
           className={activeSubTab === 'profile' ? 'active' : ''}
           onClick={() => setActiveSubTab('profile')}
         >
-          <User size={18}>
+          <User size={18} />
           {t('settings.profile')}
         </button>
         <button
           className={activeSubTab === 'export' ? 'active' : ''}
           onClick={() => setActiveSubTab('export')}
         >
-          <Download size={18}>
+          <Download size={18} />
           {t('settings.export')}
         </button>
         <button
           className={activeSubTab === 'notifications' ? 'active' : ''}
           onClick={() => setActiveSubTab('notifications')}
         >
-          <Bell size={18}>
+          <Bell size={18} />
           {t('settings.notifications')}
         </button>
         <button
           className={activeSubTab === 'help' ? 'active' : ''}
           onClick={() => setActiveSubTab('help')}
         >
-          <HelpCircle size={18}>
+          <HelpCircle size={18} />
           {t('settings.help')}
         </button>
         <button
           className={activeSubTab === 'analytics' ? 'active' : ''}
           onClick={() => setActiveSubTab('analytics')}
         >
-          <BarChart3 size={18}>
+          <BarChart3 size={18} />
           Analytics
         </button>
         <button
           className={activeSubTab === 'accessibility' ? 'active' : ''}
           onClick={() => setActiveSubTab('accessibility')}
         >
-          <Eye size={18}>
+          <Eye size={18} />
           {t('settings.accessibility', 'Accessibility')}
         </button>
         <button
           className={activeSubTab === 'security' ? 'active' : ''}
           onClick={() => setActiveSubTab('security')}
         >
-          <Lock size={18}>
+          <Lock size={18} />
           {t('settings.security', 'Security')}
         </button>
       </div>
@@ -152,7 +154,7 @@ function Settings({ userId, onContextUpdate, onLogout }) {
           animate={{ opacity: 1, y: 0 }}
         >
           <div className="section-header">
-            <User size={20}>
+            <User size={20} />
             <h3>{t('settings.profile')}</h3>
           </div>
           <div className="section-content">
@@ -162,7 +164,7 @@ function Settings({ userId, onContextUpdate, onLogout }) {
                 type="text"
                 value={settings.babyName}
                 onChange={(e) => setSettings({ ...settings, babyName: e.target.value })}
-                placeholder={t('settings.babyNamePlaceholder')}>
+                placeholder={t('settings.babyNamePlaceholder')} />
             </div>
             <div className="form-group">
               <label>{t('settings.language')}</label>
@@ -184,7 +186,7 @@ function Settings({ userId, onContextUpdate, onLogout }) {
           transition={{ delay: 0.1 }}
         >
           <div className="section-header">
-            <Baby size={20}>
+            <Baby size={20} />
             <h3>{t('settings.babyInfo')}</h3>
           </div>
           <div className="section-content">
@@ -236,7 +238,7 @@ function Settings({ userId, onContextUpdate, onLogout }) {
           transition={{ delay: 0.2 }}
         >
           <div className="section-header">
-            <Bell size={20}>
+            <Bell size={20} />
             <h3>{t('settings.preferences')}</h3>
           </div>
           <div className="section-content">
@@ -245,7 +247,7 @@ function Settings({ userId, onContextUpdate, onLogout }) {
                 <input
                   type="checkbox"
                   checked={settings.notifications}
-                  onChange={(e) => setSettings({ ...settings, notifications: e.target.checked })}>
+                  onChange={(e) => setSettings({ ...settings, notifications: e.target.checked })} />
                 <span>{t('settings.enableNotifications')}</span>
               </label>
             </div>
@@ -254,7 +256,7 @@ function Settings({ userId, onContextUpdate, onLogout }) {
                 <input
                   type="checkbox"
                   checked={settings.darkMode}
-                  onChange={(e) => setSettings({ ...settings, darkMode: e.target.checked })}>
+                  onChange={(e) => setSettings({ ...settings, darkMode: e.target.checked })} />
                 <span>{t('settings.darkMode')}</span>
               </label>
             </div>
@@ -268,7 +270,7 @@ function Settings({ userId, onContextUpdate, onLogout }) {
           transition={{ delay: 0.3 }}
         >
           <div className="section-header">
-            <Shield size={20}>
+            <Shield size={20} />
             <h3>{t('settings.privacy')}</h3>
           </div>
           <div className="section-content">
@@ -287,7 +289,7 @@ function Settings({ userId, onContextUpdate, onLogout }) {
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
         >
-          <Save size={20}>
+          <Save size={20} />
           {saving ? t('settings.saving') : saved ? t('settings.saved') : t('settings.save')}
         </motion.button>
         {onLogout && (
@@ -299,12 +301,12 @@ function Settings({ userId, onContextUpdate, onLogout }) {
       </>
       )}
 
-      {activeSubTab === 'export' && <ExportData userId={userId}>}
-      {activeSubTab === 'notifications' && <NotificationManager userId={userId}>}
-      {activeSubTab === 'help' && <HelpCenter>}
-      {activeSubTab === 'analytics' && <ProductAnalytics userId={userId}>}
-      {activeSubTab === 'accessibility' && <AccessibilitySettings>}
-      {activeSubTab === 'security' && <SecuritySettings userId={userId}>}
+      {activeSubTab === 'export' && <ExportData userId={userId} />}
+      {activeSubTab === 'notifications' && <NotificationManager userId={userId} />}
+      {activeSubTab === 'help' && <HelpCenter />}
+      {activeSubTab === 'analytics' && <ProductAnalytics userId={userId} />}
+      {activeSubTab === 'accessibility' && <AccessibilitySettings />}
+      {activeSubTab === 'security' && <SecuritySettings userId={userId} />}
     </div>
   )
 }

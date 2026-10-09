@@ -28,9 +28,11 @@ async def websocket_endpoint(websocket: WebSocket):
         token = websocket.query_params.get("token")
         if token:
             auth_service = container.get("auth_service")
-            token_data = auth_service.verify_token(token, token_type="access")
-            if token_data:
-                user_id = token_data.user_id
+            with SessionLocal() as db:
+                token_data = auth_service.verify_token(token, token_type="access", db=db)
+                user = auth_service.get_user_by_id(token_data.user_id, db) if token_data else None
+                if user and user.is_active:
+                    user_id = user.user_id
     except Exception as e:
         logger.log_error(e, context={"action": "websocket_auth"})
     

@@ -69,9 +69,12 @@ class AIWorker:
         user_id = task["user_id"]
 
         db = SessionLocal()
+        claimed_started_at = None
         try:
             if not self.task_queue.claim_task(task_id, self.worker_id, db):
                 return {"error": "Failed to claim task"}
+            claimed = self.task_queue.get_task(task_id, db)
+            claimed_started_at = datetime.fromisoformat(claimed["started_at"])
 
             if task_type == "ai_chat":
                 result = await self._process_chat_task(task_data, user_id, db)
@@ -82,12 +85,16 @@ class AIWorker:
             else:
                 raise ValueError(f"Unknown task type: {task_type}")
 
-            self.task_queue.update_task_status(
+            updated = self.task_queue.update_task_status(
                 task_id=task_id,
                 status=TaskStatus.COMPLETED,
                 db=db,
                 result=result,
+                worker_id=self.worker_id,
+                started_at=claimed_started_at,
             )
+            if not updated:
+                return {"error": "Task is no longer owned by this execution"}
             return result
 
         except Exception as e:
@@ -98,6 +105,8 @@ class AIWorker:
                     status=TaskStatus.FAILED,
                     db=db,
                     error=error_message,
+                    worker_id=self.worker_id,
+                    started_at=claimed_started_at,
                 )
             except Exception:
                 pass

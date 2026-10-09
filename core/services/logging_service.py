@@ -12,19 +12,10 @@ import traceback
 from pathlib import Path
 import os
 
-# Create logs directory if it doesn't exist
-# Validate path to prevent path traversal
-try:
-    from services.code_security_audit import CodeSecurityAuditor
-    LOG_DIR_STR = os.getenv("LOG_DIR", "../do-not-upload/logs")
-    is_valid, error = CodeSecurityAuditor.validate_file_path(LOG_DIR_STR)
-    if not is_valid:
-        raise ValueError(f"Invalid LOG_DIR: {error}")
-    LOG_DIR = Path(LOG_DIR_STR)
-except ImportError:
-    # Fallback if security audit not available
-    LOG_DIR = Path("../do-not-upload/logs")
-LOG_DIR.mkdir(exist_ok=True)
+from utils.runtime_paths import resolve_runtime_path
+
+LOG_DIR = resolve_runtime_path(os.getenv("LOG_DIR", "do-not-upload/logs"), "logs")
+LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 _HOME_PATH_PATTERN = re.compile(r"(/Users/|/home/)[^/\s\"']+")
 

@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings
 from pydantic import Field, ConfigDict, field_validator
 from typing import Optional, List
 from functools import lru_cache
+from utils.runtime_paths import PROJECT_ROOT
 import warnings
 
 
@@ -13,7 +14,7 @@ class Settings(BaseSettings):
     """Application settings with validation"""
     
     model_config = ConfigDict(
-        env_file=(".env", "../do-not-upload/local/backend.env"),
+        env_file=(PROJECT_ROOT / "backend/.env", PROJECT_ROOT / "do-not-upload/local/backend.env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore"
@@ -31,7 +32,7 @@ class Settings(BaseSettings):
     
     # Database Configuration
     database_url: str = Field(
-        default="sqlite:///../do-not-upload/data/postpartum.db",
+        default=f"sqlite:///{PROJECT_ROOT / 'do-not-upload/data/postpartum.db'}",
         validation_alias="DATABASE_URL",
     )
     
@@ -78,7 +79,7 @@ class Settings(BaseSettings):
     # Application Settings
     async_mode: bool = Field(default=True, validation_alias="ASYNC_MODE")
     rag_enabled: bool = Field(default=True, validation_alias="RAG_ENABLED")
-    vector_db_path: str = Field(default="../do-not-upload/vector_db", validation_alias="VECTOR_DB_PATH")
+    vector_db_path: str = Field(default="do-not-upload/vector_db", validation_alias="VECTOR_DB_PATH")
     
     # Worker Configuration
     num_workers: int = Field(default=2, validation_alias="NUM_WORKERS")
@@ -90,13 +91,16 @@ class Settings(BaseSettings):
     # Payment Webhook Configuration
     stripe_webhook_secret: Optional[str] = Field(default=None, validation_alias="STRIPE_WEBHOOK_SECRET")
     paypal_webhook_id: Optional[str] = Field(default=None, validation_alias="PAYPAL_WEBHOOK_ID")
+    paypal_client_id: Optional[str] = Field(default=None, validation_alias="PAYPAL_CLIENT_ID")
+    paypal_client_secret: Optional[str] = Field(default=None, validation_alias="PAYPAL_CLIENT_SECRET")
+    paypal_environment: str = Field(default="sandbox", pattern="^(sandbox|live)$", validation_alias="PAYPAL_ENVIRONMENT")
     
     # Admin Configuration
     admin_emails: Optional[str] = Field(default=None, validation_alias="ADMIN_EMAILS")
     
     # Logging
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
-    log_dir: str = Field(default="../do-not-upload/logs", validation_alias="LOG_DIR")
+    log_dir: str = Field(default="do-not-upload/logs", validation_alias="LOG_DIR")
     
     # File Upload Configuration
     max_upload_size_mb: int = Field(default=10, validation_alias="MAX_UPLOAD_SIZE_MB")

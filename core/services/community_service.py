@@ -100,7 +100,8 @@ class CommunityService:
         limit: int = 20,
         offset: int = 0,
         sort_by: str = "created_at",  # created_at, like_count, comment_count
-        db: Session = None
+        db: Session = None,
+        include_anonymous: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         Get posts list
@@ -125,6 +126,8 @@ class CommunityService:
             
             if user_id:
                 query = query.filter(PostDB.user_id == user_id)
+                if not include_anonymous:
+                    query = query.filter(PostDB.is_anonymous == False)
             
             if category:
                 query = query.filter(PostDB.category == category)
@@ -182,6 +185,8 @@ class CommunityService:
             ).first()
             
             if not post:
+                return None
+            if post.moderation_status != "approved" and post.user_id != user_id:
                 return None
             
             # Increment view count

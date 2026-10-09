@@ -3,6 +3,7 @@ Service Interfaces - Protocol definitions for services
 """
 
 from typing import Protocol, Dict, List, Any, Optional, AsyncGenerator
+from datetime import datetime
 from sqlalchemy.orm import Session
 from models.schemas import TrackingEntry, ChatMessage, ChatResponse
 
@@ -133,9 +134,12 @@ class ITaskQueue(Protocol):
         self,
         task_id: str,
         status: Any,
+        db: Session,
         result: Optional[Dict[str, Any]] = None,
-        error: Optional[str] = None
+        error: Optional[str] = None,
+        worker_id: Optional[str] = None,
+        started_at: Optional[datetime] = None,
     ) -> bool:
-        """Update task status"""
+        """Complete or fail the processing attempt owned by this worker."""
         ...
 

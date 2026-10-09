@@ -10,13 +10,19 @@ function Auth({ onSuccess }) {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [requiresTwoFactor, setRequiresTwoFactor] = useState(false)
+  const [verificationToken, setVerificationToken] = useState('')
 
   const handleLogin = async (e) => {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
-      await api.login(email, password)
+      const result = await api.login(email, password, verificationToken || null)
+      if (result.requires_2fa) {
+        setRequiresTwoFactor(true)
+        return
+      }
       const user = await api.getCurrentUser()
       if (user?.user_id) {
         api.setUserId(user.user_id)
@@ -115,6 +121,21 @@ function Auth({ onSuccess }) {
             )}
           </div>
           {error && <p className="auth-error">{error}</p>}
+          {mode === 'login' && requiresTwoFactor && (
+            <div className="auth-field">
+              <label htmlFor="auth-verification">{t('auth.verificationCode', 'Authenticator or backup code')}</label>
+              <input
+                id="auth-verification"
+                type="text"
+                autoComplete="one-time-code"
+                value={verificationToken}
+                onChange={e => setVerificationToken(e.target.value.trim())}
+                maxLength={64}
+                required
+                disabled={loading}
+              />
+            </div>
+          )}
           <button type="submit" className="auth-submit" disabled={loading}>
             {loading
               ? (mode === 'login' ? t('auth.loggingIn') : t('auth.registering'))

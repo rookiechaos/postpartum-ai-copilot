@@ -12,9 +12,11 @@ cd backend
 pip install -r requirements.txt
 
 # Copy environment template
-cp env.example .env
+cp ../do-not-upload/local/backend.env.example ../do-not-upload/local/backend.env
 
-# Edit .env and add your OpenAI API key
+# Edit ../do-not-upload/local/backend.env and set JWT_SECRET_KEY to a generated secret.
+# Generate a secret with: openssl rand -hex 32
+# Add your OpenAI API key:
 # OPENAI_API_KEY=sk-your-key-here
 
 # Start the backend server

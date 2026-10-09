@@ -17,6 +17,30 @@ function FamilySharing({ userId }) {
   const [activeTab, setActiveTab] = useState('members') // 'members', 'summary', 'tasks'
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newTaskDescription, setNewTaskDescription] = useState('')
+  const [sharingBusy, setSharingBusy] = useState(false)
+  const [sharingError, setSharingError] = useState('')
+
+  const sharingEnabled = members.find(member => member.user_id === userId)?.permissions?.share_tracking === true
+
+  const updateSharing = async (enabled) => {
+    if (!selectedFamily) return
+    setSharingBusy(true)
+    setSharingError('')
+    try {
+      await api.post(`/api/families/${selectedFamily.family_id}/sharing`, { share_tracking: enabled })
+      setSharedData([])
+      setFamilySummary(null)
+      await Promise.all([
+        loadFamilyMembers(selectedFamily.family_id),
+        loadSharedData(selectedFamily.family_id),
+        loadFamilySummary(selectedFamily.family_id)
+      ])
+    } catch (error) {
+      setSharingError(error.message)
+    } finally {
+      setSharingBusy(false)
+    }
+  }
 
   useEffect(() => {
     loadFamilies()
@@ -44,11 +68,12 @@ function FamilySharing({ userId }) {
     if (!newTaskTitle.trim() || !selectedFamily) return
     
     try {
-      await api.post(`/api/families/${selectedFamily.family_id}/tasks`, {
+      const created = await api.post(`/api/families/${selectedFamily.family_id}/tasks`, {
         title: newTaskTitle,
         description: newTaskDescription,
         priority: 'medium'
       })
+      setTasks(current => [...current, created])
       setNewTaskTitle('')
       setNewTaskDescription('')
       // Reload tasks if needed
@@ -183,6 +208,16 @@ function FamilySharing({ userId }) {
 
           {selectedFamily && (
             <div className="family-details">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={sharingEnabled}
+                  disabled={sharingBusy}
+                  onChange={event => updateSharing(event.target.checked)}
+                />
+                Share my tracking records and summaries with this family
+              </label>
+              {sharingError && <p role="alert">{sharingError}</p>}
               <div className="family-tabs">
                 <button
                   className={activeTab === 'members' ? 'active' : ''}
@@ -205,6 +240,7 @@ function FamilySharing({ userId }) {
               </div>
               
               {activeTab === 'members' && (
+              <>
               <div className="members-section">
                 <h3>Members</h3>
                 <form onSubmit={inviteMember} className="invite-form">
@@ -250,6 +286,7 @@ function FamilySharing({ userId }) {
                   )}
                 </div>
               </div>
+              </>
               )}
               
               {activeTab === 'summary' && familySummary && (

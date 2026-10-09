@@ -64,6 +64,7 @@ This product is a **companion and support tool**, not a medical product or devic
 ### Quick Start
 
 See [docs/deployment/SETUP.md](docs/deployment/SETUP.md) for detailed setup.
+See [the October 9 security fixes](docs/security/SECURITY_FIXES_2026-10-09.md) for authentication, privacy, payment restrictions, and validation limits.
 
 **Backend:**
 ```bash
@@ -72,7 +73,7 @@ python -m venv venv
 source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 mkdir -p ../do-not-upload/local ../do-not-upload/data ../do-not-upload/logs
-cp env.example ../do-not-upload/local/backend.env
+cp ../do-not-upload/local/backend.env.example ../do-not-upload/local/backend.env
 # Edit do-not-upload/local/backend.env with API keys
 uvicorn main:app --reload
 ```
@@ -93,6 +94,7 @@ npm run dev
 
 **Docker:**
 ```bash
+export JWT_SECRET_KEY="$(openssl rand -hex 32)"
 docker-compose up -d
 docker-compose logs -f api
 docker-compose logs -f worker

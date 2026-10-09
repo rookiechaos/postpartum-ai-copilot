@@ -5,7 +5,7 @@ Achievement Service - Badge system and user goals
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, or_
+from sqlalchemy import func, and_, or_, desc
 from models.database import AchievementDB, UserAchievementDB, UserGoalDB, TrackingEntryDB, TaskDB
 from services.logging_service import logger
 from exceptions import DatabaseError, NotFoundError

@@ -32,7 +32,7 @@ async def get_current_user(
         HTTPException: If token is invalid or user not found
     """
     token = credentials.credentials
-    token_data = auth_service.verify_token(token, token_type="access")
+    token_data = auth_service.verify_token(token, token_type="access", db=db)
     
     if token_data is None:
         raise HTTPException(

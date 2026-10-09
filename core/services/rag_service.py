@@ -9,6 +9,7 @@ import os
 from typing import List, Optional
 from config.settings import get_settings
 from services.logging_service import logger
+from utils.runtime_paths import resolve_runtime_path
 
 # Try to import langchain components with fallback
 try:
@@ -40,7 +41,7 @@ class RAGService:
         settings = get_settings()
         self.api_key = settings.openai_api_key
         self.embedding_model = settings.openai_embedding_model
-        self.vector_db_path = settings.vector_db_path
+        self.vector_db_path = str(resolve_runtime_path(settings.vector_db_path, "vector_db"))
         self.embeddings = None
         self.vectorstore = None
         self.initialized = False
@@ -59,21 +60,7 @@ class RAGService:
                 model=self.embedding_model
             )
             
-            # Initialize or load vector store
-            # Validate path to prevent path traversal
-            try:
-                from services.code_security_audit import CodeSecurityAuditor
-                is_valid, error = CodeSecurityAuditor.validate_file_path(
-                    self.vector_db_path,
-                    base_dir=os.getcwd()  # Restrict to current working directory
-                )
-                if not is_valid:
-                    raise ValueError(f"Invalid vector_db_path: {error}")
-            except ImportError:
-                # Fallback if security audit not available - basic check
-                if ".." in self.vector_db_path or self.vector_db_path.startswith("/"):
-                    raise ValueError("Invalid vector_db_path: path traversal detected")
-            
+            # The configured storage path is resolved and restricted during initialization.
             if os.path.exists(self.vector_db_path):
                 # Load existing vector store
                 self.vectorstore = Chroma(

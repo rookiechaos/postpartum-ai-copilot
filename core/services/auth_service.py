@@ -3,12 +3,13 @@ Authentication Service - User authentication and authorization
 """
 
 import os
+import hashlib
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from models.database import UserDB
+from models.database import UserDB, TwoFactorAuthDB
 from models.schemas import User, UserCreate, TokenData
 from config.settings import get_settings
 from exceptions import ValidationError
@@ -173,7 +174,19 @@ class AuthService:
         encoded_jwt = jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
         return encoded_jwt
     
-    def verify_token(self, token: str, token_type: str = "access") -> Optional[TokenData]:
+    def get_two_factor_version(self, user_id: str, db: Session) -> Optional[str]:
+        """Bind second-factor proof to the currently enabled authenticator."""
+        factor = db.query(TwoFactorAuthDB).filter(
+            TwoFactorAuthDB.user_id == user_id,
+            TwoFactorAuthDB.is_enabled == True,
+        ).first()
+        if not factor:
+            return None
+        if not factor.secret_key:
+            raise ValidationError("Two-factor authentication is unavailable")
+        return hashlib.sha256(factor.secret_key.encode()).hexdigest()
+
+    def verify_token(self, token: str, token_type: str = "access", db: Optional[Session] = None) -> Optional[TokenData]:
         """
         Verify a JWT token
         
@@ -196,8 +209,12 @@ class AuthService:
             
             if user_id is None:
                 return None
-            
-            return TokenData(user_id=user_id, email=email)
+            mfa_version = payload.get("mfa_version")
+            if db is not None:
+                expected_version = self.get_two_factor_version(user_id, db)
+                if expected_version and mfa_version != expected_version:
+                    return None
+            return TokenData(user_id=user_id, email=email, mfa_version=mfa_version)
         except JWTError:
             return None
     

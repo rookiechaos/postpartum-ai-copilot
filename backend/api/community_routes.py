@@ -77,6 +77,17 @@ async def get_posts(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/api/community/posts/mine")
+async def get_my_posts(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    posts = await container.get("community_service").get_posts(
+        user_id=current_user.user_id, db=db, include_anonymous=True,
+    )
+    return {"success": True, "posts": posts, "count": len(posts)}
+
+
 @router.get("/api/community/posts/{post_id}")
 async def get_post(
     post_id: str,

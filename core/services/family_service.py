@@ -20,6 +20,10 @@ if TYPE_CHECKING:
 
 class FamilyService:
     """Service for managing family groups and sharing"""
+
+    @staticmethod
+    def _shares_tracking(member: FamilyMemberDB) -> bool:
+        return (member.permissions or {}).get("share_tracking") is True
     
     def create_family(
         self,
@@ -54,6 +58,7 @@ class FamilyService:
                 user_id=user_id,
                 role="owner",
                 status="active",
+                permissions={"share_tracking": False},
                 joined_at=datetime.utcnow()
             )
             db.add(member)
@@ -259,7 +264,9 @@ class FamilyService:
                 )
             ).all()
             
-            member_user_ids = [m.user_id for m in members]
+            member_user_ids = [m.user_id for m in members if self._shares_tracking(m)]
+            if not member_user_ids:
+                return []
             
             # Get tracking entries from all members
             cutoff_date = datetime.utcnow() - timedelta(days=days)
@@ -405,11 +412,13 @@ class FamilyService:
             # Get shared tracking data
             shared_data = self.get_shared_tracking_data(family_id, user_id, days=7 if period == "daily" else 30, db=db)
             
-            # Generate summary for the primary user (usually the mother)
-            primary_user_id = members[0].user_id if members else user_id
+            # Summaries must enforce the same sharing policy as the raw records.
+            shared_members = [member for member in members if self._shares_tracking(member)]
+            shared_members.sort(key=lambda member: (member.role != "owner", member.id))
+            primary_user_id = shared_members[0].user_id if shared_members else None
             
             summary = {}
-            if tracking_service and ai_service:
+            if primary_user_id and tracking_service and ai_service:
                 if period == "daily":
                     summary = await tracking_service.generate_daily_summary(
                         user_id=primary_user_id,
@@ -468,10 +477,7 @@ class FamilyService:
                 raise ValidationError("You are not a member of this family")
             
             # Update permissions
-            if not member.permissions:
-                member.permissions = {}
-            
-            member.permissions["share_tracking"] = share_enabled
+            member.permissions = {**(member.permissions or {}), "share_tracking": share_enabled}
             db.commit()
             db.refresh(member)
             

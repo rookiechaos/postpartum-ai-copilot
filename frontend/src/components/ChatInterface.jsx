@@ -42,15 +42,18 @@ function ChatInterface({ userId }) {
     setLoading(true)
     setTaskStatus('pending')
 
-    try {Check if async mode is enabled (default)
+    try {
+      // Check if async mode is enabled (default).
       const asyncMode = import.meta.env.VITE_ASYNC_MODE !== 'false'
       
-      if (asyncMode) {Use task manager for async processing
+      if (asyncMode) {
+        // Use task manager for async processing.
         const taskData = {
           query: queryText,
           language: i18n.language,
           user_id: userId
-        }Determine priority based on query content
+        }
+        // Determine priority based on query content.
         let priority = 'medium'
         if (queryText.toLowerCase().match(/\b(urgent|emergency|help|crisis|immediate)\b/)) {
           priority = 'high'
@@ -59,7 +62,7 @@ function ChatInterface({ userId }) {
         try {
           const result = await taskManager.submitTask('ai_chat', taskData, {
             priority,
-            timeout: 3000005 minutes
+            timeout: 300000 // 5 minutes
           })
           
           const assistantMessage = {
@@ -77,7 +80,8 @@ function ChatInterface({ userId }) {
           console.error('Task error:', taskError)
           throw taskError
         }
-      } else {Synchronous mode (fallback)
+      } else {
+        // Synchronous mode (fallback).
         const response = await api.post('/api/chat', {
           query: queryText,
           user_id: userId,
@@ -184,7 +188,7 @@ function ChatInterface({ userId }) {
             </div>
           </div>
         )}
-        <div ref={messagesEndRef}>
+        <div ref={messagesEndRef} />
       </div>
 
       <form className="chat-input-form" onSubmit={sendMessage}>
@@ -194,7 +198,7 @@ function ChatInterface({ userId }) {
           onChange={(e) => setInput(e.target.value)}
           placeholder={t('chat.placeholder')}
           disabled={loading}
-          className="chat-input">
+          className="chat-input" />
         <button type="submit" disabled={loading || !input.trim()} className="send-button">
           {t('chat.send')}
         </button>

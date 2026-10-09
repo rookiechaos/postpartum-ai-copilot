@@ -170,12 +170,16 @@ async def test_update_task_status(test_db_session, mock_user_id):
         db=test_db_session
     )
     
-    # Update status
-    queue.update_task_status(
+    # Only the worker that claimed this execution can submit its result.
+    assert queue.claim_task(task_id, "test_worker", db=test_db_session)
+    claimed = queue.get_task(task_id, db=test_db_session)
+    assert queue.update_task_status(
         task_id=task_id,
         status=TaskStatus.COMPLETED,
         db=test_db_session,
-        result={"response": "Test response"}
+        result={"response": "Test response"},
+        worker_id="test_worker",
+        started_at=datetime.fromisoformat(claimed["started_at"]),
     )
     
     # Verify update

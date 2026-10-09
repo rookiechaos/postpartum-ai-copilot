@@ -6,7 +6,10 @@ from sqlalchemy import create_engine, Column, String, Integer, Float, DateTime, 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from datetime import datetime
+from pathlib import Path
+from sqlalchemy.engine import make_url
 from config.settings import get_settings
+from utils.runtime_paths import PROJECT_ROOT
 
 # Get database URL from settings
 settings = get_settings()
@@ -17,7 +20,18 @@ if DATABASE_URL.startswith("postgresql"):
     engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=20)
 else:
     # SQLite configuration
-    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+    sqlite_url = make_url(DATABASE_URL)
+    database_path = sqlite_url.database
+    if database_path and database_path != ":memory:":
+        # Existing examples used a path relative to backend/. Normalize it for workers too.
+        if database_path.startswith("../do-not-upload/"):
+            database_path = database_path[3:]
+        resolved_path = Path(database_path)
+        if not resolved_path.is_absolute():
+            resolved_path = PROJECT_ROOT / resolved_path
+        resolved_path.parent.mkdir(parents=True, exist_ok=True)
+        sqlite_url = sqlite_url.set(database=str(resolved_path))
+    engine = create_engine(sqlite_url, connect_args={"check_same_thread": False})
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

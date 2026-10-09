@@ -60,6 +60,7 @@ class TaskQueue:
     - Task timeout handling
     - Database persistence
     """
+    WORKER_TASK_TYPES = ("ai_chat", "tracking_analysis", "personalized_chat")
     
     def __init__(self, max_retries: int = 3, default_timeout: int = 300):
         """
@@ -156,7 +157,8 @@ class TaskQueue:
             else_=1,
         )
         query = db.query(TaskDB).filter(
-            TaskDB.status == TaskStatus.PENDING.value
+            TaskDB.status == TaskStatus.PENDING.value,
+            TaskDB.task_type.in_(self.WORKER_TASK_TYPES),
         ).order_by(
             priority_rank.asc(),
             TaskDB.created_at.asc()
@@ -192,6 +194,7 @@ class TaskQueue:
                 .where(
                     TaskDB.task_id == task_id,
                     TaskDB.status == TaskStatus.PENDING.value,
+                    TaskDB.task_type.in_(self.WORKER_TASK_TYPES),
                 )
                 .values(
                     status=TaskStatus.PROCESSING.value,
@@ -212,7 +215,9 @@ class TaskQueue:
         status: TaskStatus,
         db: Session,
         result: Optional[Dict[str, Any]] = None,
-        error: Optional[str] = None
+        error: Optional[str] = None,
+        worker_id: Optional[str] = None,
+        started_at: Optional[datetime] = None,
     ) -> bool:
         """
         Update task status
@@ -228,31 +233,30 @@ class TaskQueue:
             True if updated successfully
         """
         try:
-            task = db.query(TaskDB).filter(TaskDB.task_id == task_id).first()
+            if status not in (TaskStatus.COMPLETED, TaskStatus.FAILED) or not worker_id or not started_at:
+                return False
+            conditions = (
+                TaskDB.task_id == task_id,
+                TaskDB.status == TaskStatus.PROCESSING.value,
+                TaskDB.worker_id == worker_id,
+                TaskDB.started_at == started_at,
+            )
+            task = db.query(TaskDB).filter(*conditions).first()
             if not task:
                 return False
-            
-            task.status = status.value
-            task.updated_at = datetime.utcnow()
-            
+            values = {"status": status.value, "updated_at": datetime.utcnow()}
             if status == TaskStatus.COMPLETED:
-                task.completed_at = datetime.utcnow()
-                if result:
-                    task.result = json.dumps(result)
+                values.update(completed_at=datetime.utcnow(), result=json.dumps(result or {}), error=None)
             elif status == TaskStatus.FAILED:
-                task.error = error
-                task.retry_count = (task.retry_count or 0) + 1
-                
-                # Check if should retry
-                if task.retry_count < self.max_retries:
-                    task.status = TaskStatus.RETRYING.value
-                    task.retry_count = task.retry_count
-                    # Reset to pending for retry
-                    task.status = TaskStatus.PENDING.value
-                    task.worker_id = None
-                    task.started_at = None
-            
+                retries = (task.retry_count or 0) + 1
+                values.update(error=error, retry_count=retries)
+                if retries < self.max_retries:
+                    values.update(status=TaskStatus.PENDING.value, worker_id=None, started_at=None)
+            rows_updated = db.execute(update(TaskDB).where(*conditions).values(**values)).rowcount
             db.commit()
+            if not rows_updated:
+                return False
+            db.refresh(task)
             
             # Notify WebSocket subscribers about task update (non-blocking)
             try:
@@ -293,22 +297,12 @@ class TaskQueue:
             True if cancelled successfully
         """
         try:
-            task = db.query(TaskDB).filter(
-                TaskDB.task_id == task_id,
-                TaskDB.user_id == user_id
-            ).first()
-            
-            if not task:
-                return False
-            
-            # Only cancel if pending or processing
-            if task.status in [TaskStatus.PENDING.value, TaskStatus.PROCESSING.value]:
-                task.status = TaskStatus.CANCELLED.value
-                task.updated_at = datetime.utcnow()
-                db.commit()
-                return True
-            
-            return False
+            rows_updated = db.execute(update(TaskDB).where(
+                TaskDB.task_id == task_id, TaskDB.user_id == user_id,
+                TaskDB.status.in_((TaskStatus.PENDING.value, TaskStatus.PROCESSING.value)),
+            ).values(status=TaskStatus.CANCELLED.value, updated_at=datetime.utcnow())).rowcount
+            db.commit()
+            return rows_updated > 0
         except Exception as e:
             db.rollback()
             return False
@@ -336,10 +330,17 @@ class TaskQueue:
                     elapsed = (now - task.started_at).total_seconds()
                     if elapsed > task.timeout_seconds:
                         # Mark as failed due to timeout
-                        task.status = TaskStatus.FAILED.value
-                        task.error = f"Task timed out after {task.timeout_seconds} seconds"
-                        task.updated_at = now
-                        timed_out.append(task.task_id)
+                        rows_updated = db.execute(update(TaskDB).where(
+                            TaskDB.task_id == task.task_id,
+                            TaskDB.status == TaskStatus.PROCESSING.value,
+                            TaskDB.started_at == task.started_at,
+                        ).values(
+                            status=TaskStatus.FAILED.value,
+                            error=f"Task timed out after {task.timeout_seconds} seconds",
+                            updated_at=now,
+                        )).rowcount
+                        if rows_updated:
+                            timed_out.append(task.task_id)
             
             if timed_out:
                 db.commit()
