@@ -8,6 +8,7 @@ from slowapi.errors import RateLimitExceeded
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from typing import Callable
+from functools import wraps
 import time
 from config.settings import get_settings
 
@@ -97,6 +98,7 @@ def rate_limit(limit: str = "100/minute", key_func: Callable = get_remote_addres
             return func
         
         # Add rate limit headers to response
+        @wraps(func)
         async def wrapper(*args, **kwargs):
             try:
                 response = await wrapped(*args, **kwargs)
@@ -117,7 +119,7 @@ def rate_limit(limit: str = "100/minute", key_func: Callable = get_remote_addres
                 from services.logging_service import logger
                 from exceptions import RateLimitError
                 
-                request = None
+                request = kwargs.get("request") or kwargs.get("http_request")
                 for arg in args:
                     if isinstance(arg, Request):
                         request = arg

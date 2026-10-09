@@ -23,7 +23,7 @@ class FamilyCreate(BaseModel):
 
 class FamilyInvite(BaseModel):
     invitee_user_id: str
-    role: str = Field(default="member", pattern="^(owner|admin|member|viewer)$")
+    role: str = Field(default="member", pattern="^(admin|member|viewer)$")
 
 
 class SharingPreferences(BaseModel):

@@ -20,6 +20,7 @@ from services.tracking_service import TrackingService  # noqa: E402
 from services.rag_service import RAGService  # noqa: E402
 from services.personalization_service import PersonalizationService  # noqa: E402
 from services.logging_service import logger  # noqa: E402
+from services.ai_errors import PUBLIC_AI_ERROR  # noqa: E402
 from models.database import SessionLocal  # noqa: E402
 
 
@@ -98,20 +99,19 @@ class AIWorker:
             return result
 
         except Exception as e:
-            error_message = str(e)
             try:
                 self.task_queue.update_task_status(
                     task_id=task_id,
                     status=TaskStatus.FAILED,
                     db=db,
-                    error=error_message,
+                    error=PUBLIC_AI_ERROR,
                     worker_id=self.worker_id,
                     started_at=claimed_started_at,
                 )
             except Exception:
                 pass
             logger.log_error(
-                Exception(error_message),
+                e,
                 context={
                     "worker_id": self.worker_id,
                     "task_id": task_id,

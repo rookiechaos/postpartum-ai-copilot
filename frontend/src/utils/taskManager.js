@@ -1,283 +1,197 @@
-/**
- * Task Manager - Manages async task polling and state
- * Now supports WebSocket for real-time updates (fallback to polling if WebSocket unavailable)
- */
-
+/** Async tasks use bounded polling; WebSocket updates can finish them sooner. */
 import api from './api.js'
 import websocketManager from './websocketManager.js'
 
-const POLL_INTERVAL = 1000 // 1 second
-const MAX_POLL_ATTEMPTS = 300 // 5 minutes max
-const POLL_BACKOFF_MULTIPLIER = 1.5 // Exponential backoff
+const POLL_INTERVAL = 1000
+const MAX_POLL_ATTEMPTS = 300
+const DEFAULT_TIMEOUT_MS = 300000
+const POLL_BACKOFF_MULTIPLIER = 1.5
 
 class TaskManager {
   constructor() {
-    this.activeTasks = new Map() // taskId -> { task, pollInterval, attempts, resolve, reject }
-    this.taskCache = new Map() // taskId -> cached result
-    this.useWebSocket = true // Try WebSocket first, fallback to polling
-    this._setupWebSocket()
+    this.activeTasks = new Map()
+    this.taskCache = new Map()
+    this.pendingSubmissions = new Set()
+    this.sessionGeneration = 0
+    this.useWebSocket = false
+
+    websocketManager.on('task_update', task => {
+      if (task) this._applyUpdate(task.task_id, task)
+    })
+    websocketManager.on('connected', () => {
+      this.useWebSocket = true
+      this.activeTasks.forEach((info, taskId) => websocketManager.subscribeToTask(taskId))
+    })
+    websocketManager.on('disconnected', () => { this.useWebSocket = false })
+    websocketManager.on('error', () => { this.useWebSocket = false })
+    api.onAuthChange(change => this._setAuth(change))
+    this._setAuth({ token: localStorage.getItem('access_token') })
   }
 
-  /**
-   * Setup WebSocket connection and listeners
-   * @private
-   */
-  _setupWebSocket() {
-    // Get token for WebSocket connection
-    const token = localStorage.getItem('access_token')
-    if (token) {
-      try {
-        websocketManager.connect(token)
-        
-        // Listen for task updates
-        websocketManager.on('task_update', (taskData) => {
-          const taskId = taskData.task_id
-          const taskInfo = this.activeTasks.get(taskId)
-          
-          if (taskInfo) {
-            if (taskData.status === 'completed') {
-              this.taskCache.set(taskId, taskData.result)
-              this.activeTasks.delete(taskId)
-              taskInfo.resolve(taskData.result)
-            } else if (taskData.status === 'failed') {
-              this.activeTasks.delete(taskId)
-              taskInfo.reject(new Error(taskData.error || 'Task failed'))
-            } else if (taskData.status === 'cancelled') {
-              this.activeTasks.delete(taskId)
-              taskInfo.reject(new Error('Task was cancelled'))
-            } else {
-              // Status update (pending -> processing, etc.)
-              taskInfo.task = taskData
-            }
-          }
-        })
-        
-        websocketManager.on('error', (error) => {
-          console.warn('WebSocket error, falling back to polling:', error)
-          this.useWebSocket = false
-        })
-        
-        websocketManager.on('disconnected', () => {
-          console.warn('WebSocket disconnected, falling back to polling')
-          this.useWebSocket = false
-        })
-      } catch (error) {
-        console.warn('WebSocket setup failed, using polling:', error)
-        this.useWebSocket = false
-      }
-    } else {
-      this.useWebSocket = false
-    }
-  }
-
-  /**
-   * Submit a task and poll for result
-   * @param {string} taskType - Type of task
-   * @param {object} taskData - Task data
-   * @param {object} options - Options (priority, timeout, pollInterval)
-   * @returns {Promise} Promise that resolves with task result
-   */
-  async submitTask(taskType, taskData, options = {}) {
-    const {
-      priority = 'medium',
-      timeout = null,
-      pollInterval = POLL_INTERVAL,
-      maxAttempts = MAX_POLL_ATTEMPTS
-    } = options
-
-    try {
-      // Create task
-      const taskResponse = await api.createTask(taskType, taskData, priority, timeout)
-      const taskId = taskResponse.task_id
-
-      // Check if already completed (shouldn't happen, but handle it)
-      if (taskResponse.status === 'completed' && taskResponse.result) {
-        this.taskCache.set(taskId, taskResponse.result)
-        return taskResponse.result
-      }
-
-      // Return promise that resolves when task completes
-      return new Promise((resolve, reject) => {
-        this.activeTasks.set(taskId, {
-          task: taskResponse,
-          pollInterval,
-          attempts: 0,
-          maxAttempts,
-          resolve,
-          reject,
-          startTime: Date.now()
-        })
-
-        // Subscribe to WebSocket updates if available
-        if (this.useWebSocket && websocketManager.isConnected()) {
-          websocketManager.subscribeToTask(taskId)
-        }
-
-        // Start polling as fallback (or primary if WebSocket unavailable)
-        if (!this.useWebSocket || !websocketManager.isConnected()) {
-          this._pollTask(taskId)
-        }
+  _setAuth({ token, preserveTasks = false }) {
+    if (!preserveTasks) {
+      // Finish the old generation before invalidating it.
+      this.pendingSubmissions.forEach(submission => {
+        submission.reject(new Error('Authentication session changed'))
+        submission.controller.abort()
+        clearTimeout(submission.timer)
       })
-    } catch (error) {
-      console.error('Failed to submit task:', error)
-      throw error
+      this.pendingSubmissions.clear()
+      this.activeTasks.forEach((info, taskId) => {
+        this._finishTask(taskId, info, new Error('Authentication session changed'))
+      })
+      this.sessionGeneration++
+      this.taskCache.clear()
+    }
+    this.useWebSocket = false
+    websocketManager.disconnect()
+    if (token) websocketManager.connect(token)
+  }
+
+  _isCurrent(taskId, info) {
+    return this.activeTasks.get(taskId) === info && info.generation === this.sessionGeneration
+  }
+
+  _finishTask(taskId, info, error = null, result = undefined) {
+    if (!this._isCurrent(taskId, info)) return
+    this.activeTasks.delete(taskId)
+    clearTimeout(info.pollTimer)
+    clearTimeout(info.deadlineTimer)
+    info.controller.abort()
+    websocketManager.unsubscribeFromTask(taskId)
+    if (error) info.reject(error)
+    else {
+      this.taskCache.set(taskId, result)
+      info.resolve(result)
     }
   }
 
-  /**
-   * Poll a task for status updates
-   * @private
-   */
+  _applyUpdate(taskId, task) {
+    const info = this.activeTasks.get(taskId)
+    if (!info || !this._isCurrent(taskId, info)) return
+    info.task = task
+    if (task.status === 'completed') this._finishTask(taskId, info, null, task.result)
+    else if (task.status === 'failed') this._finishTask(taskId, info, new Error(task.error || 'Task failed'))
+    else if (task.status === 'cancelled') this._finishTask(taskId, info, new Error('Task was cancelled'))
+  }
+
+  /** options.timeout is milliseconds; the server's timeout is seconds. */
+  async submitTask(taskType, taskData, options = {}) {
+    const priority = options.priority ?? 'medium'
+    const timeout = options.timeout ?? DEFAULT_TIMEOUT_MS
+    const pollInterval = options.pollInterval ?? POLL_INTERVAL
+    const maxAttempts = options.maxAttempts ?? MAX_POLL_ATTEMPTS
+    if (![timeout, pollInterval, maxAttempts].every(value => Number.isFinite(value) && value > 0)) {
+      throw new Error('Task timeout, poll interval and max attempts must be positive numbers')
+    }
+    const generation = this.sessionGeneration
+    const startTime = Date.now()
+    const deadlineAt = startTime + timeout
+    const submission = { controller: new AbortController() }
+    let response
+    try {
+      response = await new Promise((resolve, reject) => {
+        submission.reject = reject
+        submission.timer = setTimeout(() => {
+          reject(new Error('Task polling timeout'))
+          submission.controller.abort()
+        }, timeout)
+        this.pendingSubmissions.add(submission)
+        api.createTask(taskType, taskData, priority, Math.ceil(timeout / 1000), {
+          signal: submission.controller.signal
+        }).then(resolve, reject)
+      })
+    } finally {
+      clearTimeout(submission.timer)
+      this.pendingSubmissions.delete(submission)
+    }
+    if (generation !== this.sessionGeneration) throw new Error('Authentication session changed')
+    if (Date.now() >= deadlineAt) throw new Error('Task polling timeout')
+    const taskId = response.task_id
+
+    return new Promise((resolve, reject) => {
+      const info = {
+        task: response, generation, pollInterval, maxAttempts, attempts: 0,
+        resolve, reject, startTime, deadlineAt, controller: new AbortController(), inFlight: false
+      }
+      this.activeTasks.set(taskId, info)
+      info.deadlineTimer = setTimeout(() => {
+        this._finishTask(taskId, info, new Error('Task polling timeout'))
+      }, deadlineAt - Date.now())
+      this._applyUpdate(taskId, response)
+      if (!this._isCurrent(taskId, info)) return
+      websocketManager.subscribeToTask(taskId)
+      // API and worker may run in separate processes without a shared socket bus.
+      this._pollTask(taskId)
+    })
+  }
+
   async _pollTask(taskId) {
-    const taskInfo = this.activeTasks.get(taskId)
-    if (!taskInfo) {
-      return // Task was cancelled or removed
+    const info = this.activeTasks.get(taskId)
+    if (!info || !this._isCurrent(taskId, info) || info.inFlight) return
+    if (Date.now() >= info.deadlineAt || info.attempts >= info.maxAttempts) {
+      this._finishTask(taskId, info, new Error('Task polling timeout'))
+      return
     }
-
+    info.inFlight = true
+    info.attempts++
+    let delay = info.pollInterval
     try {
-      const task = await api.getTask(taskId)
-      taskInfo.attempts++
-
-      if (task.status === 'completed') {
-        // Task completed successfully
-        this.taskCache.set(taskId, task.result)
-        this.activeTasks.delete(taskId)
-        taskInfo.resolve(task.result)
-        return
+      const task = await api.getTask(taskId, { signal: info.controller.signal })
+      if (!this._isCurrent(taskId, info)) return
+      this._applyUpdate(taskId, task)
+      if (task.status === 'pending') {
+        delay *= Math.pow(POLL_BACKOFF_MULTIPLIER, Math.min(info.attempts / 10, 3))
       }
-
-      if (task.status === 'failed') {
-        // Task failed
-        this.activeTasks.delete(taskId)
-        taskInfo.reject(new Error(task.error || 'Task failed'))
-        return
-      }
-
-      if (task.status === 'cancelled') {
-        // Task was cancelled
-        this.activeTasks.delete(taskId)
-        taskInfo.reject(new Error('Task was cancelled'))
-        return
-      }
-
-      // Check if max attempts reached
-      if (taskInfo.attempts >= taskInfo.maxAttempts) {
-        this.activeTasks.delete(taskId)
-        taskInfo.reject(new Error('Task polling timeout'))
-        return
-      }
-
-      // Task still pending or processing, continue polling
-      // Use exponential backoff for pending tasks
-      const backoff = task.status === 'pending' 
-        ? taskInfo.pollInterval * Math.pow(POLL_BACKOFF_MULTIPLIER, Math.min(taskInfo.attempts / 10, 3))
-        : taskInfo.pollInterval
-
-      setTimeout(() => {
-        this._pollTask(taskId)
-      }, backoff)
-
     } catch (error) {
-      console.error(`Error polling task ${taskId}:`, error)
-      
-      // Retry on error (network issues, etc.)
-      if (taskInfo.attempts < taskInfo.maxAttempts) {
-        setTimeout(() => {
-          this._pollTask(taskId)
-        }, taskInfo.pollInterval * 2)
-      } else {
-        this.activeTasks.delete(taskId)
-        taskInfo.reject(error)
+      if (!this._isCurrent(taskId, info)) return
+      if ([401, 403, 404].includes(error.status)) {
+        this._finishTask(taskId, info, error)
+        return
       }
+      delay *= 2
+    } finally {
+      info.inFlight = false
     }
+    if (!this._isCurrent(taskId, info)) return
+    if (info.attempts >= info.maxAttempts || Date.now() >= info.deadlineAt) {
+      this._finishTask(taskId, info, new Error('Task polling timeout'))
+      return
+    }
+    info.pollTimer = setTimeout(() => this._pollTask(taskId), Math.min(delay, info.deadlineAt - Date.now()))
   }
 
-  /**
-   * Get task status (without polling)
-   */
   async getTaskStatus(taskId) {
-    try {
-      const task = await api.getTask(taskId)
-      return {
-        status: task.status,
-        result: task.result,
-        error: task.error,
-        progress: this._calculateProgress(task)
-      }
-    } catch (error) {
-      console.error('Failed to get task status:', error)
-      throw error
-    }
+    const generation = this.sessionGeneration
+    const task = await api.getTask(taskId)
+    if (generation !== this.sessionGeneration) throw new Error('Authentication session changed')
+    return { status: task.status, result: task.result, error: task.error, progress: this._calculateProgress(task) }
   }
 
-  /**
-   * Cancel a task
-   */
   async cancelTask(taskId) {
-    try {
-      await api.cancelTask(taskId)
-      const taskInfo = this.activeTasks.get(taskId)
-      if (taskInfo) {
-        this.activeTasks.delete(taskId)
-        taskInfo.reject(new Error('Task cancelled by user'))
-      }
-    } catch (error) {
-      console.error('Failed to cancel task:', error)
-      throw error
-    }
+    const info = this.activeTasks.get(taskId)
+    await api.cancelTask(taskId)
+    if (info) this._finishTask(taskId, info, new Error('Task cancelled by user'))
   }
 
-  /**
-   * Get cached task result
-   */
-  getCachedResult(taskId) {
-    return this.taskCache.get(taskId)
-  }
+  getCachedResult(taskId) { return this.taskCache.get(taskId) }
+  clearCache() { this.taskCache.clear() }
+  getActiveTasks() { return Array.from(this.activeTasks.keys()) }
+  cleanupCache() { this.clearCache() }
 
-  /**
-   * Clear task cache
-   */
-  clearCache() {
-    this.taskCache.clear()
-  }
-
-  /**
-   * Calculate progress based on task status and timing
-   * @private
-   */
   _calculateProgress(task) {
     if (task.status === 'completed') return 100
     if (task.status === 'failed' || task.status === 'cancelled') return 0
     if (task.status === 'processing') {
-      // Estimate progress based on elapsed time vs timeout
       if (task.started_at && task.timeout_seconds) {
-        const started = new Date(task.started_at).getTime()
-        const elapsed = Date.now() - started
-        const progress = Math.min(90, (elapsed / (task.timeout_seconds * 1000)) * 90)
-        return Math.round(progress)
+        const elapsed = Date.now() - new Date(task.started_at).getTime()
+        return Math.round(Math.min(90, (elapsed / (task.timeout_seconds * 1000)) * 90))
       }
-      return 50 // Unknown progress, assume halfway
+      return 50
     }
-    return 0 // Pending
-  }
-
-  /**
-   * Get all active tasks
-   */
-  getActiveTasks() {
-    return Array.from(this.activeTasks.keys())
-  }
-
-  /**
-   * Clean up old cached results (older than 1 hour)
-   */
-  cleanupCache() {
-    // For now, just clear all cache
-    // Could implement time-based cleanup if needed
-    this.clearCache()
+    return 0
   }
 }
 
-// Export singleton instance
 const taskManager = new TaskManager()
 export default taskManager

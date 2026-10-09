@@ -5,6 +5,7 @@ Two-Factor Authentication Service - 2FA management
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
+from sqlalchemy import update
 import secrets
 import pyotp
 import qrcode
@@ -124,13 +125,31 @@ class TwoFactorAuthService:
             
             # Check backup codes
             if two_fa.backup_codes and token in two_fa.backup_codes:
-                # Remove used backup code
+                # A write lock also works on SQLite, where FOR UPDATE is ignored.
+                # Refresh under that lock so concurrent sessions cannot consume
+                # the same code from stale JSON lists.
+                locked = db.execute(
+                    update(TwoFactorAuthDB).where(
+                        TwoFactorAuthDB.id == two_fa.id,
+                        TwoFactorAuthDB.is_enabled == True,
+                        TwoFactorAuthDB.secret_key == two_fa.secret_key,
+                    ).values(updated_at=TwoFactorAuthDB.updated_at)
+                    .execution_options(synchronize_session=False)
+                )
+                if locked.rowcount != 1:
+                    db.rollback()
+                    return False
+                db.refresh(two_fa)
+                if token not in (two_fa.backup_codes or []):
+                    db.rollback()
+                    return False
                 two_fa.backup_codes = [code for code in two_fa.backup_codes if code != token]
                 db.commit()
                 return True
             
             return False
         except Exception as e:
+            db.rollback()
             logger.log_error(e, context={"action": "verify_2fa", "user_id": user_id})
             return False
     

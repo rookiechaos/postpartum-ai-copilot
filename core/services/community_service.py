@@ -23,6 +23,15 @@ class CommunityService:
     
     def __init__(self):
         self.nsfw_detector = get_nsfw_detector()
+
+    @staticmethod
+    def _find_visible_post(db: Session, post_id: str, user_id: Optional[str] = None):
+        post = db.query(PostDB).filter(
+            PostDB.post_id == post_id, PostDB.is_deleted == False
+        ).first()
+        if post and (post.moderation_status == "approved" or post.user_id == user_id):
+            return post
+        return None
     
     async def create_post(
         self,
@@ -177,16 +186,8 @@ class CommunityService:
             raise DatabaseError("Database session required")
         
         def _get_post():
-            post = db.query(PostDB).filter(
-                and_(
-                    PostDB.post_id == post_id,
-                    PostDB.is_deleted == False
-                )
-            ).first()
-            
+            post = self._find_visible_post(db, post_id, user_id)
             if not post:
-                return None
-            if post.moderation_status != "approved" and post.user_id != user_id:
                 return None
             
             # Increment view count
@@ -406,16 +407,20 @@ class CommunityService:
             raise ValidationError("Comment contains inappropriate content")
         
         def _create_comment():
-            # Check if post exists
-            post = db.query(PostDB).filter(
-                and_(
-                    PostDB.post_id == post_id,
-                    PostDB.is_deleted == False
-                )
-            ).first()
+            post = self._find_visible_post(db, post_id, user_id)
             
             if not post:
                 return None
+
+            if parent_id:
+                parent = db.query(CommentDB).filter(
+                    CommentDB.comment_id == parent_id,
+                    CommentDB.post_id == post_id,
+                    CommentDB.is_deleted == False,
+                    or_(CommentDB.moderation_status == "approved", CommentDB.user_id == user_id),
+                ).first()
+                if not parent:
+                    return None
             
             comment_id = f"comment_{uuid.uuid4().hex[:16]}"
             comment = CommentDB(
@@ -451,7 +456,8 @@ class CommunityService:
         post_id: str,
         limit: int = 50,
         offset: int = 0,
-        db: Session = None
+        db: Session = None,
+        user_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Get comments for a post
@@ -469,6 +475,8 @@ class CommunityService:
             raise DatabaseError("Database session required")
         
         def _get_comments():
+            if not self._find_visible_post(db, post_id, user_id):
+                return None
             comments = db.query(CommentDB).filter(
                 and_(
                     CommentDB.post_id == post_id,
@@ -479,11 +487,14 @@ class CommunityService:
             
             return [self._comment_to_dict(comment) for comment in comments]
         
-        return await query_in_executor(
+        result = await query_in_executor(
             _get_comments,
             db,
             error_message="Failed to get comments"
         )
+        if result is None:
+            raise NotFoundError(f"Post {post_id} not found")
+        return result
     
     async def follow_user(
         self,

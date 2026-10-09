@@ -5,6 +5,8 @@ AI Provider Implementations - Support for OpenAI, Claude, and Gemini
 from typing import Dict, List, Any, Optional, AsyncGenerator
 from abc import ABC, abstractmethod
 from config.settings import get_settings
+from services.ai_errors import PUBLIC_AI_ERROR
+from services.logging_service import logger
 
 
 class AIProvider(ABC):
@@ -73,7 +75,8 @@ class OpenAIProvider(AIProvider):
             
             yield {"type": "done"}
         except Exception as e:
-            yield {"type": "error", "content": str(e)}
+            logger.log_error(e, context={"action": "openai_stream"})
+            yield {"type": "error", "content": PUBLIC_AI_ERROR}
 
 
 class ClaudeProvider(AIProvider):
@@ -164,7 +167,8 @@ class ClaudeProvider(AIProvider):
             
             yield {"type": "done"}
         except Exception as e:
-            yield {"type": "error", "content": str(e)}
+            logger.log_error(e, context={"action": "claude_stream"})
+            yield {"type": "error", "content": PUBLIC_AI_ERROR}
 
 
 class GeminiProvider(AIProvider):
@@ -268,7 +272,8 @@ class GeminiProvider(AIProvider):
             
             yield {"type": "done"}
         except Exception as e:
-            yield {"type": "error", "content": str(e)}
+            logger.log_error(e, context={"action": "gemini_stream"})
+            yield {"type": "error", "content": PUBLIC_AI_ERROR}
 
 
 def get_ai_provider() -> AIProvider:

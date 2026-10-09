@@ -184,6 +184,7 @@ async def get_comments(
     post_id: str,
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    current_user: Optional[User] = Depends(get_optional_user),
     db: Session = Depends(get_db)
 ):
     """Get comments for a post"""
@@ -193,9 +194,12 @@ async def get_comments(
             post_id=post_id,
             limit=limit,
             offset=offset,
+            user_id=current_user.user_id if current_user else None,
             db=db
         )
         return {"success": True, "comments": comments, "count": len(comments)}
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except DatabaseError as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -16,6 +16,7 @@ from services.nsfw_detector import get_nsfw_detector
 from config.settings import get_settings
 from exceptions import AIServiceError, ValidationError
 from services.logging_service import logger
+from services.ai_errors import PUBLIC_AI_ERROR
 from utils.locale_loader import load_locale_file, load_locale_text
 
 
@@ -237,11 +238,12 @@ Please provide a helpful, empathetic response. Include:
                 }
             }
         except Exception as e:
+            logger.log_error(e, context={"action": "ai_chat"})
             return {
-                "text": f"I'm having trouble connecting right now. Please try again or consult your healthcare provider for urgent concerns. (Error: {str(e)})",
+                "text": "I'm having trouble connecting right now. Please try again or consult your healthcare provider for urgent concerns.",
                 "suggestions": [],
                 "red_flags": ["If this is a medical emergency, please contact emergency services immediately."],
-                "error": str(e),
+                "error": PUBLIC_AI_ERROR,
                 "provider": self.provider_name
             }
     
@@ -278,9 +280,13 @@ User's question: {query}"""
                 temperature=0.7,
                 max_tokens=500
             ):
-                yield chunk
+                if chunk.get("type") == "error":
+                    yield {"type": "error", "content": PUBLIC_AI_ERROR}
+                else:
+                    yield chunk
         except Exception as e:
-            yield {"type": "error", "content": str(e)}
+            logger.log_error(e, context={"action": "ai_chat_stream"})
+            yield {"type": "error", "content": PUBLIC_AI_ERROR}
     
     async def crisis_response(
         self,
@@ -368,11 +374,12 @@ Provide immediate, concise help. What should they try RIGHT NOW?
                 }
             }
         except Exception as e:
+            logger.log_error(e, context={"action": "ai_crisis_response"})
             return {
                 "text": "I'm here to help. For immediate concerns, try: 1) Check if baby needs feeding/diaper change, 2) Try gentle rocking or swaddling, 3) If urgent medical concern, contact healthcare provider.",
                 "actions": ["Check feeding/diaper", "Try calming techniques", "Contact healthcare if urgent"],
                 "red_flags": ["If this is a medical emergency, call emergency services"],
-                "error": str(e),
+                "error": PUBLIC_AI_ERROR,
                 "provider": self.provider_name
             }
     
@@ -449,12 +456,13 @@ Always start with encouragement and positive reinforcement. Acknowledge the moth
                 "provider": response.get("provider", self.provider_name)
             }
         except Exception as e:
+            logger.log_error(e, context={"action": "ai_analyze_tracking"})
             return {
                 "patterns": [],
                 "insights": ["Unable to analyze data at this time. Please try again."],
                 "recommendations": [],
                 "normalcy_checks": [],
-                "error": str(e),
+                "error": PUBLIC_AI_ERROR,
                 "provider": self.provider_name
             }
     
@@ -542,11 +550,12 @@ If you notice any concerns, frame them gently and suggest when to consult health
                 "provider": response.get("provider", self.provider_name)
             }
         except Exception as e:
+            logger.log_error(e, context={"action": "ai_tracking_summary"})
             return {
                 "summary_text": f"Unable to generate {period} summary at this time. You're doing great, keep tracking!",
                 "period": period,
                 "timestamp": datetime.now().isoformat(),
-                "error": str(e),
+                "error": PUBLIC_AI_ERROR,
                 "provider": self.provider_name
             }
     
@@ -612,13 +621,14 @@ Assess:
                 }
             }
         except Exception as e:
+            logger.log_error(e, context={"action": "ai_emotional_state"})
             return {
                 "assessment": "Thank you for checking in. Remember, it's okay to ask for help.",
                 "risk_level": "low",
                 "suggestions": ["Consider reaching out to a support person", "Contact your healthcare provider if concerns persist"],
                 "escalation_needed": False,
                 "resources": ["Postpartum Support International", "National Suicide Prevention Lifeline"],
-                "error": str(e),
+                "error": PUBLIC_AI_ERROR,
                 "provider": self.provider_name
             }
     

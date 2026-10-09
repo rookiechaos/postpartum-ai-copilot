@@ -38,7 +38,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, update
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 from models import database
@@ -53,8 +53,8 @@ async def fixture_current_user(x_review_user: str = Header("review_viewer")):
     return User(id=1, user_id=x_review_user, email="review@example.com", is_active=True, created_at=datetime.utcnow())
 
 
-async def fixture_optional_user():
-    return None
+async def fixture_optional_user(x_review_user: Optional[str] = Header(None)):
+    return await fixture_current_user(x_review_user) if x_review_user else None
 
 
 auth_dependency = types.ModuleType("middleware.auth")
@@ -443,7 +443,8 @@ class ReviewFixTests(unittest.TestCase):
         otp = types.SimpleNamespace(TOTP=lambda secret: types.SimpleNamespace(verify=lambda *args, **kwargs: False))
         scope = {"Dict": Dict, "Any": Any, "Session": Session, "datetime": datetime,
                  "TwoFactorAuthDB": database.TwoFactorAuthDB, "logger": logger,
-                 "ValidationError": ValidationError, "DatabaseError": DatabaseError, "pyotp": otp}
+                 "ValidationError": ValidationError, "DatabaseError": DatabaseError, "pyotp": otp,
+                 "update": update}
         return extract("core/services/two_factor_auth_service.py", "TwoFactorAuthService", scope)()
 
     def test_backup_code_is_persistently_consumed(self):

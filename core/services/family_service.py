@@ -89,13 +89,18 @@ class FamilyService:
             family_id: Family ID
             inviter_user_id: User ID of inviter
             invitee_user_id: User ID to invite
-            role: Role to assign (owner, admin, member, viewer)
+            role: Role to assign (admin, member, viewer)
             db: Database session
         
         Returns:
             Created member invitation
         """
         try:
+            family = db.query(FamilyDB).filter(FamilyDB.family_id == family_id).first()
+            if not family:
+                raise NotFoundError("Family not found")
+            if role not in {"admin", "member", "viewer"}:
+                raise ValidationError("Invitations cannot grant ownership")
             # Check if inviter has permission
             inviter_member = db.query(FamilyMemberDB).filter(
                 and_(
@@ -105,8 +110,11 @@ class FamilyService:
                 )
             ).first()
             
-            if not inviter_member or inviter_member.role not in ["owner", "admin"]:
+            is_creator = family.created_by == inviter_user_id
+            if not inviter_member or (not is_creator and inviter_member.role != "admin"):
                 raise ValidationError("Only owners and admins can invite members")
+            if role == "admin" and not is_creator:
+                raise ValidationError("Only the family creator can invite admins")
             
             # Check if already a member
             existing = db.query(FamilyMemberDB).filter(
@@ -164,6 +172,8 @@ class FamilyService:
             
             if not member:
                 raise NotFoundError("Invitation not found")
+            if member.role not in {"admin", "member", "viewer"}:
+                raise ValidationError("Invalid invitation role; request a new invitation")
             
             member.status = "active"
             member.joined_at = datetime.utcnow()
@@ -308,6 +318,9 @@ class FamilyService:
     ) -> bool:
         """Remove a member from family (only owner/admin can remove)"""
         try:
+            family = db.query(FamilyDB).filter(FamilyDB.family_id == family_id).first()
+            if not family:
+                raise NotFoundError("Family not found")
             # Check if remover has permission
             remover_member = db.query(FamilyMemberDB).filter(
                 and_(
@@ -317,7 +330,8 @@ class FamilyService:
                 )
             ).first()
             
-            if not remover_member or remover_member.role not in ["owner", "admin"]:
+            is_creator = family.created_by == remover_user_id
+            if not remover_member or (not is_creator and remover_member.role != "admin"):
                 raise ValidationError("Only owners and admins can remove members")
             
             # Cannot remove owner
@@ -328,8 +342,10 @@ class FamilyService:
                 )
             ).first()
             
-            if member and member.role == "owner":
-                raise ValidationError("Cannot remove the owner")
+            if member_user_id == family.created_by:
+                raise ValidationError("Cannot remove the family creator")
+            if member and member.role in {"owner", "admin"} and not is_creator:
+                raise ValidationError("Only the family creator can remove admins or legacy owners")
             
             if member:
                 member.status = "inactive"

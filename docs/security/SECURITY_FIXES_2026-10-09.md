@@ -35,9 +35,10 @@
 
 ```bash
 python tests/regression/security_checks.py
-node --test tests/regression/frontend_security.test.cjs
+python tests/regression/followup_checks.py
+node --test tests/regression/frontend_security.test.cjs tests/regression/frontend_tasks.test.cjs
 python -m unittest discover -s tests/privacy -v
-ruff check --select E9,F63,F7,F82 backend core workers tests/regression/security_checks.py
+ruff check --select E9,F63,F7,F82 backend core workers tests/regression
 ./check-privacy.sh
 ```
 
@@ -46,3 +47,21 @@ ruff check --select E9,F63,F7,F82 backend core workers tests/regression/security
 - 隐私扫描器回归：14 项通过。待发布工作树、暂存区和分支可达历史的隐私扫描未发现匹配的真实 IP、私人邮箱、个人目录路径或凭证；忽略的本地文件及不可达对象不在此结论范围内。
 - Python 致命静态错误检查通过；全部前端源文件的 JavaScript/JSX 语法检查通过；Docker Compose 配置解析通过。
 - **未执行完整依赖安装、完整应用集成测试、前端生产构建或 Docker 镜像构建/启动。** 依赖下载未获批准，当前环境也没有完整后端依赖和前端 node_modules。版本约束修复不等于完整依赖解析已验证；本次测试不证明真实支付网络、实际 JWT/TOTP 库或 PostgreSQL 并发行为已经端到端验证。
+
+## 对 c96e6e5 的再次复审修复
+
+| # | 问题 | 修复后的行为 |
+|---|---|---|
+| 1 | 生产限流装饰器丢失接口签名，接口返回 422 | 用 `functools.wraps` 保留 FastAPI 的参数和依赖签名；保留限流和 429 响应。 |
+| 2 | AI 正常响应和流式错误包含内部异常 | 聊天、分析、摘要、供应商流及 worker 任务错误返回通用消息；异常只写入本地日志。 |
+| 3 | WebSocket 已连接时不轮询，跨进程完成通知丢失后永久等待 | 所有任务都轮询数据库状态，WebSocket 仍可提前完成；创建和等待共用明确截止时间。 |
+| 4 | 退出或切换账号保留连接、任务和结果 | 认证变更同步取消等待、清除缓存、关闭连接和重连计时器；拒绝旧账号的迟到结果。当前账号刷新令牌会重连并保留任务。 |
+| 5 | 隐藏或删除帖子的评论仍可公开读取或提交 | 评论读写检查父帖可见性；回复必须属于同一帖子，且父评论可见、未删除。 |
+| 6 | SQLite 中两个会话可同时消费同一备用验证码 | 取得数据库写锁后重新读取备用码列表再移除；并发验证只允许一次成功。无需数据库结构迁移。 |
+| 7 | WebSocket 断连时边遍历边删除订阅字典 | 遍历快照并清理全部订阅；重复断连安全，不影响其他连接。 |
+| 8 | 状态请求持续失败不计入重试次数 | 发出请求前计数；错误同样消耗次数；401/403/404 直接结束，独立计时器终止挂起请求。 |
+| 9 | 家庭管理员可以邀请无法移除的 owner | 邀请只允许 admin/member/viewer；只有创建者可授予或撤销 admin。创建者可移除遗留的其他 owner，旧 owner 邀请不能再接受。 |
+
+新增后端回归 17 项、前端任务回归 15 项，均使用当前源码。合计后端 50 项、前端 24 项、隐私扫描器 14 项通过。新增测试覆盖生产装饰器、隐藏父帖、角色边界、两个真实 SQLite 会话并发、断连清理、AI 异常、无通知的 WebSocket、网络失败、截止时间和跨账号迟到响应。
+
+生产限流测试执行原始外层装饰器与实际登录路由，底层限流器使用受控 fixture；未安装 SlowAPI，因此不代表其存储或实际计数器已经集成验证。前端测试使用虚拟时钟和 WebSocket/fetch fixture，不代表实际浏览器及跨进程服务已经端到端验证。上述完整构建、真实供应商及 PostgreSQL 验证限制继续适用；付费订阅继续关闭。

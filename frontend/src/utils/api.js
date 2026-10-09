@@ -32,6 +32,25 @@ const setStoredUserId = (id) => {
 }
 
 const getRefreshToken = () => localStorage.getItem('refresh_token')
+const authListeners = new Set()
+let authSession = 0
+
+function notifyAuthChange(preserveTasks = false) {
+  const change = { token: getToken(), preserveTasks }
+  authListeners.forEach(callback => {
+    try { callback(change) } catch (error) { console.error('Auth listener failed:', error) }
+  })
+}
+
+function assertSession(session) {
+  if (session !== authSession) throw new Error('Authentication session changed')
+}
+
+async function responseError(response) {
+  const error = new Error(await parseErrorResponse(response))
+  error.status = response.status
+  return error
+}
 
 async function clearPrivateCaches() {
   if (typeof caches === 'undefined') return
@@ -67,6 +86,7 @@ function withTimeout(options, defaultTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {
 /** Call /api/auth/refresh with refresh_token; does NOT retry on 401 (avoids loop). */
 async function refreshAccessToken() {
   const refreshToken = getRefreshToken()
+  const session = authSession
   if (!refreshToken) return null
   const response = await fetch(`${API_BASE}/api/auth/refresh`, {
     method: 'POST',
@@ -76,13 +96,18 @@ async function refreshAccessToken() {
     },
     body: JSON.stringify({ refresh_token: refreshToken })
   })
+  if (session !== authSession) return null
+  if (refreshToken !== getRefreshToken()) return getToken()
   if (!response.ok) return null
   const data = await response.json().catch(() => null)
+  if (session !== authSession) return null
+  if (refreshToken !== getRefreshToken()) return getToken()
   if (data?.access_token) {
     setToken(data.access_token)
     if (data.refresh_token) {
       localStorage.setItem('refresh_token', data.refresh_token)
     }
+    notifyAuthChange(true)
     return data.access_token
   }
   return null
@@ -90,6 +115,7 @@ async function refreshAccessToken() {
 
 export const api = {
   async get(endpoint, options = {}, isRetry = false) {
+    const session = authSession
     const { signal, timeoutId } = withTimeout(options)
     try {
       const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -101,22 +127,26 @@ export const api = {
           ...options.headers
         }
       })
+      assertSession(session)
       if (response.status === 401 && !isRetry) {
         const newToken = await refreshAccessToken()
+        assertSession(session)
         if (newToken) {
           return await this.get(endpoint, options, true)
         }
         this.logout()
         triggerUnauthorized()
-        throw new Error('Authentication required')
+        const error = new Error('Authentication required')
+        error.status = 401
+        throw error
       }
       if (response.status === 401 && isRetry) {
         this.logout()
         triggerUnauthorized()
-        throw new Error(await parseErrorResponse(response))
+        throw await responseError(response)
       }
       if (!response.ok) {
-        throw new Error(await parseErrorResponse(response))
+        throw await responseError(response)
       }
       return await response.json()
     } catch (error) {
@@ -131,10 +161,13 @@ export const api = {
   },
 
   async post(endpoint, data, options = {}, isRetry = false) {
+    const session = authSession
+    const { signal, timeoutId } = withTimeout(options)
     try {
       const response = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
         ...options,
+        signal,
         headers: {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
@@ -142,31 +175,38 @@ export const api = {
         },
         body: JSON.stringify(data)
       })
+      assertSession(session)
       if (response.status === 401 && !isRetry && !endpoint.startsWith('/api/auth/')) {
         const newToken = await refreshAccessToken()
+        assertSession(session)
         if (newToken) {
           return await this.post(endpoint, data, options, true)
         }
         this.logout()
         triggerUnauthorized()
-        throw new Error('Authentication required')
+        const error = new Error('Authentication required')
+        error.status = 401
+        throw error
       }
       if (response.status === 401 && isRetry) {
         this.logout()
         triggerUnauthorized()
-        throw new Error(await parseErrorResponse(response))
+        throw await responseError(response)
       }
       if (!response.ok) {
-        throw new Error(await parseErrorResponse(response))
+        throw await responseError(response)
       }
       return await response.json()
     } catch (error) {
       console.error('API POST error:', error)
       throw error
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId)
     }
   },
 
   async delete(endpoint, options = {}, isRetry = false) {
+    const session = authSession
     const { signal, timeoutId } = withTimeout(options)
     try {
       const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -179,25 +219,29 @@ export const api = {
           ...options.headers
         }
       })
+      assertSession(session)
       if (response.status === 401 && !isRetry) {
         const newToken = await refreshAccessToken()
+        assertSession(session)
         if (newToken) {
           return await this.delete(endpoint, options, true)
         }
         this.logout()
         triggerUnauthorized()
-        throw new Error('Authentication required')
+        const error = new Error('Authentication required')
+        error.status = 401
+        throw error
       }
       if (response.status === 401 && isRetry) {
         this.logout()
         triggerUnauthorized()
-        throw new Error(await parseErrorResponse(response))
+        throw await responseError(response)
       }
       if (response.status === 204) {
         return null
       }
       if (!response.ok) {
-        throw new Error(await parseErrorResponse(response))
+        throw await responseError(response)
       }
       return await response.json().catch(() => null)
     } catch (error) {
@@ -215,17 +259,27 @@ export const api = {
     onUnauthorizedCallback = callback
   },
 
+  onAuthChange(callback) {
+    authListeners.add(callback)
+    return () => authListeners.delete(callback)
+  },
+
   // Authentication methods
   async login(email, password, verificationToken = null) {
-    await this.logout()
+    const clearing = this.logout()
+    const session = authSession
+    await clearing
+    assertSession(session)
     const response = await this.post('/api/auth/login', {
       email, password, verification_token: verificationToken
     })
+    assertSession(session)
     if (response.access_token) {
       setToken(response.access_token)
       if (response.refresh_token) {
         localStorage.setItem('refresh_token', response.refresh_token)
       }
+      notifyAuthChange()
     }
     return response
   },
@@ -240,9 +294,11 @@ export const api = {
   },
 
   logout() {
+    authSession++
     setToken(null)
     setStoredUserId(null)
     localStorage.removeItem('refresh_token')
+    notifyAuthChange()
     return clearPrivateCaches().catch(() => {})
   },
 
@@ -302,17 +358,17 @@ export const api = {
   },
 
   // Task management methods
-  async createTask(taskType, taskData, priority = 'medium', timeout = null) {
+  async createTask(taskType, taskData, priority = 'medium', timeout = null, options = {}) {
     return await this.post('/api/tasks', {
       task_type: taskType,
       task_data: taskData,
       priority,
       timeout
-    })
+    }, options)
   },
 
-  async getTask(taskId) {
-    return await this.get(`/api/tasks/${taskId}`)
+  async getTask(taskId, options = {}) {
+    return await this.get(`/api/tasks/${taskId}`, options)
   },
 
   async getUserTasks(status = null, limit = 50) {

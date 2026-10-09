@@ -51,7 +51,7 @@ class ConnectionManager:
                     del self.active_connections[user_id]
             
             # Remove from task subscriptions
-            for task_id, connections in self.task_subscriptions.items():
+            for task_id, connections in list(self.task_subscriptions.items()):
                 connections.discard(websocket)
                 if not connections:
                     del self.task_subscriptions[task_id]
@@ -73,7 +73,7 @@ class ConnectionManager:
             return
         
         disconnected = set()
-        for websocket in self.active_connections[user_id]:
+        for websocket in list(self.active_connections[user_id]):
             try:
                 await websocket.send_json(message)
             except Exception as e:
@@ -97,7 +97,7 @@ class ConnectionManager:
         }
         
         disconnected = set()
-        for websocket in self.task_subscriptions[task_id]:
+        for websocket in list(self.task_subscriptions[task_id]):
             try:
                 await websocket.send_json(message)
             except Exception as e:
