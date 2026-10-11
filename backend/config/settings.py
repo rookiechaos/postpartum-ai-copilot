@@ -97,6 +97,8 @@ class Settings(BaseSettings):
     
     # Admin Configuration
     admin_user_ids: Optional[str] = Field(default=None, validation_alias="ADMIN_USER_IDS")
+    # Separate from system administration; only manages this pilot's public directory.
+    institution_user_ids: Optional[str] = Field(default=None, validation_alias="INSTITUTION_USER_IDS")
     
     # Logging
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")

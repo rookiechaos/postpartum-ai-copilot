@@ -20,7 +20,7 @@ function Settings({ userId, onContextUpdate, onLogout }) {
     babyAge: '',
     birthType: '',
     feedingType: '',
-    notifications: true,
+    notifications: false,
     darkMode: false,
     language: i18n.language
   })
@@ -41,7 +41,7 @@ function Settings({ userId, onContextUpdate, onLogout }) {
         babyAge: context.babyAge || '',
         birthType: context.birthType || '',
         feedingType: context.feedingType || '',
-        notifications: context.notifications !== false,
+        notifications: context.notifications === true,
         darkMode: context.darkMode || false,
         language: context.language || i18n.language
       })
@@ -127,7 +127,7 @@ function Settings({ userId, onContextUpdate, onLogout }) {
           onClick={() => setActiveSubTab('analytics')}
         >
           <BarChart3 size={18} />
-          Analytics
+          {t('settings.analytics')}
         </button>
         <button
           className={activeSubTab === 'accessibility' ? 'active' : ''}
@@ -197,12 +197,7 @@ function Settings({ userId, onContextUpdate, onLogout }) {
                 onChange={(e) => setSettings({ ...settings, babyAge: e.target.value })}
               >
                 <option value="">{t('common.select')}</option>
-                <option value="0-7">0-7 days</option>
-                <option value="1-2">1-2 weeks</option>
-                <option value="2-4">2-4 weeks</option>
-                <option value="1-2m">1-2 months</option>
-                <option value="2-3m">2-3 months</option>
-                <option value="3+">3+ months</option>
+                {['0-7', '1-2', '2-4', '1-2m', '2-3m', '3+'].map(value => <option key={value} value={value}>{t(`pilot.ages.${value}`)}</option>)}
               </select>
             </div>
             <div className="form-group">
@@ -212,8 +207,8 @@ function Settings({ userId, onContextUpdate, onLogout }) {
                 onChange={(e) => setSettings({ ...settings, birthType: e.target.value })}
               >
                 <option value="">{t('common.select')}</option>
-                <option value="vaginal">Vaginal Birth</option>
-                <option value="c-section">C-Section</option>
+                <option value="vaginal">{t('pilot.vaginal')}</option>
+                <option value="c-section">{t('pilot.csection')}</option>
               </select>
             </div>
             <div className="form-group">
@@ -223,9 +218,7 @@ function Settings({ userId, onContextUpdate, onLogout }) {
                 onChange={(e) => setSettings({ ...settings, feedingType: e.target.value })}
               >
                 <option value="">{t('common.select')}</option>
-                <option value="breast">Breastfeeding</option>
-                <option value="formula">Formula</option>
-                <option value="mixed">Mixed</option>
+                {['breast', 'formula', 'mixed'].map(value => <option key={value} value={value}>{t(`tracking.${value}`)}</option>)}
               </select>
             </div>
           </div>

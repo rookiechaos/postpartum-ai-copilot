@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import api from '../utils/api'
+import { japanDay } from '../utils/japanTime'
 import { useToast } from './Toast'
 import { Calendar, TrendingUp } from 'lucide-react'
 import EmptyState from './EmptyState'
 import './Charts.css'
 
-function Charts({ userId }) {
+function Charts({ userId, onRecord }) {
+  const { t, i18n } = useTranslation()
   const toast = useToast()
   const [chartData, setChartData] = useState([])
   const [loading, setLoading] = useState(true)
@@ -26,7 +28,7 @@ function Charts({ userId }) {
       setChartData(processed)
     } catch (error) {
       console.error('Error loading chart data:', error)
-      toast.error(error?.message || 'Failed to load chart data')
+      toast.error(t('pilot.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -35,10 +37,8 @@ function Charts({ userId }) {
   const processDataForCharts = (entries) => {
     // Enhanced data processing for better visualization
     const now = new Date()
-    const last7Days = Array.from({ length: 7 }, (_, i) => {
-      const date = new Date(now)
-      date.setDate(date.getDate() - (6 - i))
-      return date.toISOString().split('T')[0]
+    const last7Days = Array.from({ length: timeRange }, (_, i) => {
+      return japanDay(new Date(now.getTime() - (timeRange - 1 - i) * 86400000))
     })
     
     // Group entries by date
@@ -56,7 +56,7 @@ function Charts({ userId }) {
     })
     
     entries.forEach(entry => {
-      const entryDate = new Date(entry.timestamp).toISOString().split('T')[0]
+      const entryDate = japanDay(entry.timestamp)
       if (groupedByDate[entryDate]) {
         if (entry.entry_type === 'feeding') {
           groupedByDate[entryDate].feeding++
@@ -69,7 +69,7 @@ function Charts({ userId }) {
         } else if (entry.entry_type === 'mood') {
           // Convert mood level to number for chart
           const moodMap = { 'very_low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'very_good': 5 }
-          groupedByDate[entryDate].mood = moodMap[entry.mood_level] || 3
+          groupedByDate[entryDate].mood = moodMap[entry.mood_level] ?? null
         }
       }
     })
@@ -84,11 +84,11 @@ function Charts({ userId }) {
     return Object.values(groupedByDate)
       .sort((a, b) => new Date(a.date) - new Date(b.date))
       .map(day => ({
-        date: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        date: new Date(`${day.date}T00:00:00+09:00`).toLocaleDateString(i18n.language, { timeZone: 'Asia/Tokyo', month: 'short', day: 'numeric' }),
         feeds: day.feeding,
         diapers: day.diaper,
         sleepMinutes: day.sleepDuration,
-        mood: day.mood || 3
+        mood: day.mood
       }))
   }
 
@@ -97,20 +97,16 @@ function Charts({ userId }) {
     return (
       <div className="charts-loading">
         <div className="spinner"></div>
-        <p>Loading charts...</p>
+        <p>{t('charts.loading')}</p>
       </div>
     )
   }
 
-  if (chartData.length === 0 || chartData.every(day => day.feeds === 0 && day.diapers === 0 && day.sleepMinutes === 0)) {
+  if (chartData.length === 0 || chartData.every(day => day.feeds === 0 && day.diapers === 0 && day.sleepMinutes === 0 && day.mood === null)) {
     return (
       <EmptyState
         type="charts"
-        onAction={() => {
-          // Navigate to tracking tab
-          const event = new CustomEvent('navigate', { detail: { tab: 'tracking' } })
-          window.dispatchEvent(event)
-        }}
+        onAction={onRecord}
       />
     )
   }
@@ -118,7 +114,7 @@ function Charts({ userId }) {
   return (
     <div className="charts-container">
       <div className="charts-header">
-        <h2>📊 Trends & Analytics</h2>
+        <h2>📊 {t('charts.title')}</h2>
         <div className="time-range-selector">
           <Calendar size={18} />
           <select 
@@ -126,17 +122,17 @@ function Charts({ userId }) {
             onChange={(e) => setTimeRange(Number(e.target.value))}
             className="time-select"
           >
-            <option value={3}>Last 3 days</option>
-            <option value={7}>Last 7 days</option>
-            <option value={14}>Last 2 weeks</option>
-            <option value={30}>Last month</option>
+            <option value={3}>{t('charts.last3Days')}</option>
+            <option value={7}>{t('charts.last7Days')}</option>
+            <option value={14}>{t('charts.last2Weeks')}</option>
+            <option value={30}>{t('charts.lastMonth')}</option>
           </select>
         </div>
       </div>
 
       <div className="charts-grid">
         <div className="chart-card">
-          <h3>Feeding Frequency</h3>
+          <h3>{t('charts.feedingFrequency')}</h3>
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -144,13 +140,13 @@ function Charts({ userId }) {
               <YAxis />
               <Tooltip />
               <Legend />
-              <Bar dataKey="feeds" fill="#667eea" name="Feeds per day" />
+              <Bar dataKey="feeds" fill="#256354" name={t('charts.feedsPerDay')} />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
         <div className="chart-card">
-          <h3>Diaper Changes</h3>
+          <h3>{t('charts.diaperChanges')}</h3>
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -158,13 +154,13 @@ function Charts({ userId }) {
               <YAxis />
               <Tooltip />
               <Legend />
-              <Bar dataKey="diapers" fill="#48bb78" name="Diaper changes" />
+              <Bar dataKey="diapers" fill="#48bb78" name={t('charts.diaperChanges')} />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
         <div className="chart-card">
-          <h3>Sleep Duration</h3>
+          <h3>{t('charts.sleepDuration')}</h3>
           <ResponsiveContainer width="100%" height={250}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -177,14 +173,14 @@ function Charts({ userId }) {
                 dataKey="sleepMinutes" 
                 stroke="#ed8936" 
                 strokeWidth={2}
-                name="Sleep (minutes)"
+                name={t('charts.sleepMinutes')}
               />
             </LineChart>
           </ResponsiveContainer>
         </div>
 
         <div className="chart-card">
-          <h3>Mood Trend</h3>
+          <h3>{t('charts.moodTrend')}</h3>
           <ResponsiveContainer width="100%" height={250}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -197,7 +193,7 @@ function Charts({ userId }) {
                 dataKey="mood" 
                 stroke="#f56565" 
                 strokeWidth={2}
-                name="Mood (1-5)"
+                name={t('charts.moodTrend')}
               />
             </LineChart>
           </ResponsiveContainer>

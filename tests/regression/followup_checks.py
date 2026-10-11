@@ -267,11 +267,13 @@ class FollowupReviewTests(unittest.TestCase):
         self.assertEqual(manager.active_connections, {"review_subject": {other}})
 
     def ai_service(self):
+        from utils.locale_loader import load_locale_text
         detector = types.SimpleNamespace(check=AsyncMock(return_value={"safe": True}), should_block=lambda result: False)
         ai_class = extract("core/services/ai_service.py", "AIService", {
             "Dict": Dict, "List": List, "Any": Any, "Optional": Optional, "AsyncGenerator": AsyncGenerator,
             "datetime": datetime, "json": json, "get_nsfw_detector": lambda: detector,
             "logger": logger, "PUBLIC_AI_ERROR": PUBLIC_AI_ERROR,
+            "load_locale_text": load_locale_text,
         })
         ai = object.__new__(ai_class)
         ai.provider_name = "review"

@@ -1,6 +1,6 @@
 // Service Worker for Postpartum AI Copilot
-const CACHE_NAME = 'postpartum-copilot-v3'
-const RUNTIME_CACHE = 'postpartum-runtime-v3'
+const CACHE_NAME = 'postpartum-copilot-v4'
+const RUNTIME_CACHE = 'postpartum-runtime-v4'
 const urlsToCache = [
   '/',
   '/index.html',

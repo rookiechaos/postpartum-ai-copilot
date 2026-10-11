@@ -1,345 +1,128 @@
 import React, { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
-import EmptyState from './EmptyState'
+import taskManager from '../utils/taskManager'
+import { japanDateTime } from '../utils/japanTime'
+import AIUseNotice from './AIUseNotice'
 import Charts from './Charts'
 import { useToast } from './Toast'
 import './TrackingPanel.css'
 
-function TrackingPanel({ userId }) {
+const types = ['feeding', 'diaper', 'sleep', 'mood', 'pumping', 'recovery']
+
+export default function TrackingPanel({ userId, initialEntryType }) {
+  const { t, i18n } = useTranslation()
   const toast = useToast()
   const [entries, setEntries] = useState([])
   const [summary, setSummary] = useState(null)
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [entryType, setEntryType] = useState('feeding')
+  const [showAddForm, setShowAddForm] = useState(types.includes(initialEntryType))
+  const [entryType, setEntryType] = useState(types.includes(initialEntryType) ? initialEntryType : 'feeding')
   const [loading, setLoading] = useState(false)
   const [showCharts, setShowCharts] = useState(false)
+  const [acceptedAI, setAcceptedAI] = useState(false)
+  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
-    loadEntries()
-    loadSummary()
-  }, [userId])
+    let active = true
+    setError('')
+    api.getTracking(userId, 7).then(data => { if (active) setEntries(data) })
+      .catch(() => { if (active) setError(t('pilot.loadFailed')) })
+    return () => { active = false }
+  }, [userId, attempt])
 
-  const loadEntries = async () => {
-    try {
-      const data = await api.getTracking(userId, 7)
-      setEntries(data)
-    } catch (error) {
-      console.error('Error loading entries:', error)
-    }
-  }
-
-  const loadSummary = async () => {
-    try {
-      const data = await api.getTrackingSummary(userId, 7)
-      setSummary(data)
-    } catch (error) {
-      console.error('Error loading summary:', error)
-    }
-  }
-
-  const addEntry = async (formData) => {
+  const addEntry = async formData => {
     setLoading(true)
     try {
-      await api.addTrackingEntry({ user_id: userId, ...formData })
-      await loadEntries()
-      await loadSummary()
+      await api.addTrackingEntry({ ...formData, user_id: userId })
       setShowAddForm(false)
-      toast.success('Entry added successfully!')
-    } catch (error) {
-      console.error('Error adding entry:', error)
-      toast.error(error?.message || 'Failed to add entry. Please try again.')
-    } finally {
-      setLoading(false)
+      setSummary(null)
+      setAttempt(value => value + 1)
+      toast.success(t('pilot.recordSaved'))
+    } catch { toast.error(t('pilot.recordFailed')) }
+    finally { setLoading(false) }
+  }
+  const loadSummary = async () => {
+    if (!acceptedAI || summaryLoading) return
+    setSummaryLoading(true)
+    try {
+      const result = import.meta.env.VITE_ASYNC_MODE !== 'false'
+        ? await taskManager.submitTask('tracking_analysis', { user_id: userId, days: 7, language: i18n.language }, { priority: 'low', timeout: 120000 })
+        : await api.getTrackingSummary(userId, 7)
+      setSummary(result)
     }
+    catch { toast.error(t('pilot.chatUnavailable')) }
+    finally { setSummaryLoading(false) }
   }
 
-  return (
-    <div className="tracking-panel">
-      <div className="tracking-header">
-        <h2>Smart Tracking</h2>
-        <div className="tracking-actions">
-          <button 
-            onClick={() => setShowCharts(!showCharts)} 
-            className="charts-button"
-          >
-            {showCharts ? '📊 Hide Charts' : '📈 Show Charts'}
-          </button>
-          <button onClick={() => setShowAddForm(!showAddForm)} className="add-button">
-            + Add Entry
-          </button>
+  return <div className="tracking-panel">
+    <div className="tracking-header"><h2>{t('tracking.title')}</h2>
+      <button className="add-button" onClick={() => setShowAddForm(value => !value)}>{showAddForm ? t('tracking.cancel') : `+ ${t('tracking.addEntry')}`}</button></div>
+    <p>{t('pilot.noPressure')}</p>
+    {showAddForm && <EntryForm key={entryType} entryType={entryType} onEntryTypeChange={setEntryType}
+      onSubmit={addEntry} onCancel={() => setShowAddForm(false)} loading={loading} />}
+    {error && <p role="alert">{error}<button className="pilot-button secondary" onClick={() => setAttempt(value => value + 1)}>{t('pilot.retry')}</button></p>}
+    <section className="entries-list"><h3>{t('tracking.recentEntries')}</h3><p>{t('pilot.japanTime')}</p>
+      {!error && entries.length === 0 && <p>{t('tracking.noEntries')}</p>}
+      {entries.map(entry => <article key={entry.id} className="entry-card">
+        <div className="entry-header"><strong>{t(`tracking.${entry.entry_type}`)}</strong><time>{japanDateTime(entry.timestamp, i18n.language)}</time></div>
+        <div className="entry-details">
+          {entry.feeding_type && <span>{t(`tracking.${entry.feeding_type}`)}</span>}
+          {entry.diaper_type && <span>{t(`tracking.${entry.diaper_type}`)}</span>}
+          {entry.duration_minutes != null && <span>{entry.duration_minutes} {t('pilot.minutes')}</span>}
+          {entry.amount_ml != null && <span>{entry.amount_ml} mL</span>}
+          {entry.pumped_amount_ml != null && <span>{entry.pumped_amount_ml} mL</span>}
+          {entry.sleep_duration_minutes != null && <span>{entry.sleep_duration_minutes} {t('pilot.minutes')}</span>}
+          {entry.mood_level && <span>{t(`tracking.${entry.mood_level}`)}</span>}
+          {entry.weight_kg != null && <span>{entry.weight_kg} kg</span>}
+          {entry.breast_condition && <span>{t(`tracking.${entry.breast_condition}`)}</span>}
         </div>
-      </div>
-
-      {showCharts && <Charts userId={userId} />}
-
-      {showAddForm && (
-        <EntryForm
-          entryType={entryType}
-          onEntryTypeChange={setEntryType}
-          onSubmit={addEntry}
-          onCancel={() => setShowAddForm(false)}
-          loading={loading}
-        />
-      )}
-
-      {summary && (
-        <div className="ai-summary">
-          <h3>AI Insights</h3>
-          {summary.patterns && summary.patterns.length > 0 && (
-            <div className="summary-section">
-              <strong>Patterns:</strong>
-              <ul>
-                {summary.patterns.map((pattern, i) => (
-                  <li key={i}>{pattern}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {summary.insights && summary.insights.length > 0 && (
-            <div className="summary-section">
-              <strong>Insights:</strong>
-              <ul>
-                {summary.insights.map((insight, i) => (
-                  <li key={i}>{insight}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {summary.recommendations && summary.recommendations.length > 0 && (
-            <div className="summary-section">
-              <strong>Recommendations:</strong>
-              <ul>
-                {summary.recommendations.map((rec, i) => (
-                  <li key={i}>{rec}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="entries-list">
-        <h3>Recent Entries</h3>
-        {entries.length === 0 && !showAddForm ? (
-          <EmptyState
-            type="tracking"
-            onAction={() => setShowAddForm(true)}
-          />
-        ) : entries.length === 0 ? null : (
-          entries.map((entry) => (
-            <div key={entry.id} className="entry-card">
-              <div className="entry-header">
-                <span className="entry-type">{entry.entry_type}</span>
-                <span className="entry-time">
-                  {new Date(entry.timestamp).toLocaleString()}
-                </span>
-              </div>
-              <div className="entry-details">
-                {entry.feeding_type && <span>Type: {entry.feeding_type}</span>}
-                {entry.duration_minutes && <span>Duration: {entry.duration_minutes} min</span>}
-                {entry.amount_ml && <span>Amount: {entry.amount_ml} ml</span>}
-                {entry.diaper_type && <span>Type: {entry.diaper_type}</span>}
-                {entry.sleep_duration_minutes && (
-                  <span>Sleep: {entry.sleep_duration_minutes} min</span>
-                )}
-                {entry.mood_level && <span>Mood: {entry.mood_level}</span>}
-                {entry.weight_kg && <span>Weight: {entry.weight_kg} kg</span>}
-                {entry.breast_condition && <span>Breast: {entry.breast_condition}</span>}
-              </div>
-              {entry.notes && <p className="entry-notes">{entry.notes}</p>}
-              {entry.recovery_notes && <p className="entry-notes">Recovery: {entry.recovery_notes}</p>}
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  )
+        {['notes', 'mood_notes', 'recovery_notes'].map(key => entry[key] && <p key={key} className="entry-notes">{entry[key]}</p>)}
+      </article>)}
+    </section>
+    <details className="pilot-panel"><summary>{t('pilot.optionalAnalysis')}</summary>
+      <button className="pilot-button secondary" onClick={() => setShowCharts(value => !value)}>{t(showCharts ? 'tracking.hideCharts' : 'tracking.showCharts')}</button>
+      {showCharts && <Charts userId={userId} onRecord={() => setShowAddForm(true)} />}
+      <AIUseNotice accepted={acceptedAI} onChange={setAcceptedAI} />
+      <button className="pilot-button secondary" disabled={!acceptedAI || summaryLoading || entries.length === 0} onClick={loadSummary}>{t(summaryLoading ? 'common.loading' : 'pilot.analyzeRecords')}</button>
+      {summary && <div className="ai-summary"><p>{t('pilot.aiLabel')}</p>
+        {['patterns', 'insights', 'recommendations'].map(key => summary[key]?.length > 0 && <section key={key}>
+          <h3>{t(`tracking.${key}`)}</h3><ul>{summary[key].map((value, index) => <li key={index}>{value}</li>)}</ul>
+        </section>)}
+      </div>}
+    </details>
+  </div>
 }
 
 function EntryForm({ entryType, onEntryTypeChange, onSubmit, onCancel, loading }) {
+  const { t } = useTranslation()
   const [formData, setFormData] = useState({})
-
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    onSubmit({
-      entry_type: entryType,
-      ...formData,
-      timestamp: new Date().toISOString()
-    })
-    setFormData({})
+  const fields = {
+    feeding: [['feeding_type', 'feedingType', ['breast', 'formula', 'mixed']], ['duration_minutes', 'duration', 'number'], ['amount_ml', 'amount', 'number']],
+    diaper: [['diaper_type', 'diaperType', ['wet', 'dirty', 'both']]],
+    sleep: [['sleep_duration_minutes', 'duration', 'number'], ['sleep_quality', 'quality', ['peaceful', 'restless', 'interrupted']]],
+    mood: [['mood_level', 'moodLevel', ['very_low', 'low', 'neutral', 'good', 'very_good']], ['mood_notes', 'notes', 'textarea']],
+    pumping: [['pumped_amount_ml', 'amount', 'number']],
+    recovery: [['weight_kg', 'weight', 'number'], ['breast_condition', 'breastCondition', ['normal', 'engorged', 'blocked', 'painful', 'other']], ['recovery_notes', 'recoveryNotes', 'textarea']],
   }
-
-  return (
-    <form className="entry-form" onSubmit={handleSubmit}>
-      <div className="form-group">
-        <label>Entry Type</label>
-        <select value={entryType} onChange={(e) => onEntryTypeChange(e.target.value)}>
-          <option value="feeding">Feeding</option>
-          <option value="diaper">Diaper</option>
-          <option value="sleep">Sleep</option>
-          <option value="mood">Mood</option>
-          <option value="pumping">Pumping</option>
-          <option value="recovery">Recovery</option>
-        </select>
-      </div>
-
-      {entryType === 'feeding' && (
-        <>
-          <div className="form-group">
-            <label>Feeding Type</label>
-            <select
-              value={formData.feeding_type || ''}
-              onChange={(e) => setFormData({ ...formData, feeding_type: e.target.value })}
-            >
-              <option value="">Select...</option>
-              <option value="breast">Breast</option>
-              <option value="formula">Formula</option>
-              <option value="mixed">Mixed</option>
-            </select>
-          </div>
-          <div className="form-group">
-            <label>Duration (minutes)</label>
-            <input
-              type="number"
-              value={formData.duration_minutes || ''}
-              onChange={(e) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) })}
-            />
-          </div>
-          <div className="form-group">
-            <label>Amount (ml)</label>
-            <input
-              type="number"
-              value={formData.amount_ml || ''}
-              onChange={(e) => setFormData({ ...formData, amount_ml: parseFloat(e.target.value) })}
-            />
-          </div>
-        </>
-      )}
-
-      {entryType === 'diaper' && (
-        <div className="form-group">
-          <label>Diaper Type</label>
-          <select
-            value={formData.diaper_type || ''}
-            onChange={(e) => setFormData({ ...formData, diaper_type: e.target.value })}
-          >
-            <option value="">Select...</option>
-            <option value="wet">Wet</option>
-            <option value="dirty">Dirty</option>
-            <option value="both">Both</option>
-          </select>
-        </div>
-      )}
-
-      {entryType === 'sleep' && (
-        <>
-          <div className="form-group">
-            <label>Duration (minutes)</label>
-            <input
-              type="number"
-              value={formData.sleep_duration_minutes || ''}
-              onChange={(e) => setFormData({ ...formData, sleep_duration_minutes: parseInt(e.target.value) })}
-            />
-          </div>
-          <div className="form-group">
-            <label>Quality</label>
-            <select
-              value={formData.sleep_quality || ''}
-              onChange={(e) => setFormData({ ...formData, sleep_quality: e.target.value })}
-            >
-              <option value="">Select...</option>
-              <option value="peaceful">Peaceful</option>
-              <option value="restless">Restless</option>
-              <option value="interrupted">Interrupted</option>
-            </select>
-          </div>
-        </>
-      )}
-
-      {entryType === 'mood' && (
-        <>
-          <div className="form-group">
-            <label>Mood Level</label>
-            <select
-              value={formData.mood_level || ''}
-              onChange={(e) => setFormData({ ...formData, mood_level: e.target.value })}
-            >
-              <option value="">Select...</option>
-              <option value="very_low">Very Low</option>
-              <option value="low">Low</option>
-              <option value="neutral">Neutral</option>
-              <option value="good">Good</option>
-              <option value="very_good">Very Good</option>
-            </select>
-          </div>
-          <div className="form-group">
-            <label>Notes</label>
-            <textarea
-              value={formData.mood_notes || ''}
-              onChange={(e) => setFormData({ ...formData, mood_notes: e.target.value })}
-              rows="3"
-            />
-          </div>
-        </>
-      )}
-
-      {entryType === 'recovery' && (
-        <>
-          <div className="form-group">
-            <label>Weight (kg)</label>
-            <input
-              type="number"
-              step="0.1"
-              value={formData.weight_kg || ''}
-              onChange={(e) => setFormData({ ...formData, weight_kg: parseFloat(e.target.value) })}
-              placeholder="Enter your weight"
-            />
-          </div>
-          <div className="form-group">
-            <label>Breast Condition</label>
-            <select
-              value={formData.breast_condition || ''}
-              onChange={(e) => setFormData({ ...formData, breast_condition: e.target.value })}
-            >
-              <option value="">Select...</option>
-              <option value="normal">Normal</option>
-              <option value="engorged">Engorged</option>
-              <option value="blocked">Blocked</option>
-              <option value="painful">Painful</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
-          <div className="form-group">
-            <label>Recovery Notes</label>
-            <textarea
-              value={formData.recovery_notes || ''}
-              onChange={(e) => setFormData({ ...formData, recovery_notes: e.target.value })}
-              rows="3"
-              placeholder="Pain, bleeding, discomfort, etc."
-            />
-          </div>
-        </>
-      )}
-
-      <div className="form-group">
-        <label>Notes (optional)</label>
-        <textarea
-          value={formData.notes || ''}
-          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-          rows="2"
-        />
-      </div>
-
-      <div className="form-actions">
-        <button type="button" onClick={onCancel} disabled={loading}>
-          Cancel
-        </button>
-        <button type="submit" disabled={loading}>
-          {loading ? 'Adding...' : 'Add Entry'}
-        </button>
-      </div>
-    </form>
-  )
+  return <form className="entry-form" onSubmit={event => {
+    event.preventDefault()
+    if (!loading) onSubmit({ ...formData, entry_type: entryType, timestamp: new Date().toISOString() })
+  }}><fieldset disabled={loading}>
+    <label>{t('tracking.entryType')}<select value={entryType} onChange={event => onEntryTypeChange(event.target.value)}>
+      {types.map(type => <option key={type} value={type}>{t(`tracking.${type}`)}</option>)}
+    </select></label>
+    {fields[entryType].map(([key, label, kind]) => <label key={key}>{t(`tracking.${label}`)}
+      {Array.isArray(kind) ? <select value={formData[key] || ''} onChange={event => setFormData({ ...formData, [key]: event.target.value || null })}>
+        <option value="">{t('common.select')}</option>{kind.map(value => <option key={value} value={value}>{t(`tracking.${value}`)}</option>)}
+      </select> : kind === 'textarea' ? <textarea value={formData[key] || ''} maxLength={2000} rows={3}
+        onChange={event => setFormData({ ...formData, [key]: event.target.value })} />
+        : <input type="number" min="0" step={key.endsWith('_minutes') ? '1' : '0.1'} value={formData[key] ?? ''}
+          onChange={event => setFormData({ ...formData, [key]: event.target.value === '' ? null : Number(event.target.value) })} />}
+    </label>)}
+    <label>{t('tracking.notes')}<textarea rows={2} maxLength={2000} value={formData.notes || ''} onChange={event => setFormData({ ...formData, notes: event.target.value })} /></label>
+    <div className="form-actions"><button type="button" onClick={onCancel}>{t('tracking.cancel')}</button>
+      <button type="submit">{t(loading ? 'tracking.adding' : 'tracking.addEntryButton')}</button></div>
+  </fieldset></form>
 }
-
-export default TrackingPanel

@@ -2,10 +2,12 @@ import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 import { useToast } from './Toast'
+import AIUseNotice from './AIUseNotice'
+import SupportDirectory from './SupportDirectory'
 import './EmotionalCheckIn.css'
 
 function EmotionalCheckIn({ userId }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const toast = useToast()
   const [overwhelmed, setOverwhelmed] = useState(5)
   const [anxiety, setAnxiety] = useState(5)
@@ -13,15 +15,18 @@ function EmotionalCheckIn({ userId }) {
   const [notes, setNotes] = useState('')
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [acceptedAI, setAcceptedAI] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!acceptedAI || loading) return
     setLoading(true)
     setResult(null)
 
     try {
       const data = await api.postEmotionalCheckin({
         user_id: userId,
+        language: i18n.resolvedLanguage || i18n.language,
         overwhelmed_level: overwhelmed,
         anxiety_level: anxiety,
         support_level: support,
@@ -31,41 +36,32 @@ function EmotionalCheckIn({ userId }) {
       setResult(data)
     } catch (error) {
       console.error('Check-in error:', error)
-      toast.error(error?.message || 'Check-in failed. Please try again.')
+      toast.error(t('pilot.chatUnavailable'))
       setResult({
-        assessment: 'Your check-in could not be assessed. Please try again or contact a healthcare professional for support.',
+        assessment: t('pilot.checkinUnavailable'),
         risk_level: 'unknown',
         analysis_available: false,
-        suggestions: ["Consider reaching out to a support person", "Contact your healthcare provider if concerns persist"],
+        suggestions: [],
         escalation_needed: null,
-        resources: ["Postpartum Support International", "National Suicide Prevention Lifeline"]
+        resources: []
       })
     } finally {
       setLoading(false)
     }
   }
 
-  const getRiskColor = (riskLevel) => {
-    switch (riskLevel) {
-      case 'high': return '#ff4444'
-      case 'medium': return '#ffaa00'
-      case 'low': return '#44aa44'
-      default: return '#999'
-    }
-  }
-
   return (
     <div className="emotional-checkin">
       <div className="checkin-container">
-        <h2>💚 Emotional Check-in</h2>
+        <h2>💚 {t('checkin.title')}</h2>
         <p className="checkin-subtitle">
-          How are you feeling today? This is a safe space to check in with yourself.
+          {t('checkin.subtitle')}
         </p>
 
         <form onSubmit={handleSubmit} className="checkin-form">
           <div className="slider-group">
             <label>
-              How overwhelmed do you feel? ({overwhelmed}/10)
+              {t('checkin.overwhelmed')} ({overwhelmed}/10)
             </label>
             <input
               type="range"
@@ -76,14 +72,14 @@ function EmotionalCheckIn({ userId }) {
               className="slider"
             />
             <div className="slider-labels">
-              <span>Not at all</span>
-              <span>Extremely</span>
+              <span>{t('checkin.notAtAll')}</span>
+              <span>{t('checkin.extremely')}</span>
             </div>
           </div>
 
           <div className="slider-group">
             <label>
-              How anxious do you feel? ({anxiety}/10)
+              {t('checkin.anxiety')} ({anxiety}/10)
             </label>
             <input
               type="range"
@@ -94,14 +90,14 @@ function EmotionalCheckIn({ userId }) {
               className="slider"
             />
             <div className="slider-labels">
-              <span>Not at all</span>
-              <span>Extremely</span>
+              <span>{t('checkin.notAtAll')}</span>
+              <span>{t('checkin.extremely')}</span>
             </div>
           </div>
 
           <div className="slider-group">
             <label>
-              How supported do you feel? ({support}/10)
+              {t('checkin.support')} ({support}/10)
             </label>
             <input
               type="range"
@@ -112,49 +108,47 @@ function EmotionalCheckIn({ userId }) {
               className="slider"
             />
             <div className="slider-labels">
-              <span>Not at all</span>
-              <span>Very supported</span>
+              <span>{t('checkin.notAtAll')}</span>
+              <span>{t('checkin.verySupported')}</span>
             </div>
           </div>
 
           <div className="form-group">
-            <label>Anything else you'd like to share? (optional)</label>
+            <label>{t('checkin.share')}</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows="4"
-              placeholder="Share what's on your mind..."
+              placeholder={t('checkin.sharePlaceholder')}
               className="notes-input"
             />
           </div>
 
-          <button type="submit" disabled={loading} className="submit-button">
-            {loading ? 'Processing...' : 'Check In'}
+          <AIUseNotice accepted={acceptedAI} onChange={setAcceptedAI} />
+          <button type="submit" disabled={loading || !acceptedAI} className="submit-button">
+            {t(loading ? 'checkin.processing' : 'checkin.checkIn')}
           </button>
         </form>
 
         {result && (
           <div className="checkin-result">
             <p className="checkin-disclaimer">{t('checkin.disclaimerNonClinical')}</p>
-            {result.analysis_available === true ? (
-              <div className="risk-badge" style={{ backgroundColor: getRiskColor(result.risk_level) }}>
-                Risk Level: {result.risk_level.toUpperCase()}
-              </div>
-            ) : (
+            {result.analysis_available !== true && (
               <div role="status">
-                <p>Assessment unavailable. Your risk level has not been determined.</p>
-                <button type="button" onClick={handleSubmit} disabled={loading}>Try again</button>
+                <p>{t('pilot.checkinUnavailable')}</p>
+                <button type="button" onClick={handleSubmit} disabled={loading}>{t('pilot.retry')}</button>
               </div>
             )}
 
             <div className="assessment">
-              <h3>Assessment</h3>
+              <h3>{t('checkin.assessment')}</h3>
+              {result.analysis_available === true && <p>{t('pilot.aiLabel')}</p>}
               <p>{result.assessment}</p>
             </div>
 
             {result.suggestions && result.suggestions.length > 0 && (
               <div className="suggestions">
-                <h3>Suggestions</h3>
+                <h3>{t('checkin.suggestions')}</h3>
                 <ul>
                   {result.suggestions.map((suggestion, i) => (
                     <li key={i}>{suggestion}</li>
@@ -165,14 +159,14 @@ function EmotionalCheckIn({ userId }) {
 
             {result.escalation_needed && (
               <div className="escalation-warning">
-                <strong>⚠️ Important:</strong>
-                <p>Based on your responses, we recommend reaching out to a healthcare professional or mental health provider. You don't have to go through this alone.</p>
+                <strong>⚠️ {t('chat.important')}</strong>
+                <p>{t('pilot.reachOut')}</p>
               </div>
             )}
 
             {result.resources && result.resources.length > 0 && (
               <div className="resources">
-                <h3>Resources</h3>
+                <h3>{t('checkin.resources')}</h3>
                 <ul>
                   {result.resources.map((resource, i) => (
                     <li key={i}>{resource}</li>
@@ -185,10 +179,10 @@ function EmotionalCheckIn({ userId }) {
 
         <div className="safety-note">
           <p>
-            <strong>Remember:</strong> This is not a substitute for professional mental health care. 
-            If you're experiencing thoughts of self-harm or harm to your baby, please contact emergency services immediately.
+            {t('checkin.safetyNote')}
           </p>
         </div>
+        <SupportDirectory compact />
       </div>
     </div>
   )

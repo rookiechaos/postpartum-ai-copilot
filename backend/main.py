@@ -113,6 +113,9 @@ app.include_router(chat_router)
 app.include_router(tracking_router)
 app.include_router(personalization_router)
 
+from api.pilot_routes import router as pilot_router
+app.include_router(pilot_router)
+
 # WebSocket routes
 from api.websocket_routes import router as websocket_router
 app.include_router(websocket_router)

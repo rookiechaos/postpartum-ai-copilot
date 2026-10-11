@@ -7,7 +7,7 @@
 }
 
 .app-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #256354;
   color: white;
   padding: 2rem;
   position: relative;
@@ -19,12 +19,13 @@
 }
 
 .header-actions {
-  position: absolute;
-  top: 1.5rem;
-  right: 2rem;
+  position: static;
   display: flex;
   align-items: center;
   gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 1rem;
 }
 
 .app-header h1 {
@@ -40,9 +41,7 @@
 }
 
 .night-mode-btn {
-  position: absolute;
-  top: 1.5rem;
-  right: 2rem;
+  position: static;
   background: rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(10px);
   border: 2px solid white;
@@ -141,9 +140,13 @@
   }
 
   .tab-nav button span {
-    display: none;
+    display: block;
   }
+
+  .tab-nav button { flex-direction: column; min-width: 72px; font-size: .75rem; }
 }
+
+.entrance-switch { min-height: 44px; padding: 8px 12px; background: transparent; color: white; border: 1px solid #ffffff80; border-radius: 12px; font: inherit; cursor: pointer; }
 
 @media (max-width: 480px) {
   .app-header h1 {

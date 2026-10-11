@@ -27,7 +27,7 @@
 
 **实现**:
 ```javascript
-// 新增组件: frontend/src/components/OnboardingTutorial.jsx
+// 历史方案；当前首用流程已改为 frontend/src/components/WelcomeScreen.jsx 的两步引导。
 // 功能:
 // - 步骤式引导（5-7步）
 // - 高亮功能区域

@@ -33,10 +33,23 @@ uvicorn main:app --reload
 | `task_routes` | `/api/tasks` |
 | `tracking_routes` | `/api/tracking`, emotional check-in |
 | `personalization_routes` | `/api/user`, personalization |
+| `pilot_routes` | Public `/api/pilot`; separately authorized `/api/pilot/organization` |
 | `community_routes` | `/api/community` |
-| `family_routes` | `/api/family` |
+| `family_routes` | `/api/families` |
 | `notification_routes` | `/api/notifications` |
 | `monitoring_routes` | health, metrics |
 | Others | feedback, help, payment, voice, analytics, … |
 
 See `main.py` for the full router registration list.
+
+## Japan small-pilot directory
+
+`GET /api/pilot` exposes only the deployment's public organization profile and local resources.
+`GET` / `POST /api/pilot/organization` require a current active account whose server-generated ID is listed in `INSTITUTION_USER_IDS`.
+This allowlist is independent of `ADMIN_USER_IDS` and does not bypass the owner checks on private APIs.
+
+The new `pilot_profiles` table stores one public directory per deployment; it contains no family records or memberships.
+The existing database initialization creates this table without altering existing tables.
+Source links require HTTPS without embedded credentials. Checked dates cannot be in the future, and each directory has at most ten resources.
+
+See the [main README](../README.md) for environment setup and staff provisioning, and the [pilot guide](../docs/product/JAPAN_PILOT.md) for scope and acceptance scenarios.

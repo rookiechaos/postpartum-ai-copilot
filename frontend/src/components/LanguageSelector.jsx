@@ -4,11 +4,11 @@ import { Globe } from 'lucide-react'
 import './LanguageSelector.css'
 
 function LanguageSelector() {
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation()
 
   const languages = [
-    { code: 'en', name: 'English', flag: '🇺🇸' },
-    { code: 'ja', name: '日本語', flag: '🇯🇵' }
+    { code: 'ja', name: '日本語' },
+    { code: 'en', name: 'English' }
   ]
 
   const changeLanguage = (langCode) => {
@@ -20,13 +20,14 @@ function LanguageSelector() {
     <div className="language-selector">
       <Globe size={18} />
       <select
-        value={i18n.language}
+        value={(i18n.resolvedLanguage || i18n.language).split('-')[0]}
+        aria-label={t('settings.language')}
         onChange={(e) => changeLanguage(e.target.value)}
         className="language-select"
       >
         {languages.map((lang) => (
           <option key={lang.code} value={lang.code}>
-            {lang.flag} {lang.name}
+            {lang.name}
           </option>
         ))}
       </select>

@@ -1,249 +1,69 @@
 import React, { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
+import { Baby, MessageCircle, Phone, Heart, Moon } from 'lucide-react'
 import api from '../utils/api'
-import { useToast } from './Toast'
-import { Baby, Moon, Heart, TrendingUp, Clock, Droplet } from 'lucide-react'
-import Skeleton from './Skeleton'
-import EmptyState from './EmptyState'
+import { japanDay } from '../utils/japanTime'
 import './Dashboard.css'
 
-function Dashboard({ userId, userContext }) {
+export default function Dashboard({ userId, userContext, onNavigate, onNightMode }) {
   const { t } = useTranslation()
-  const toast = useToast()
-  const [stats, setStats] = useState({
-    todayFeeds: 0,
-    todayDiapers: 0,
-    avgSleep: 0,
-    moodTrend: 'stable'
-  })
-  const [loading, setLoading] = useState(true)
-  const [dailySummary, setDailySummary] = useState(null)
-  const [weeklySummary, setWeeklySummary] = useState(null)
-  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [entries, setEntries] = useState(null)
+  const [error, setError] = useState(false)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
-    loadStats()
-    loadSummaries()
-  }, [userId])
-  
-  const loadSummaries = async () => {
-    setSummaryLoading(true)
-    try {
-      const [dailyRes, weeklyRes] = await Promise.all([
-        api.getDailySummary(userId).catch(() => null),
-        api.getWeeklySummary(userId).catch(() => null)
-      ])
-      if (dailyRes) setDailySummary(dailyRes)
-      if (weeklyRes) setWeeklySummary(weeklyRes)
-    } catch (error) {
-      console.error('Error loading summaries:', error)
-    } finally {
-      setSummaryLoading(false)
-    }
-  }
+    let active = true
+    setError(false)
+    api.getTracking(userId, 2).then(data => {
+      if (active) setEntries(data.filter(entry => japanDay(entry.timestamp) === japanDay()))
+    }).catch(() => { if (active) setError(true) })
+    return () => { active = false }
+  }, [userId, attempt])
 
-  const loadStats = async () => {
-    try {
-      const entries = await api.getTracking(userId, 1)
-      
-      const feeds = entries.filter(e => e.entry_type === 'feeding').length
-      const diapers = entries.filter(e => e.entry_type === 'diaper').length
-      const sleepEntries = entries.filter(e => e.entry_type === 'sleep')
-      const avgSleep = sleepEntries.length > 0
-        ? Math.round(sleepEntries.reduce((sum, e) => sum + (e.sleep_duration_minutes || 0), 0) / sleepEntries.length)
-        : 0
-
-      setStats({
-        todayFeeds: feeds,
-        todayDiapers: diapers,
-        avgSleep: avgSleep,
-        moodTrend: 'stable'
-      })
-    } catch (error) {
-      console.error('Error loading stats:', error)
-      toast.error(error?.message || 'Failed to load stats')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const statCards = [
-    {
-      icon: <Baby size={24} />,
-      label: t('dashboard.todayFeeds'),
-      value: stats.todayFeeds,
-      color: "#667eea"
-    },
-    {
-      icon: <Droplet size={24} />,
-      label: t('dashboard.diaperChanges'),
-      value: stats.todayDiapers,
-      color: "#48bb78"
-    },
-    {
-      icon: <Clock size={24} />,
-      label: t('dashboard.avgSleep'),
-      value: stats.avgSleep,
-      color: "#ed8936"
-    },
-    {
-      icon: <TrendingUp size={24} />,
-      label: t('dashboard.moodTrend'),
-      value: stats.moodTrend,
-      color: "#f56565"
-    }
+  const actions = [
+    { icon: <Baby />, title: t('pilot.recordTitle'), description: t('pilot.recordDescription'), action: () => onNavigate('tracking', 'feeding') },
+    { icon: <MessageCircle />, title: t('pilot.askTitle'), description: t('pilot.askDescription'), action: () => onNavigate('chat') },
+    { icon: <Phone />, title: t('pilot.supportTitle'), description: t('pilot.findHelpDescription'), action: () => onNavigate('support') },
   ]
-
-  const quickActions = [
-    { icon: <Baby />, label: t('dashboard.logFeeding'), action: "feeding", onClick: () => {} },
-    { icon: <Droplet />, label: t('dashboard.diaperChange'), action: "diaper", onClick: () => {} },
-    { icon: <Clock />, label: t('dashboard.sleep'), action: "sleep", onClick: () => {} },
-    { icon: <Heart />, label: t('dashboard.mood'), action: "mood", onClick: () => {} }
-  ]
-
-  if (loading) {
-    return (
-      <div className="dashboard">
-        <div className="stats-grid">
-          <Skeleton.Stat />
-          <Skeleton.Stat />
-          <Skeleton.Stat />
-          <Skeleton.Stat />
-        </div>
-      </div>
-    )
-  }
-
-  // Check if there's no data
-  const hasNoData = stats.todayFeeds === 0 && stats.todayDiapers === 0 && stats.avgSleep === 0
-
-  if (hasNoData) {
-    return (
-      <div className="dashboard">
-        <div className="dashboard-header">
-          <div>
-            <h2>{t('dashboard.welcome')}</h2>
-            {userContext?.babyName && (
-              <p className="baby-name">{t('dashboard.howIsBaby', { name: userContext.babyName })}</p>
-            )}
-          </div>
-        </div>
-        <EmptyState
-          type="dashboard"
-          onAction={() => {
-            // Navigate to tracking tab
-            const event = new CustomEvent('navigate', { detail: { tab: 'tracking' } })
-            window.dispatchEvent(event)
-          }}
-        />
-      </div>
-    )
-  }
-
-  return (
-    <div className="dashboard">
-      <div className="dashboard-header">
-        <div>
-          <h2>{t('dashboard.welcome')}</h2>
-          {userContext?.babyName && (
-            <p className="baby-name">{t('dashboard.howIsBaby', { name: userContext.babyName })}</p>
-          )}
-        </div>
-        <motion.button
-          className="night-mode-button"
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-        >
-          <Moon size={20} />
-          {t('nightMode.title')}
-        </motion.button>
-      </div>
-
-      <div className="stats-grid">
-        {statCards.map((card, index) => (
-          <motion.div
-            key={index}
-            className="stat-card"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-          >
-            <div className="stat-icon" style={{ color: card.color }}>
-              {card.icon}
-            </div>
-            <div className="stat-content">
-              <div className="stat-value">{card.value}</div>
-              <div className="stat-label">{card.label}</div>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      <div className="quick-actions-section">
-        <h3>{t('dashboard.quickActions')}</h3>
-        <div className="quick-actions-grid">
-          {quickActions.map((action, index) => (
-            <motion.button
-              key={index}
-              className="quick-action-card"
-              onClick={action.onClick}
-              whileHover={{ scale: 1.05, y: -5 }}
-              whileTap={{ scale: 0.95 }}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 + index * 0.1 }}
-            >
-              <div className="quick-action-icon">{action.icon}</div>
-              <div className="quick-action-label">{action.label}</div>
-            </motion.button>
-          ))}
-        </div>
-      </div>
-
-      <div className="insights-section">
-        <h3>{t('dashboard.insights')}</h3>
-        <div className="insight-card">
-          <p>💡 {t('dashboard.insightText')}</p>
-          <p className="insight-subtext">{t('dashboard.insightSubtext')}</p>
-        </div>
-      </div>
-
-      {(dailySummary || weeklySummary) && (
-        <div className="summary-section">
-          <h3>AI Summaries</h3>
-          <div className="summary-grid">
-            {dailySummary && (
-              <motion.div
-                className="summary-card"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.6 }}
-              >
-                <h4>📅 Daily Summary</h4>
-                <p className="summary-date">{new Date(dailySummary.date).toLocaleDateString()}</p>
-                <p className="summary-text">{dailySummary.summary}</p>
-                <p className="summary-meta">{dailySummary.entries_count} entries tracked</p>
-              </motion.div>
-            )}
-            {weeklySummary && (
-              <motion.div
-                className="summary-card"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.7 }}
-              >
-                <h4>📊 Weekly Summary</h4>
-                <p className="summary-date">Week of {new Date(weeklySummary.week_start).toLocaleDateString()}</p>
-                <p className="summary-text">{weeklySummary.summary}</p>
-                <p className="summary-meta">{weeklySummary.entries_count} entries tracked</p>
-              </motion.div>
-            )}
-          </div>
-        </div>
-      )}
+  return <div className="dashboard family-dashboard">
+    <header className="dashboard-header">
+      <div><h2>{t('pilot.familyHeading')}</h2><p>{userContext?.babyName ? t('dashboard.howIsBaby', { name: userContext.babyName }) : t('pilot.todayIntro')}</p></div>
+    </header>
+    <div className="family-primary-actions">
+      {actions.map(action => <button key={action.title} className="family-action" onClick={action.action}>
+        {action.icon}<strong>{action.title}</strong><span>{action.description}</span>
+      </button>)}
     </div>
-  )
+    <section className="pilot-panel">
+      <h3>{t('pilot.quickRecord')}</h3>
+      <div className="pilot-actions">
+        {['feeding', 'diaper', 'sleep', 'pumping'].map(type => <button key={type} className="pilot-button secondary"
+          onClick={() => onNavigate('tracking', type)}>{t(`tracking.${type}`)}</button>)}
+      </div>
+      <p>{t('pilot.noPressure')}</p>
+    </section>
+    <section className="pilot-panel">
+      <h3>{t('pilot.todayRecords')}</h3>
+      <p>{t('pilot.japanTime')}</p>
+      {error ? <div role="status"><p>{t('pilot.loadFailed')}</p><button className="pilot-button secondary" onClick={() => setAttempt(value => value + 1)}>{t('pilot.retry')}</button></div>
+        : entries === null ? <p>{t('common.loading')}</p>
+        : entries.length === 0 ? <p>{t('tracking.noEntries')}</p>
+        : <div className="stats-grid">
+          <div className="stat-card"><strong>{entries.filter(entry => entry.entry_type === 'feeding').length}</strong><span>{t('dashboard.todayFeeds')}</span></div>
+          <div className="stat-card"><strong>{entries.filter(entry => entry.entry_type === 'diaper').length}</strong><span>{t('dashboard.diaperChanges')}</span></div>
+          <div className="stat-card"><strong>{entries.reduce((sum, entry) => sum + (entry.entry_type === 'sleep' ? entry.sleep_duration_minutes || 0 : 0), 0)}</strong><span>{t('pilot.totalSleep')}</span></div>
+        </div>}
+    </section>
+    <section className="pilot-panel">
+      <h3>{t('pilot.startWithSituation')}</h3>
+      <div className="pilot-actions">
+        {['crying', 'feeding', 'rest', 'appointment'].map(scene => <button key={scene} className="pilot-button secondary"
+          onClick={() => onNavigate('chat', t(`pilot.questions.${scene}`))}>{t(`pilot.scenes.${scene}`)}</button>)}
+      </div>
+    </section>
+    <div className="pilot-actions">
+      <button className="pilot-button secondary" onClick={() => onNavigate('checkin')}><Heart size={18} />{t('checkin.title')}</button>
+      <button className="pilot-button secondary" onClick={onNightMode}><Moon size={18} />{t('nightMode.title')}</button>
+    </div>
+  </div>
 }
-
-export default Dashboard

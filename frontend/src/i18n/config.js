@@ -17,7 +17,9 @@ i18n
         translation: jaTranslations
       }
     },
-    fallbackLng: 'en',
+    fallbackLng: 'ja',
+    supportedLngs: ['ja', 'en'],
+    load: 'languageOnly',
     defaultNS: 'translation',
     interpolation: {
       escapeValue: false
@@ -27,5 +29,11 @@ i18n
       caches: ['localStorage']
     }
   })
+
+const updatePageLanguage = () => {
+  if (typeof document !== 'undefined') document.documentElement.lang = i18n.resolvedLanguage || 'ja'
+}
+i18n.on('languageChanged', updatePageLanguage)
+i18n.on('initialized', updatePageLanguage)
 
 export default i18n

@@ -84,6 +84,16 @@ class TrackingEntryDB(Base):
     )
 
 
+class PilotProfileDB(Base):
+    """One public community directory per deployment; never stores family health data."""
+    __tablename__ = "pilot_profiles"
+
+    id = Column(String, primary_key=True)
+    profile = Column(JSON, nullable=False)
+    updated_by = Column(String, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class UserContextDB(Base):
     __tablename__ = "user_context"
     

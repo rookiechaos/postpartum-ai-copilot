@@ -2,9 +2,11 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 import taskManager from '../utils/taskManager'
+import AIUseNotice from './AIUseNotice'
+import SupportDirectory from './SupportDirectory'
 import './ChatInterface.css'
 
-function ChatInterface({ userId }) {
+function ChatInterface({ userId, initialDraft = '' }) {
   const { t, i18n } = useTranslation()
   const [messages, setMessages] = useState([
     {
@@ -13,7 +15,8 @@ function ChatInterface({ userId }) {
       timestamp: new Date()
     }
   ])
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState(initialDraft)
+  const [acceptedAI, setAcceptedAI] = useState(false)
   const [loading, setLoading] = useState(false)
   const [taskStatus, setTaskStatus] = useState(null)
   const messagesEndRef = useRef(null)
@@ -28,7 +31,7 @@ function ChatInterface({ userId }) {
 
   const sendMessage = async (e) => {
     e.preventDefault()
-    if (!input.trim() || loading) return
+    if (!input.trim() || loading || !acceptedAI) return
 
     const userMessage = {
       role: 'user',
@@ -55,7 +58,7 @@ function ChatInterface({ userId }) {
         }
         // Determine priority based on query content.
         let priority = 'medium'
-        if (queryText.toLowerCase().match(/\b(urgent|emergency|help|crisis|immediate)\b/)) {
+        if (/\b(urgent|emergency|help|crisis|immediate)\b|緊急|救急|助けて|今すぐ|息ができない/i.test(queryText)) {
           priority = 'high'
         }
         
@@ -67,6 +70,7 @@ function ChatInterface({ userId }) {
           
           const assistantMessage = {
             role: 'assistant',
+            generated: !result.error,
             content: result.response || result.text || '',
             suggestions: result.suggestions || [],
             red_flags: result.red_flags || [],
@@ -90,6 +94,7 @@ function ChatInterface({ userId }) {
 
         const assistantMessage = {
           role: 'assistant',
+          generated: !response.error,
           content: response.response || response.text || '',
           suggestions: response.suggestions || [],
           red_flags: response.red_flags || [],
@@ -105,9 +110,7 @@ function ChatInterface({ userId }) {
       setTaskStatus('failed')
       const errorMessage = {
         role: 'assistant',
-        content: error.message?.includes('timeout') 
-          ? "The request is taking longer than expected. Please try again or consult your healthcare provider for urgent concerns."
-          : "I'm having trouble connecting right now. Please try again or consult your healthcare provider for urgent concerns.",
+        content: t('pilot.chatUnavailable'),
         timestamp: new Date()
       }
       setMessages(prev => [...prev, errorMessage])
@@ -119,6 +122,16 @@ function ChatInterface({ userId }) {
 
   return (
     <div className="chat-interface">
+      <div className="guided-chat">
+        <h2>{t('pilot.askTitle')}</h2>
+        <p>{t('pilot.guidedChatIntro')}</p>
+        <div className="pilot-actions">
+          {['crying', 'feeding', 'rest', 'appointment'].map(scene => <button key={scene} type="button"
+            className="pilot-button secondary" disabled={loading} onClick={() => setInput(t(`pilot.questions.${scene}`))}>{t(`pilot.scenes.${scene}`)}</button>)}
+        </div>
+        <p>{t('pilot.chatBoundary')}</p>
+      </div>
+      <details className="chat-support"><summary>{t('pilot.supportTitle')}</summary><SupportDirectory compact /></details>
       <div className="chat-messages">
         {messages.map((msg, idx) => (
           <div key={idx} className={`message ${msg.role}`}>
@@ -128,29 +141,10 @@ function ChatInterface({ userId }) {
             {msg.suggestions && msg.suggestions.length > 0 && (
               <div className="suggestions">
                 <strong>{t('chat.suggestions')}</strong>
-                {msg.validation && (
-                  <div className="validation-badge">
-                    {msg.validation.summary?.all_safe ? (
-                      <span className="badge safe">✓ {t('chat.validated')}</span>
-                    ) : (
-                      <span className="badge reviewed">⚠ {t('chat.reviewed')}</span>
-                    )}
-                    {msg.validation.summary && (
-                      <span className="confidence">
-                        {t('chat.confidence', { percent: Math.round(msg.validation.summary.average_confidence * 100) })}
-                      </span>
-                    )}
-                  </div>
-                )}
                 <ul>
                   {msg.suggestions.map((suggestion, i) => (
                     <li key={i}>
                       {suggestion}
-                      {msg.validation?.validated_details?.[i]?.warnings?.length > 0 && (
-                        <span className="warning-icon" title={msg.validation.validated_details[i].warnings.join(', ')}>
-                          ⚠️
-                        </span>
-                      )}
                     </li>
                   ))}
                 </ul>
@@ -166,6 +160,7 @@ function ChatInterface({ userId }) {
                 </ul>
               </div>
             )}
+            {msg.generated && <small className="ai-label">{t('pilot.aiLabel')}</small>}
           </div>
         ))}
             {loading && (
@@ -191,6 +186,7 @@ function ChatInterface({ userId }) {
         <div ref={messagesEndRef} />
       </div>
 
+      <AIUseNotice accepted={acceptedAI} onChange={setAcceptedAI} />
       <form className="chat-input-form" onSubmit={sendMessage}>
         <input
           type="text"
@@ -199,7 +195,7 @@ function ChatInterface({ userId }) {
           placeholder={t('chat.placeholder')}
           disabled={loading}
           className="chat-input" />
-        <button type="submit" disabled={loading || !input.trim()} className="send-button">
+        <button type="submit" disabled={loading || !input.trim() || !acceptedAI} className="send-button">
           {t('chat.send')}
         </button>
       </form>

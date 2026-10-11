@@ -41,7 +41,7 @@ function harness(file, api = {}) {
   const React = { createElement: (type, props, ...children) => ({ type, props: props || {}, children: children.flat(Infinity) }) }
   function requireFixture(name) {
     if (name === 'react') return { __esModule: true, default: React, ...hooks }
-    if (name === 'react-i18next') return { useTranslation: () => ({ t: (key, fallback) => fallback || key }) }
+    if (name === 'react-i18next') return { useTranslation: () => ({ t: (key, fallback) => fallback || key, i18n: { language: 'en', resolvedLanguage: 'en' } }) }
     if (name.endsWith('/api')) return { __esModule: true, default: api }
     if (name.endsWith('/Toast')) return { useToast: () => ({ error: message => errors.push(message) }) }
     if (name === 'framer-motion') return { motion: new Proxy({}, { get: (_, key) => `motion.${key}` }), AnimatePresence: 'AnimatePresence' }
@@ -58,7 +58,7 @@ function harness(file, api = {}) {
   const context = {
     exports: {}, require: requireFixture,
     console: { log() {}, error() {} }, Date,
-    navigator: {}, window: { addEventListener() {}, removeEventListener() {} },
+    navigator: {}, window: { location: { pathname: '/family' }, history: { pushState() {} }, addEventListener() {}, removeEventListener() {} },
     localStorage: {
       getItem: key => stored.get(key) || null,
       setItem: (key, value) => stored.set(key, value),
@@ -101,15 +101,17 @@ test('check-in network errors show an unavailable assessment and retry without a
     return { analysis_available: true, risk_level: 'high', assessment: 'Contact your care team.', escalation_needed: true }
   } })
   const component = h.mount(undefined, { userId: 'review_a' })
+  find(component.render(), node => node.type === './AIUseNotice').props.onChange(true)
   await submit(component.render())
   const failed = component.render()
   assert.equal(h.errors.length, 1)
-  assert.match(text(failed), /Assessment unavailable/)
+  assert.match(text(failed), /pilot.checkinUnavailable/)
   assert.doesNotMatch(text(failed), /Risk Level:\s+LOW/)
-  const retry = find(failed, node => node.type === 'button' && text(node) === 'Try again')
+  const retry = find(failed, node => node.type === 'button' && text(node) === 'pilot.retry')
   assert.equal(retry.props.disabled, false)
   await retry.props.onClick({ preventDefault() {} })
-  assert.match(text(component.render()), /Risk Level:\s+HIGH/)
+  assert.match(text(component.render()), /Contact your care team/)
+  assert.doesNotMatch(text(component.render()), /Risk Level:/)
 })
 
 test('provider failures returned as JSON never render a low-risk badge', async () => {
@@ -117,8 +119,9 @@ test('provider failures returned as JSON never render a low-risk badge', async (
     return { analysis_available: false, risk_level: 'unknown', escalation_needed: null, assessment: 'Please try again.' }
   } })
   const component = h.mount(undefined, { userId: 'review_a' })
+  find(component.render(), node => node.type === './AIUseNotice').props.onChange(true)
   await submit(component.render())
-  assert.match(text(component.render()), /risk level has not been determined/)
+  assert.match(text(component.render()), /pilot.checkinUnavailable/)
   assert.doesNotMatch(text(component.render()), /Risk Level:/)
 })
 
@@ -140,8 +143,8 @@ function appHarness({ initialUser = 'review_a', bootstrap } = {}) {
     updateUserContext: async () => { throw new Error('save failed') },
   }
   const h = harness('frontend/src/App.jsx', api)
-  h.stored.set('hasCompletedWelcome', 'true')
-  h.stored.set('onboarding_completed', 'true')
+  h.stored.set('hasCompletedWelcome:review_a', 'true')
+  h.stored.set('hasCompletedWelcome:review_b', 'true')
   return { ...h, contexts, api, listeners, get logouts() { return logouts },
     emit(change = { preserveTasks: false }) { listeners.forEach(callback => callback(change)) },
     unauthorized() { unauthorized() },
@@ -205,14 +208,14 @@ for (const failed of [false, true]) {
 
 test('welcome completion waits for persistence before recording completion', async () => {
   const h = appHarness(), app = h.mount()
-  h.stored.delete('hasCompletedWelcome')
+  h.stored.delete('hasCompletedWelcome:review_a')
   app.render()
   const account = app.render(), privateApp = h.mount(account.type, account.props)
   privateApp.render()
   const welcome = privateApp.render()
   assert.equal(welcome.type, './components/WelcomeScreen')
   await assert.rejects(welcome.props.onComplete({ babyName: 'sample' }), /save failed/)
-  assert.equal(h.stored.has('hasCompletedWelcome'), false)
+  assert.equal(h.stored.has('hasCompletedWelcome:review_a'), false)
   assert.equal(privateApp.render().type, './components/WelcomeScreen')
   privateApp.unmount()
   app.unmount()

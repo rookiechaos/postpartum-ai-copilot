@@ -1,9 +1,12 @@
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
+import AIUseNotice from './AIUseNotice'
+import SupportDirectory from './SupportDirectory'
 import './NightMode.css'
 
 function NightMode({ userId, onExit }) {
+  const [acceptedAI, setAcceptedAI] = useState(false)
   const { t, i18n } = useTranslation()
   const [query, setQuery] = useState('')
   const [response, setResponse] = useState(null)
@@ -23,12 +26,11 @@ function NightMode({ userId, onExit }) {
 
   const handleQuickAction = (action) => {
     setQuery(action)
-    handleCrisis(action)
   }
 
   const handleCrisis = async (crisisQuery = null) => {
     const queryToSend = crisisQuery || query
-    if (!queryToSend.trim()) return
+    if (!queryToSend.trim() || !acceptedAI || loading) return
 
     setLoading(true)
     setResponse(null)
@@ -41,14 +43,14 @@ function NightMode({ userId, onExit }) {
         language: i18n.language
       })
 
-      setResponse(result)
+      setResponse(result.error ? { response: t('pilot.nightUnavailable'), actions: [], red_flags: [] } : { ...result, generated: true })
       setQuery('')
     } catch (error) {
       console.error('Crisis mode error:', error)
       setResponse({
-        response: "I'm here to help. For immediate concerns, try: 1) Check if baby needs feeding/diaper change, 2) Try gentle rocking or swaddling, 3) If urgent medical concern, contact healthcare provider.",
-        actions: ["Check feeding/diaper", "Try calming techniques", "Contact healthcare if urgent"],
-        red_flags: ["If this is a medical emergency, call emergency services"]
+        response: t('pilot.nightUnavailable'),
+        actions: [],
+        red_flags: []
       })
     } finally {
       setLoading(false)
@@ -56,6 +58,7 @@ function NightMode({ userId, onExit }) {
   }
 
   const loadRelaxationGuide = async () => {
+    if (!acceptedAI || loading) return
     setLoading(true)
     try {
       const result = await api.getNightModeRelaxation(i18n.language)
@@ -69,6 +72,7 @@ function NightMode({ userId, onExit }) {
   }
 
   const loadBreathingExercise = async () => {
+    if (!acceptedAI || loading) return
     setLoading(true)
     try {
       const result = await api.getNightModeBreathing(i18n.language)
@@ -106,37 +110,42 @@ function NightMode({ userId, onExit }) {
           <p>{t('nightMode.subtitle')}</p>
         </div>
 
+        <SupportDirectory compact />
+        <AIUseNotice accepted={acceptedAI} onChange={setAcceptedAI} />
+
         <div className="night-mode-tabs">
           <button
             className={activeTab === 'help' ? 'active' : ''}
             onClick={() => setActiveTab('help')}
           >
-            💬 Help
+            💬 {t('pilot.nightHelp')}
           </button>
           <button
             className={activeTab === 'relaxation' ? 'active' : ''}
             onClick={loadRelaxationGuide}
+            disabled={!acceptedAI || loading}
           >
-            🧘 Relaxation
+            🧘 {t('pilot.relaxation')}
           </button>
           <button
             className={activeTab === 'breathing' ? 'active' : ''}
             onClick={loadBreathingExercise}
+            disabled={!acceptedAI || loading}
           >
-            🌬️ Breathing
+            🌬️ {t('pilot.breathing')}
           </button>
           <button
             className={activeTab === 'safety' ? 'active' : ''}
             onClick={loadSafetyTips}
           >
-            ⚠️ Safety
+            ⚠️ {t('pilot.safety')}
           </button>
         </div>
 
         {activeTab === 'relaxation' && relaxationGuide && (
           <div className="relaxation-guide">
             <h3>{relaxationGuide.title}</h3>
-            <p className="duration">Duration: {relaxationGuide.duration}</p>
+            <p className="duration">{t('tracking.duration')}: {relaxationGuide.duration}</p>
             <ol className="relaxation-steps">
               {relaxationGuide.steps.map((step, i) => (
                 <li key={i}>{step}</li>
@@ -149,7 +158,7 @@ function NightMode({ userId, onExit }) {
           <div className="breathing-exercise">
             <h3>{breathingExercise.name}</h3>
             <p className="description">{breathingExercise.description}</p>
-            <p className="benefits">Benefits: {breathingExercise.benefits}</p>
+            <p className="benefits">{breathingExercise.benefits}</p>
             <ol className="breathing-steps">
               {breathingExercise.steps.map((step, i) => (
                 <li key={i}>{step}</li>
@@ -160,7 +169,7 @@ function NightMode({ userId, onExit }) {
 
         {activeTab === 'safety' && safetyTips && (
           <div className="safety-tips">
-            <h3>Safety Tips</h3>
+            <h3>{t('pilot.safety')}</h3>
             <p className="emergency-message">{safetyTips.emergency_message}</p>
             <ul className="safety-tips-list">
               {safetyTips.tips.map((tip, i) => (
@@ -200,7 +209,7 @@ function NightMode({ userId, onExit }) {
           />
           <button
             onClick={() => handleCrisis()}
-            disabled={loading || !query.trim()}
+            disabled={loading || !query.trim() || !acceptedAI}
             className="crisis-submit-btn"
           >
             {loading ? t('nightMode.gettingHelp') : t('nightMode.getHelp')}
@@ -210,7 +219,7 @@ function NightMode({ userId, onExit }) {
         {loading && (
           <div className="crisis-loading">
             <div className="spinner"></div>
-            <p>Getting help...</p>
+            <p>{t('nightMode.gettingHelp')}</p>
           </div>
         )}
 
@@ -218,11 +227,12 @@ function NightMode({ userId, onExit }) {
           <div className="crisis-response">
             <div className="response-text">
               {response.response}
+              {response.generated && <p>{t('pilot.aiLabel')}</p>}
             </div>
 
             {response.actions && response.actions.length > 0 && (
               <div className="response-actions">
-                <strong>Try this:</strong>
+                <strong>{t('nightMode.tryThis')}</strong>
                 <ul>
                   {response.actions.map((action, i) => (
                     <li key={i}>{action}</li>
@@ -233,7 +243,7 @@ function NightMode({ userId, onExit }) {
 
             {response.red_flags && response.red_flags.length > 0 && (
               <div className="response-red-flags">
-                <strong>⚠️ Important:</strong>
+                <strong>⚠️ {t('chat.important')}</strong>
                 <ul>
                   {response.red_flags.map((flag, i) => (
                     <li key={i}>{flag}</li>
@@ -245,7 +255,7 @@ function NightMode({ userId, onExit }) {
         )}
 
         <div className="emergency-info">
-          <p><strong>Emergency?</strong> Call 911 or your local emergency services</p>
+          <p><strong>{t('nightMode.emergency')}</strong> {t('nightMode.emergencyText')}</p>
         </div>
           </>
         )}

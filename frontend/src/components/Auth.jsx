@@ -1,9 +1,11 @@
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
+import LanguageSelector from './LanguageSelector'
+import SupportDirectory from './SupportDirectory'
 import './Auth.css'
 
-function Auth({ onSuccess }) {
+function Auth({ onSuccess, entry = 'family', onBack }) {
   const { t } = useTranslation()
   const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
@@ -32,7 +34,7 @@ function Auth({ onSuccess }) {
       }
     } catch (err) {
       const msg = err?.message || ''
-      setError(msg.includes('Incorrect') || msg.includes('401') ? t('auth.errorInvalidCredentials') : (msg || t('auth.errorGeneric')))
+      setError(msg.includes('Incorrect') || msg.includes('401') ? t('auth.errorInvalidCredentials') : t('auth.errorGeneric'))
     } finally {
       setLoading(false)
     }
@@ -54,10 +56,10 @@ function Auth({ onSuccess }) {
       }
     } catch (err) {
       const msg = err?.message || ''
-      if (msg.includes('already exists') || msg.includes('400')) {
+      if (msg.includes('already exists')) {
         setError(t('auth.errorEmailExists'))
       } else {
-        setError(msg || t('auth.errorGeneric'))
+        setError(t('auth.errorGeneric'))
       }
     } finally {
       setLoading(false)
@@ -69,9 +71,14 @@ function Auth({ onSuccess }) {
   return (
     <div className="auth-screen">
       <div className="auth-container">
+        <div className="pilot-topbar">
+          {onBack && <button type="button" className="auth-link" onClick={onBack}>{t('pilot.switchEntrance')}</button>}
+          <LanguageSelector />
+        </div>
         <div className="auth-header">
           <h1>🤱 {t('app.title')}</h1>
-          <p className="auth-subtitle">{t('auth.subtitle')}</p>
+          <p className="auth-subtitle">{t(entry === 'organization' ? 'pilot.organizationTitle' : 'pilot.familyTitle')}</p>
+          <p>{t(entry === 'organization' ? 'pilot.organizationAuthNote' : 'pilot.familyAuthNote')}</p>
         </div>
 
         <div className="auth-tabs">
@@ -160,6 +167,7 @@ function Auth({ onSuccess }) {
             </>
           )}
         </p>
+        <SupportDirectory compact />
       </div>
     </div>
   )

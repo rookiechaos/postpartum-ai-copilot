@@ -4,7 +4,7 @@ Tracking Service - Manages tracking entries and user context
 
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, or_
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from models.database import TrackingEntryDB, UserContextDB
 from models.schemas import TrackingEntry
@@ -22,10 +22,13 @@ class TrackingService:
     ) -> Dict[str, Any]:
         """Add a new tracking entry"""
         def _add_entry():
+            timestamp = entry.timestamp or datetime.utcnow()
+            if timestamp.tzinfo is not None:
+                timestamp = timestamp.astimezone(timezone.utc).replace(tzinfo=None)
             db_entry = TrackingEntryDB(
                 user_id=entry.user_id,
                 entry_type=entry.entry_type.value,
-                timestamp=entry.timestamp or datetime.utcnow(),
+                timestamp=timestamp,
                 feeding_type=entry.feeding_type.value if entry.feeding_type else None,
                 duration_minutes=entry.duration_minutes,
                 amount_ml=entry.amount_ml,
@@ -362,8 +365,10 @@ class TrackingService:
     ) -> Dict[str, Any]:
         """Generate daily summary of tracking data with caching"""
         # Get today's entries
-        today = datetime.utcnow().date()
-        start_of_day = datetime.combine(today, datetime.min.time())
+        japan_timezone = timezone(timedelta(hours=9))
+        today = datetime.now(japan_timezone).date()
+        start_of_day = datetime.combine(today, datetime.min.time(), tzinfo=japan_timezone).astimezone(timezone.utc).replace(tzinfo=None)
+        end_of_day = start_of_day + timedelta(days=1)
         
         # Check cache first (cache key includes date to ensure daily refresh)
         from services.cache_service import get_cache
@@ -376,7 +381,8 @@ class TrackingService:
         def _get_daily_entries():
             entries = db.query(TrackingEntryDB).filter(
                 TrackingEntryDB.user_id == user_id,
-                TrackingEntryDB.timestamp >= start_of_day
+                TrackingEntryDB.timestamp >= start_of_day,
+                TrackingEntryDB.timestamp < end_of_day
             ).order_by(TrackingEntryDB.timestamp).all()
             return [self._entry_to_dict(e) for e in entries]
         

@@ -10,7 +10,7 @@ function workerFixture(fetch) {
   const events = {}
   const deleted = []
   let cacheWrites = 0
-  const cacheNames = ['postpartum-runtime-v2', 'postpartum-copilot-v2', 'postpartum-runtime-v3', 'postpartum-copilot-v3', 'unrelated-cache']
+  const cacheNames = ['postpartum-runtime-v2', 'postpartum-copilot-v2', 'postpartum-runtime-v3', 'postpartum-copilot-v3', 'postpartum-runtime-v4', 'postpartum-copilot-v4', 'unrelated-cache']
   const context = {
     Request, Response, URL, console,
     self: {
@@ -49,7 +49,7 @@ function apiFixture(fetch) {
       removeItem(key) { stored.delete(key) }
     },
     caches: {
-      async keys() { return ['postpartum-runtime-v2', 'postpartum-runtime-v3', 'postpartum-copilot-v3', 'unrelated-cache'] },
+      async keys() { return ['postpartum-runtime-v2', 'postpartum-runtime-v3', 'postpartum-runtime-v4', 'postpartum-copilot-v4', 'unrelated-cache'] },
       async delete(name) { deleted.push(name); return true }
     }
   }
@@ -91,7 +91,7 @@ test('activation removes legacy application caches while preserving unrelated ca
   let done
   worker.events.activate({ waitUntil(value) { done = value } })
   await done
-  assert.deepEqual(worker.deleted.sort(), ['postpartum-copilot-v2', 'postpartum-runtime-v2'])
+  assert.deepEqual(worker.deleted.sort(), ['postpartum-copilot-v2', 'postpartum-copilot-v3', 'postpartum-runtime-v2', 'postpartum-runtime-v3'])
 })
 
 test('logout clears credentials and both legacy/current private caches', async () => {
@@ -101,7 +101,7 @@ test('logout clears credentials and both legacy/current private caches', async (
   fixture.stored.set('userId', 'previous-account')
   await fixture.api.logout()
   assert.equal(fixture.stored.size, 0)
-  assert.deepEqual(fixture.deleted.sort(), ['postpartum-runtime-v2', 'postpartum-runtime-v3'])
+  assert.deepEqual(fixture.deleted.sort(), ['postpartum-runtime-v2', 'postpartum-runtime-v3', 'postpartum-runtime-v4'])
 })
 
 test('a 2FA-required response does not authenticate or preserve a previous session', async () => {

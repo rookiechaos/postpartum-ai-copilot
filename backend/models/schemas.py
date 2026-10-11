@@ -14,6 +14,7 @@ class EntryType(str, Enum):
     SLEEP = "sleep"
     MOOD = "mood"
     PUMPING = "pumping"
+    RECOVERY = "recovery"
 
 
 class DiaperType(str, Enum):
@@ -82,6 +83,7 @@ class ChatResponse(BaseModel):
 
 # Tracking Models
 class TrackingEntry(BaseModel):
+    id: Optional[int] = None
     user_id: Optional[str] = Field(
         default=None,
         description="Deprecated: user identity comes from JWT when authenticated",
@@ -144,6 +146,7 @@ class RecoveryEntry(BaseModel):
 
 # Emotional Check-in Models
 class EmotionalCheckIn(BaseModel):
+    language: str = Field(default="ja", pattern="^(ja|en)(-[A-Za-z]+)?$")
     user_id: Optional[str] = Field(
         default=None,
         description="Deprecated: user identity comes from JWT when authenticated",

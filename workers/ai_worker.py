@@ -182,7 +182,7 @@ class AIWorker:
 
         entries = await self.tracking_service.get_entries(user_id, db, days=days)
         context = await self.tracking_service.get_user_context(user_id, db)
-        language = context.get("language", "en") or "en"
+        language = task_data.get("language") or context.get("language") or "ja"
 
         summary = await self.ai_service.analyze_tracking(
             entries=entries,

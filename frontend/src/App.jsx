@@ -9,19 +9,41 @@ import EmotionalCheckIn from './components/EmotionalCheckIn'
 import Dashboard from './components/Dashboard'
 import Settings from './components/Settings'
 import WelcomeScreen from './components/WelcomeScreen'
-import OnboardingTutorial from './components/OnboardingTutorial'
+import EntryScreen from './components/EntryScreen'
+import OrganizationPortal from './components/OrganizationPortal'
+import SupportDirectory from './components/SupportDirectory'
+import ShareSummary from './components/ShareSummary'
 import InstallPrompt from './components/InstallPrompt'
 import LanguageSelector from './components/LanguageSelector'
 import FeedbackWidget from './components/FeedbackWidget'
 import Auth from './components/Auth'
-import { Home, MessageCircle, BarChart3, Heart, Settings as SettingsIcon, Moon } from 'lucide-react'
+import { Home, MessageCircle, BarChart3, Phone, Settings as SettingsIcon, Moon } from 'lucide-react'
 import './App.css'
+import './components/Pilot.css'
 
 function App() {
   const { t } = useTranslation()
   const [authChecked, setAuthChecked] = useState(false)
   const [userId, setUserId] = useState(null)
   const [sessionKey, setSessionKey] = useState(0)
+  const [entry, setEntry] = useState(() => {
+    const path = window.location?.pathname
+    return path === '/family' ? 'family' : path === '/organization' ? 'organization' : null
+  })
+
+  const chooseEntry = value => {
+    window.history.pushState({}, '', value ? `/${value}` : '/')
+    setEntry(value)
+  }
+
+  useEffect(() => {
+    const onPopState = () => {
+      const path = window.location.pathname
+      setEntry(path === '/family' ? 'family' : path === '/organization' ? 'organization' : null)
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -81,25 +103,27 @@ function App() {
       </div>
     )
   }
-  if (!userId) return <Auth onSuccess={setUserId} />
-  return <AuthenticatedApp key={`${sessionKey}:${userId}`} userId={userId} />
+  if (!entry) return <EntryScreen onChoose={chooseEntry} />
+  if (!userId) return <Auth entry={entry} onBack={() => chooseEntry(null)} onSuccess={setUserId} />
+  if (entry === 'organization') return <OrganizationPortal key={`${sessionKey}:${userId}:organization`}
+    userId={userId} onFamily={() => chooseEntry('family')} onExit={() => chooseEntry(null)} />
+  return <AuthenticatedApp key={`${sessionKey}:${userId}:family`} userId={userId} onChooseEntry={chooseEntry} />
 }
 
 // A new login mounts fresh private state, including all child components.
-function AuthenticatedApp({ userId }) {
-  const { t } = useTranslation()
+function AuthenticatedApp({ userId, onChooseEntry }) {
+  const { t, i18n } = useTranslation()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [nightMode, setNightMode] = useState(false)
   const [showWelcome, setShowWelcome] = useState(false)
-  const [showOnboarding, setShowOnboarding] = useState(false)
   const [userContext, setUserContext] = useState(null)
+  const [trackingRequest, setTrackingRequest] = useState(null)
+  const [chatDraft, setChatDraft] = useState('')
 
   useEffect(() => {
     let active = true
-    const welcomeCompleted = localStorage.getItem('hasCompletedWelcome')
-    const onboardingCompleted = localStorage.getItem('onboarding_completed')
+    const welcomeCompleted = localStorage.getItem(`hasCompletedWelcome:${userId}`)
     setShowWelcome(!welcomeCompleted)
-    setShowOnboarding(!!welcomeCompleted && !onboardingCompleted)
     if (welcomeCompleted) {
       api.getUserContext(userId).then(context => {
         if (active) setUserContext(context)
@@ -150,27 +174,26 @@ function AuthenticatedApp({ userId }) {
   }, [])
 
   const handleWelcomeComplete = async (formData) => {
-    const saved = await api.updateUserContext(userId, formData)
-    localStorage.setItem('hasCompletedWelcome', 'true')
+    const saved = await api.updateUserContext(userId, { ...formData, language: i18n.resolvedLanguage || 'ja' })
+    localStorage.setItem(`hasCompletedWelcome:${userId}`, 'true')
     setUserContext(saved.context)
     setShowWelcome(false)
+    setTrackingRequest('feeding')
+    setActiveTab('tracking')
   }
 
   const handleContextUpdate = (newContext) => {
     setUserContext(newContext)
   }
 
-  const handleOnboardingComplete = () => {
-    localStorage.setItem('onboarding_completed', 'true')
-    setShowOnboarding(false)
+  const navigate = (tab, detail) => {
+    if (tab === 'tracking') setTrackingRequest(detail || null)
+    if (tab === 'chat') setChatDraft(detail || '')
+    setActiveTab(tab)
   }
 
   if (showWelcome) {
-    return <WelcomeScreen onComplete={handleWelcomeComplete} />
-  }
-
-  if (showOnboarding) {
-    return <OnboardingTutorial onComplete={handleOnboardingComplete} skipOnboarding={false} userId={userId} />
+    return <WelcomeScreen onComplete={handleWelcomeComplete} onExit={() => onChooseEntry(null)} />
   }
 
   if (nightMode) {
@@ -181,7 +204,7 @@ function AuthenticatedApp({ userId }) {
     { id: 'dashboard', label: t('nav.home'), icon: <Home size={20} /> },
     { id: 'chat', label: t('nav.chat'), icon: <MessageCircle size={20} /> },
     { id: 'tracking', label: t('nav.tracking'), icon: <BarChart3 size={20} /> },
-    { id: 'checkin', label: t('nav.checkin'), icon: <Heart size={20} /> },
+    { id: 'support', label: t('pilot.supportNav'), icon: <Phone size={20} /> },
     { id: 'settings', label: t('nav.settings'), icon: <SettingsIcon size={20} /> }
   ]
 
@@ -194,10 +217,11 @@ function AuthenticatedApp({ userId }) {
         </div>
         <div className="header-actions">
           <LanguageSelector />
+          <button className="entrance-switch" onClick={() => onChooseEntry(null)}>{t('pilot.switchEntrance')}</button>
           <motion.button
             className="night-mode-btn"
             onClick={() => setNightMode(true)}
-            title="Crisis Mode"
+            title={t('nightMode.title')}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
@@ -212,7 +236,8 @@ function AuthenticatedApp({ userId }) {
           <button
             key={tab.id}
             className={activeTab === tab.id ? 'active' : ''}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => navigate(tab.id)}
+            aria-current={activeTab === tab.id ? 'page' : undefined}
           >
             {tab.icon}
             <span>{tab.label}</span>
@@ -230,11 +255,12 @@ function AuthenticatedApp({ userId }) {
             transition={{ duration: 0.3 }}
           >
             {activeTab === 'dashboard' && (
-              <Dashboard userId={userId} userContext={userContext} />
+              <Dashboard userId={userId} userContext={userContext} onNavigate={navigate} onNightMode={() => setNightMode(true)} />
             )}
-            {activeTab === 'chat' && <ChatInterface userId={userId} />}
-            {activeTab === 'tracking' && <TrackingPanel userId={userId} />}
+            {activeTab === 'chat' && <ChatInterface userId={userId} initialDraft={chatDraft} />}
+            {activeTab === 'tracking' && <TrackingPanel userId={userId} initialEntryType={trackingRequest} />}
             {activeTab === 'checkin' && <EmotionalCheckIn userId={userId} />}
+            {activeTab === 'support' && <><SupportDirectory /><ShareSummary userId={userId} /></>}
             {activeTab === 'settings' && (
               <Settings
                 userId={userId}

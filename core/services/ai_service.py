@@ -50,57 +50,26 @@ class AIService:
     
     def _get_system_prompt(self, language: str = "en") -> str:
         """Get the system prompt for postpartum AI copilot"""
-        if language == "ja":
+        language = language or "ja"
+        if language.startswith("ja"):
             ja_prompt = load_locale_text("ja", "system_prompt")
             if ja_prompt:
                 return ja_prompt
 
-        return """You are an empathetic, knowledgeable AI assistant specifically designed to support new mothers during the postpartum and newborn stage.
-
-Your role:
-- Provide calm, reassuring, and evidence-based guidance
-- Reduce cognitive load, not add complexity
-- Use simple, actionable language
-- Always prioritize safety and red flags
-- Be empathetic and non-judgmental
-- Always provide encouragement and positive reinforcement
-- Acknowledge the mother's efforts: "You're doing great", "You're doing your best"
-- Use warm, supportive language especially during difficult moments
-- Recognize that "good enough" parenting is enough
-
-Key principles:
-1. You provide general information, NOT medical diagnosis
-2. Always include red flags when relevant
-3. Keep responses concise, especially during crisis situations
-4. Acknowledge that "good enough" is often enough
-5. Be culturally sensitive and respectful of different parenting choices
-6. Always acknowledge the mother's efforts and provide encouragement
-7. Use positive reinforcement: "You're doing great", "You're handling this well"
-8. Recognize that every mother's journey is unique and valid
-
-When responding:
-- Consider the baby's age (days/weeks old)
-- Consider birth type (vaginal, C-section)
-- Consider feeding type (breast, formula, mixed)
-- Consider the mother's sleep level and context
-- Provide step-by-step suggestions when helpful
-- Include reassurance when appropriate
-- Always start with acknowledgment and encouragement when the mother expresses difficulty
-- End with positive reinforcement and support
-
-Encouragement examples:
-- "You're doing an amazing job, mama."
-- "You're stronger than you think."
-- "It's okay to feel overwhelmed. That's completely normal."
-- "You're not failing - you're learning and adapting."
-- "Every day you're doing your best, and that's enough."
-
-Safety boundaries:
-- Never provide medical diagnosis
-- Always recommend consulting healthcare professionals for medical concerns
-- Escalate to human resources for mental health crises
-- Include disclaimers for medical information"""
+        return """You support postpartum families in Japan with everyday care records and preparing questions for human support.
+Use plain language and short responses. Offer up to three practical next steps; ask one clarifying question at a time when needed.
+Respect different feeding choices and family arrangements. Do not pressure users to keep records or praise them automatically.
+Do not infer that everything is normal from incomplete records. State uncertainty plainly.
+Do not diagnose, prescribe, assess clinical risk, give medical certainty percentages, or imply clinician review.
+For medical concerns, encourage contacting an appropriate care professional.
+In Japan, ambulance emergencies use 119. Do not delay urgent human help while asking questions or generating explanations.
+Child telephone advice #8000 has prefecture-specific hours. #7119 coverage, eligible ages and hours vary; never claim it is universally available.
+Do not invent local service names, fees, subsidy eligibility, hours, source links or review dates.
+Do not claim that the app automatically alerts an organization, monitors a family, books an appointment or contacts emergency services.
+Distinguish provided source information from your own explanation. Ask only for information necessary for the current question.
+Keep health records, mental health notes and identity information private unless the user explicitly chooses what to share."""
     
+
     def _resolve_system_prompt(
         self,
         language: str = "en",
@@ -567,10 +536,11 @@ If you notice any concerns, frame them gently and suggest when to consult health
         """Analyze emotional check-in for risk detection"""
         
         mood_summary = self._summarize_mood_history(mood_history)
-        base_prompt = self._resolve_system_prompt("en")
+        language = current_checkin.get("language", "ja")
+        base_prompt = self._resolve_system_prompt(language)
         
         messages = [
-            {"role": "system", "content": base_prompt + "\n\nYou are analyzing emotional state for postpartum mental health risk. Be gentle, supportive, and prioritize safety."},
+            {"role": "system", "content": base_prompt + "\n\nHelp the user reflect on their feelings and prepare questions for a professional. Do not diagnose or claim to determine clinical risk. Be gentle and supportive."},
             {
                 "role": "user",
                 "content": f"""Current emotional check-in:
@@ -582,11 +552,9 @@ If you notice any concerns, frame them gently and suggest when to consult health
 Recent mood history:
 {mood_summary}
 
-Assess:
-1. Risk level (low, medium, high)
-2. Supportive suggestions
-3. Whether escalation to human resources is needed
-4. Resources to recommend"""
+Offer a short supportive reflection and up to three practical next steps.
+Encourage contacting a trusted person or care professional when support is needed.
+Use Japanese for Japanese-language requests. The user is in Japan; never invent local contacts, fees or service hours."""
             }
         ]
         
@@ -617,19 +585,19 @@ Assess:
                 "provider": response.get("provider", self.provider_name),
                 "validation": {
                     "suggestions_validated": len(validated_suggestions),
-                    "risk_assessment_validated": True
+                    "risk_assessment_validated": False
                 },
                 "analysis_available": True,
             }
         except Exception as e:
             logger.log_error(e, context={"action": "ai_emotional_state"})
             return {
-                "assessment": "Your check-in could not be assessed. Please try again or contact a healthcare professional for support.",
+                "assessment": "現在、回答を取得できません。必要なときは身近な人や専門家に相談してください。" if language.startswith("ja") else "A reflection response is unavailable. Please try again or contact a care professional for support.",
                 "risk_level": "unknown",
                 "analysis_available": False,
-                "suggestions": ["Consider reaching out to a support person", "Contact your healthcare provider if concerns persist"],
+                "suggestions": [],
                 "escalation_needed": None,
-                "resources": ["Postpartum Support International", "National Suicide Prevention Lifeline"],
+                "resources": ["かかりつけの医療機関・市区町村の保健相談窓口", "日本で救急車が必要な場合は119"] if language.startswith("ja") else ["Your usual care provider or municipal health support service", "In Japan, call 119 if you need an ambulance"],
                 "error": PUBLIC_AI_ERROR,
                 "provider": self.provider_name
             }
@@ -639,10 +607,15 @@ Assess:
         parts = []
         if context.get("baby_age_days"):
             parts.append(f"Baby age: {context['baby_age_days']} days old")
-        if context.get("birth_type"):
-            parts.append(f"Birth type: {context['birth_type']}")
-        if context.get("feeding_type"):
-            parts.append(f"Feeding: {context['feeding_type']}")
+        elif context.get("babyAge"):
+            ranges = {"0-7": "0–7 days", "1-2": "1–2 weeks", "2-4": "2–4 weeks", "1-2m": "1–2 months", "2-3m": "2–3 months", "3+": "3 months or older"}
+            parts.append(f"Baby age range (not an exact age): {ranges.get(context['babyAge'], context['babyAge'])}")
+        birth_type = context.get("birth_type") or context.get("birthType")
+        feeding_type = context.get("feeding_type") or context.get("feedingType")
+        if birth_type:
+            parts.append(f"Birth type: {birth_type}")
+        if feeding_type:
+            parts.append(f"Feeding: {feeding_type}")
         if context.get("sleep_hours_avg"):
             parts.append(f"Average sleep: {context['sleep_hours_avg']} hours")
         return "\n".join(parts) if parts else "No specific context available"
@@ -697,9 +670,10 @@ Assess:
         """Extract red flags from response"""
         red_flags = []
         text_lower = text.lower()
-        red_flag_keywords = ["emergency", "urgent", "immediately", "call", "seek", "danger", "warning"]
+        red_flag_keywords = ["emergency", "urgent", "immediately", "call", "seek", "danger", "warning", "緊急", "救急", "119", "すぐに受診", "至急", "意識がない", "呼吸困難"]
         
-        sentences = text.split(".")
+        import re
+        sentences = re.split(r"[。.!?\n]", text)
         for sentence in sentences:
             if any(keyword in sentence.lower() for keyword in red_flag_keywords):
                 red_flags.append(sentence.strip())
@@ -740,9 +714,6 @@ Assess:
             "risk_level": risk_level,
             "suggestions": self._extract_suggestions(text),
             "escalation_needed": escalation_needed,
-            "resources": [
-                "Postpartum Support International: 1-800-944-4773",
-                "National Suicide Prevention Lifeline: 988",
-                "Crisis Text Line: Text HOME to 741741"
-            ]
+            "resources": ["かかりつけの医療機関・市区町村の保健相談窓口", "日本で救急車が必要な場合は119"]
+            if checkin.get("language", "ja").startswith("ja") else ["Your usual care provider or municipal health support service", "In Japan, call 119 if you need an ambulance"]
         }
