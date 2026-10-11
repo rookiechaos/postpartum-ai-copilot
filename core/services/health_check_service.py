@@ -48,7 +48,7 @@ class HealthCheckService:
             logger.log_error(e, context={"check": "database"})
             return {
                 "status": "unhealthy",
-                "error": str(e),
+                "error": "Database health check failed",
                 "connected": False
             }
     
@@ -77,7 +77,7 @@ class HealthCheckService:
             logger.log_error(e, context={"check": "ai_provider"})
             return {
                 "status": "error",
-                "error": str(e)
+                "error": "AI provider health check failed"
             }
     
     def check_task_queue(self, db: Session) -> Dict[str, Any]:
@@ -117,7 +117,7 @@ class HealthCheckService:
             logger.log_error(e, context={"check": "task_queue"})
             return {
                 "status": "error",
-                "error": str(e)
+                "error": "Task queue health check failed"
             }
     
     def check_system_resources(self) -> Dict[str, Any]:
@@ -161,7 +161,7 @@ class HealthCheckService:
             logger.log_error(e, context={"check": "system_resources"})
             return {
                 "status": "error",
-                "error": str(e)
+                "error": "System resources health check failed"
             }
     
     def get_comprehensive_health(self, db: Session) -> Dict[str, Any]:

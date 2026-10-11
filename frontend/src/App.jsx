@@ -19,71 +19,95 @@ import './App.css'
 
 function App() {
   const { t } = useTranslation()
+  const [authChecked, setAuthChecked] = useState(false)
+  const [userId, setUserId] = useState(null)
+  const [sessionKey, setSessionKey] = useState(0)
+
+  useEffect(() => {
+    let active = true
+    let generation = 0
+    const clearAccount = () => {
+      generation++
+      if (!active) return
+      setUserId(null)
+      setSessionKey(key => key + 1)
+      setAuthChecked(true)
+    }
+    const unsubscribe = api.onAuthChange(({ preserveTasks }) => {
+      if (!preserveTasks) clearAccount()
+    })
+    api.setOnUnauthorized(clearAccount)
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(error => {
+        console.error('Service Worker registration failed:', error)
+      })
+    }
+
+    const initialize = async () => {
+      const initialGeneration = generation
+      if (!api.isAuthenticated()) {
+        setAuthChecked(true)
+        return
+      }
+      const storedUserId = api.getUserId()
+      if (storedUserId) {
+        setUserId(storedUserId)
+        setAuthChecked(true)
+        return
+      }
+      try {
+        const user = await api.getCurrentUser()
+        if (!active || generation !== initialGeneration) return
+        api.setUserId(user?.user_id || null)
+        setUserId(user?.user_id || null)
+        setAuthChecked(true)
+      } catch {
+        if (active && generation === initialGeneration) api.logout()
+      }
+    }
+    initialize()
+    return () => {
+      active = false
+      unsubscribe()
+      api.setOnUnauthorized(null)
+    }
+  }, [])
+
+  if (!authChecked) {
+    return (
+      <div className="app app-loading" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p>{t('auth.loggingIn', 'Loading...')}</p>
+      </div>
+    )
+  }
+  if (!userId) return <Auth onSuccess={setUserId} />
+  return <AuthenticatedApp key={`${sessionKey}:${userId}`} userId={userId} />
+}
+
+// A new login mounts fresh private state, including all child components.
+function AuthenticatedApp({ userId }) {
+  const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [nightMode, setNightMode] = useState(false)
   const [showWelcome, setShowWelcome] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [userContext, setUserContext] = useState(null)
-  const [authChecked, setAuthChecked] = useState(false)
-  const [userId, setUserId] = useState(null)
 
   useEffect(() => {
-    api.setOnUnauthorized(() => {
-      setUserId(null)
-      setAuthChecked(true)
-    })
-  }, [])
-
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js')
-        .then((registration) => {
-          console.log('Service Worker registered:', registration)
-        })
-        .catch((error) => {
-          console.log('Service Worker registration failed:', error)
-        })
-    }
-    if (!api.isAuthenticated()) {
-      setUserId(null)
-      setAuthChecked(true)
-      return
-    }
-    const storedUserId = api.getUserId()
-    if (storedUserId) {
-      setUserId(storedUserId)
-      setAuthChecked(true)
-      return
-    }
-    api.getCurrentUser()
-      .then((user) => {
-        if (user?.user_id) {
-          api.setUserId(user.user_id)
-          setUserId(user.user_id)
-        } else {
-          setUserId(null)
-        }
-        setAuthChecked(true)
+    let active = true
+    const welcomeCompleted = localStorage.getItem('hasCompletedWelcome')
+    const onboardingCompleted = localStorage.getItem('onboarding_completed')
+    setShowWelcome(!welcomeCompleted)
+    setShowOnboarding(!!welcomeCompleted && !onboardingCompleted)
+    if (welcomeCompleted) {
+      api.getUserContext(userId).then(context => {
+        if (active) setUserContext(context)
+      }).catch(error => {
+        if (active) console.error('Error loading context:', error)
       })
-      .catch(() => {
-        api.logout()
-        setUserId(null)
-        setAuthChecked(true)
-      })
-  }, [])
-
-  useEffect(() => {
-    if (!userId) return
-    const hasCompletedWelcome = localStorage.getItem('hasCompletedWelcome')
-    const hasCompletedOnboarding = localStorage.getItem('onboarding_completed')
-    if (!hasCompletedWelcome) {
-      setShowWelcome(true)
-    } else if (!hasCompletedOnboarding) {
-      setShowOnboarding(true)
-      loadUserContext()
-    } else {
-      loadUserContext()
     }
+    return () => { active = false }
   }, [userId])
 
   useEffect(() => {
@@ -125,37 +149,20 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  const loadUserContext = async () => {
-    if (!userId) return
-    try {
-      const context = await api.getUserContext(userId)
-      setUserContext(context)
-    } catch (error) {
-      console.error('Error loading context:', error)
-    }
-  }
-
-  const handleWelcomeComplete = (formData) => {
+  const handleWelcomeComplete = async (formData) => {
+    const saved = await api.updateUserContext(userId, formData)
     localStorage.setItem('hasCompletedWelcome', 'true')
-    setUserContext(formData)
+    setUserContext(saved.context)
     setShowWelcome(false)
-    api.updateUserContext(userId, formData).catch(console.error)
   }
 
   const handleContextUpdate = (newContext) => {
     setUserContext(newContext)
   }
 
-  if (!authChecked) {
-    return (
-      <div className="app app-loading" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p>{t('auth.loggingIn', 'Loading...')}</p>
-      </div>
-    )
-  }
-
-  if (authChecked && !userId) {
-    return <Auth onSuccess={(uid) => setUserId(uid)} />
+  const handleOnboardingComplete = () => {
+    localStorage.setItem('onboarding_completed', 'true')
+    setShowOnboarding(false)
   }
 
   if (showWelcome) {
@@ -163,7 +170,7 @@ function App() {
   }
 
   if (showOnboarding) {
-    return <OnboardingTutorial onComplete={() => setShowOnboarding(false)} skipOnboarding={false} userId={userId} />
+    return <OnboardingTutorial onComplete={handleOnboardingComplete} skipOnboarding={false} userId={userId} />
   }
 
   if (nightMode) {
@@ -232,10 +239,7 @@ function App() {
               <Settings
                 userId={userId}
                 onContextUpdate={handleContextUpdate}
-                onLogout={() => {
-                  api.logout()
-                  setUserId(null)
-                }}
+                onLogout={() => api.logout()}
               />
             )}
           </motion.div>

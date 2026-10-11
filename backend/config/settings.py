@@ -96,7 +96,7 @@ class Settings(BaseSettings):
     paypal_environment: str = Field(default="sandbox", pattern="^(sandbox|live)$", validation_alias="PAYPAL_ENVIRONMENT")
     
     # Admin Configuration
-    admin_emails: Optional[str] = Field(default=None, validation_alias="ADMIN_EMAILS")
+    admin_user_ids: Optional[str] = Field(default=None, validation_alias="ADMIN_USER_IDS")
     
     # Logging
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")

@@ -3,10 +3,8 @@ WebSocket Manager - Real-time communication for task updates
 WebSocket manager - real-time communication for task updates
 """
 
-from typing import Dict, Set, Optional
-from fastapi import WebSocket, WebSocketDisconnect
-import json
-import asyncio
+from typing import Callable, Dict, Set
+from fastapi import WebSocket
 from datetime import datetime
 from services.logging_service import logger
 
@@ -21,8 +19,9 @@ class ConnectionManager:
         self.task_subscriptions: Dict[str, Set[WebSocket]] = {}
         # WebSocket -> user_id (for reverse lookup)
         self.connection_users: Dict[WebSocket, str] = {}
+        self.session_validators: Dict[WebSocket, Callable[[], bool]] = {}
     
-    async def connect(self, websocket: WebSocket, user_id: str):
+    async def connect(self, websocket: WebSocket, user_id: str, validate_session: Callable[[], bool]):
         """Accept a new WebSocket connection"""
         await websocket.accept()
         
@@ -31,6 +30,7 @@ class ConnectionManager:
         
         self.active_connections[user_id].add(websocket)
         self.connection_users[websocket] = user_id
+        self.session_validators[websocket] = validate_session
         
         logger.log_info(f"WebSocket connected: user_id={user_id}", context={"user_id": user_id})
         
@@ -40,9 +40,11 @@ class ConnectionManager:
             "status": "connected",
             "timestamp": datetime.utcnow().isoformat()
         }, websocket)
+        return websocket in self.connection_users
     
     def disconnect(self, websocket: WebSocket):
         """Remove a WebSocket connection"""
+        self.session_validators.pop(websocket, None)
         user_id = self.connection_users.get(websocket)
         if user_id:
             if user_id in self.active_connections:
@@ -58,9 +60,29 @@ class ConnectionManager:
             
             del self.connection_users[websocket]
             logger.log_info(f"WebSocket disconnected: user_id={user_id}", context={"user_id": user_id})
+
+    async def ensure_authenticated(self, websocket: WebSocket) -> bool:
+        """Recheck current token, factor and account state before using a socket."""
+        if websocket not in self.connection_users:
+            return False
+        validate = self.session_validators.get(websocket)
+        try:
+            valid = validate is not None and validate()
+        except Exception as e:
+            logger.log_error(e, context={"action": "websocket_session_check"})
+            valid = False
+        if not valid:
+            self.disconnect(websocket)
+            try:
+                await websocket.close(code=1008, reason="Authentication required")
+            except Exception:
+                pass  # The peer may already have closed the connection.
+        return bool(valid)
     
     async def send_personal_message(self, message: dict, websocket: WebSocket):
         """Send message to a specific WebSocket connection"""
+        if not await self.ensure_authenticated(websocket):
+            return
         try:
             await websocket.send_json(message)
         except Exception as e:
@@ -72,17 +94,8 @@ class ConnectionManager:
         if user_id not in self.active_connections:
             return
         
-        disconnected = set()
         for websocket in list(self.active_connections[user_id]):
-            try:
-                await websocket.send_json(message)
-            except Exception as e:
-                logger.log_error(e, context={"action": "websocket_send_to_user", "user_id": user_id})
-                disconnected.add(websocket)
-        
-        # Clean up disconnected connections
-        for ws in disconnected:
-            self.disconnect(ws)
+            await self.send_personal_message(message, websocket)
     
     async def broadcast_task_update(self, task_id: str, task_data: dict):
         """Broadcast task update to all subscribers"""
@@ -96,20 +109,13 @@ class ConnectionManager:
             "timestamp": datetime.utcnow().isoformat()
         }
         
-        disconnected = set()
         for websocket in list(self.task_subscriptions[task_id]):
-            try:
-                await websocket.send_json(message)
-            except Exception as e:
-                logger.log_error(e, context={"action": "websocket_broadcast_task", "task_id": task_id})
-                disconnected.add(websocket)
-        
-        # Clean up disconnected connections
-        for ws in disconnected:
-            self.disconnect(ws)
+            await self.send_personal_message(message, websocket)
     
     def subscribe_to_task(self, websocket: WebSocket, task_id: str):
         """Subscribe a connection to task updates"""
+        if websocket not in self.connection_users:
+            return
         if task_id not in self.task_subscriptions:
             self.task_subscriptions[task_id] = set()
         self.task_subscriptions[task_id].add(websocket)

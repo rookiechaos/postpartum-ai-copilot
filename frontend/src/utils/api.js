@@ -46,8 +46,9 @@ function assertSession(session) {
   if (session !== authSession) throw new Error('Authentication session changed')
 }
 
-async function responseError(response) {
+async function responseError(response, session) {
   const error = new Error(await parseErrorResponse(response))
+  assertSession(session)
   error.status = response.status
   return error
 }
@@ -141,14 +142,17 @@ export const api = {
         throw error
       }
       if (response.status === 401 && isRetry) {
+        const error = await responseError(response, session)
         this.logout()
         triggerUnauthorized()
-        throw await responseError(response)
+        throw error
       }
       if (!response.ok) {
-        throw await responseError(response)
+        throw await responseError(response, session)
       }
-      return await response.json()
+      const data = await response.json()
+      assertSession(session)
+      return data
     } catch (error) {
       if (error.name === 'AbortError') {
         throw new Error('Request timeout, please check your network')
@@ -189,14 +193,17 @@ export const api = {
         throw error
       }
       if (response.status === 401 && isRetry) {
+        const error = await responseError(response, session)
         this.logout()
         triggerUnauthorized()
-        throw await responseError(response)
+        throw error
       }
       if (!response.ok) {
-        throw await responseError(response)
+        throw await responseError(response, session)
       }
-      return await response.json()
+      const result = await response.json()
+      assertSession(session)
+      return result
     } catch (error) {
       console.error('API POST error:', error)
       throw error
@@ -233,17 +240,20 @@ export const api = {
         throw error
       }
       if (response.status === 401 && isRetry) {
+        const error = await responseError(response, session)
         this.logout()
         triggerUnauthorized()
-        throw await responseError(response)
+        throw error
       }
       if (response.status === 204) {
         return null
       }
       if (!response.ok) {
-        throw await responseError(response)
+        throw await responseError(response, session)
       }
-      return await response.json().catch(() => null)
+      const data = await response.json().catch(() => null)
+      assertSession(session)
+      return data
     } catch (error) {
       if (error.name === 'AbortError') {
         throw new Error('Request timeout, please check your network')
@@ -385,6 +395,7 @@ export const api = {
 
   // Voice methods
   async speechToText(audioFile, language = 'en') {
+    const session = authSession
     const formData = new FormData()
     formData.append('audio', audioFile)
     formData.append('language', language)
@@ -396,15 +407,19 @@ export const api = {
       },
       body: formData
     })
+    assertSession(session)
     
     if (!response.ok) {
       throw new Error(`Speech-to-text failed: ${response.status}`)
     }
     
-    return await response.json()
+    const data = await response.json()
+    assertSession(session)
+    return data
   },
 
   async textToSpeech(text, language = 'en', voice = null, speed = 1.0) {
+    const session = authSession
     const response = await fetch(`${API_BASE}/api/voice/text-to-speech`, {
       method: 'POST',
       headers: {
@@ -413,12 +428,15 @@ export const api = {
       },
       body: JSON.stringify({ text, language, voice, speed })
     })
+    assertSession(session)
     
     if (!response.ok) {
       throw new Error(`Text-to-speech failed: ${response.status}`)
     }
     
-    return await response.blob()
+    const audio = await response.blob()
+    assertSession(session)
+    return audio
   },
 
   // Family methods
@@ -684,13 +702,18 @@ export const api = {
     const response = await this.post('/api/security/2fa/enable', {
       verification_token: verificationToken
     })
-    await this.logout()
+    const clearing = this.logout()
     triggerUnauthorized()
+    await clearing
     return response
   },
 
   async disable2FA() {
-    return this.post('/api/security/2fa/disable')
+    const response = await this.post('/api/security/2fa/disable')
+    const clearing = this.logout()
+    triggerUnauthorized()
+    await clearing
+    return response
   },
 
   async get2FAStatus() {

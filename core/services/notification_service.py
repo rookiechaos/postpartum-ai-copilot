@@ -57,7 +57,7 @@ class NotificationService:
                 is_recurring=is_recurring,
                 recurrence_pattern=recurrence_pattern,
                 action_url=action_url,
-                metadata=metadata or {},
+                notification_metadata=metadata or {},
                 is_enabled=True,
                 is_sent=False
             )
@@ -155,7 +155,7 @@ class NotificationService:
                         is_recurring=True,
                         recurrence_pattern=notification.recurrence_pattern,
                         action_url=notification.action_url,
-                        metadata=notification.notification_metadata,
+                        notification_metadata=notification.notification_metadata,
                         is_enabled=True,
                         is_sent=False
                     )

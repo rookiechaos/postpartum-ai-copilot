@@ -73,16 +73,11 @@ class AuthService:
             if existing_user:
                 raise ValidationError("User with this email already exists")
             
-            # Generate user_id if not provided
-            user_id = user_data.user_id or f"user_{secrets.token_urlsafe(8)}"
-            
-            # Check if user_id already exists
-            existing_user_id = db.query(UserDB).filter(
-                UserDB.user_id == user_id
-            ).first()
-            
-            if existing_user_id:
-                user_id = f"user_{secrets.token_urlsafe(12)}"
+            # Public signup cannot select an identity, including a provisioned
+            # administrator ID. Legacy user_id input is deliberately ignored.
+            user_id = f"user_{secrets.token_urlsafe(24)}"
+            while db.query(UserDB).filter(UserDB.user_id == user_id).first():
+                user_id = f"user_{secrets.token_urlsafe(24)}"
             
             # Create user
             hashed_password = self.get_password_hash(user_data.password)
@@ -212,7 +207,7 @@ class AuthService:
             mfa_version = payload.get("mfa_version")
             if db is not None:
                 expected_version = self.get_two_factor_version(user_id, db)
-                if expected_version and mfa_version != expected_version:
+                if mfa_version != expected_version:
                     return None
             return TokenData(user_id=user_id, email=email, mfa_version=mfa_version)
         except JWTError:

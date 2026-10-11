@@ -241,6 +241,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     """User creation model"""
+    user_id: Optional[str] = Field(default=None, description="Deprecated and ignored: the server generates account IDs")
     password: str = Field(..., min_length=8, max_length=128, description="Password must be at least 8 characters")
     
     @validator('password')

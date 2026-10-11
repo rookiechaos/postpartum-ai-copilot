@@ -34,7 +34,7 @@ function fixture({ authenticated = true, fetch: fetchOverride } = {}) {
     return json({ task_id: 'task-a', status: 'processing' })
   })
   const context = {
-    console: { log() {}, warn() {}, error() {} }, AbortController, URLSearchParams,
+    console: { log() {}, warn() {}, error() {} }, AbortController, URLSearchParams, FormData,
     Date: ClockDate, WebSocket: Socket,
     localStorage: {
       getItem: key => stored.get(key) || null,
@@ -82,6 +82,56 @@ function fixture({ authenticated = true, fetch: fetchOverride } = {}) {
 function outcome(promise) {
   return promise.then(value => ({ value }), error => ({ error }))
 }
+
+for (const method of ['get', 'post', 'delete']) {
+  test(`${method} rejects an old account body that arrives after new login`, async () => {
+    const f = fixture()
+    const body = deferred()
+    f.setFetch(async url => url.endsWith('/api/auth/login')
+      ? json({ access_token: 'access-b', refresh_token: 'refresh-b' })
+      : { ok: true, status: 200, json: () => body.promise })
+    const result = outcome(method === 'post' ? f.api.post('/api/private', {}) : f.api[method]('/api/private'))
+    await flush() // Headers have arrived; JSON parsing is still pending.
+    await f.api.login('review@example.com', 'fixture-password')
+    body.resolve({ babyName: 'private-account-a' })
+    assert.match((await result).error.message, /session changed/)
+    assert.equal(f.stored.get('access_token'), 'access-b')
+  })
+}
+
+test('a late retried 401 body cannot log out the successor account', async () => {
+  const f = fixture()
+  const body = deferred()
+  let privateCalls = 0
+  f.setFetch(async url => {
+    if (url.endsWith('/api/auth/login')) return json({ access_token: 'access-b', refresh_token: 'refresh-b' })
+    if (url.endsWith('/api/auth/refresh')) return json({ access_token: 'renewed-a', refresh_token: 'renewed-refresh-a' })
+    if (++privateCalls === 1) return json({}, 401)
+    return { ok: false, status: 401, json: () => body.promise }
+  })
+  const result = outcome(f.api.get('/api/private'))
+  await flush()
+  assert.equal(privateCalls, 2)
+  await f.api.login('review@example.com', 'fixture-password')
+  body.resolve({ detail: 'private-account-a-error' })
+  assert.match((await result).error.message, /session changed/)
+  assert.equal(f.stored.get('access_token'), 'access-b')
+})
+
+test('voice transcription and audio bodies are also bound to their login session', async () => {
+  for (const method of ['speechToText', 'textToSpeech']) {
+    const f = fixture()
+    const body = deferred()
+    f.setFetch(async url => url.endsWith('/api/auth/login')
+      ? json({ access_token: 'access-b', refresh_token: 'refresh-b' })
+      : { ok: true, status: 200, json: () => body.promise, blob: () => body.promise })
+    const result = outcome(f.api[method](method === 'speechToText' ? new Blob(['sample']) : 'sample'))
+    await flush()
+    await f.api.login('review@example.com', 'fixture-password')
+    body.resolve(method === 'speechToText' ? { text: 'private-a' } : new Blob(['private-a']))
+    assert.match((await result).error.message, /session changed/)
+  }
+})
 
 test('a connected socket without worker notifications still completes through polling', async () => {
   const f = fixture()

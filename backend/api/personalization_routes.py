@@ -3,7 +3,8 @@ Personalization Routes - API endpoints for user personalization
 """
 
 from fastapi import APIRouter, Depends
-from typing import Dict, Any
+from pydantic import BaseModel
+from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 
 from dependencies.database import get_db
@@ -22,6 +23,11 @@ router = APIRouter(tags=["personalization"])
 
 # Get service instances from container
 container = get_container()
+
+
+class UserContextUpdate(BaseModel):
+    context: Dict[str, Any]
+    user_id: Optional[str] = None  # Compatibility only; identity comes from JWT.
 
 
 @router.get("/api/user/{user_id}/personalization")
@@ -94,19 +100,19 @@ async def update_personalization(
 
 @router.post("/api/user/context")
 async def update_user_context(
-    user_id: str,
-    context: Dict[str, Any],
+    request: UserContextUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Update user context (baby age, birth type, feeding preferences, etc.)
     """
-    check_user_authorization(current_user, user_id, "user context")
+    if request.user_id is not None:
+        check_user_authorization(current_user, request.user_id, "user context")
     tracking_service = container.get("tracking_service")
     
     try:
-        result = await tracking_service.update_user_context(user_id, context, db)
+        result = await tracking_service.update_user_context(current_user.user_id, request.context, db)
         return result
     except PostpartumException:
         raise

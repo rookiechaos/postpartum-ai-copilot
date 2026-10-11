@@ -6,6 +6,8 @@ import './WelcomeScreen.css'
 function WelcomeScreen({ onComplete }) {
   const { t } = useTranslation()
   const [step, setStep] = useState(0)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
   const [formData, setFormData] = useState({
     babyAge: '',
     birthType: '',
@@ -101,16 +103,28 @@ function WelcomeScreen({ onComplete }) {
     }
   ]
 
+  const complete = async () => {
+    setSaving(true)
+    setError('')
+    try {
+      await onComplete(formData)
+    } catch {
+      setError('Unable to save your settings. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleNext = () => {
     if (step < steps.length - 1) {
       setStep(step + 1)
     } else {
-      onComplete(formData)
+      complete()
     }
   }
 
   const handleSkip = () => {
-    onComplete(formData)
+    complete()
   }
 
   return (
@@ -138,6 +152,7 @@ function WelcomeScreen({ onComplete }) {
         </motion.div>
 
         <div className="welcome-footer">
+          {error && <p role="alert">{error}</p>}
           <div className="progress-dots">
             {steps.map((_, index) => (
               <div
@@ -151,6 +166,7 @@ function WelcomeScreen({ onComplete }) {
             {step > 0 && (
               <button
                 className="btn-secondary"
+                disabled={saving}
                 onClick={() => setStep(step - 1)}
               >
                 {t('welcome.back')}
@@ -160,7 +176,7 @@ function WelcomeScreen({ onComplete }) {
               <button
                 className="btn-primary"
                 onClick={handleNext}
-                disabled={step === 1 && !formData.babyAge}
+                disabled={saving || (step === 1 && !formData.babyAge)}
               >
                 {t('welcome.next')}
               </button>
@@ -168,6 +184,7 @@ function WelcomeScreen({ onComplete }) {
               <button
                 className="btn-primary"
                 onClick={handleNext}
+                disabled={saving}
               >
                 {t('welcome.getStarted')}
               </button>
@@ -176,6 +193,7 @@ function WelcomeScreen({ onComplete }) {
               <button
                 className="btn-link"
                 onClick={handleSkip}
+                disabled={saving}
               >
                 {t('welcome.skip')}
               </button>

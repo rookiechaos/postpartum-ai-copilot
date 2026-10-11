@@ -1,10 +1,12 @@
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
+import { useToast } from './Toast'
 import './EmotionalCheckIn.css'
 
 function EmotionalCheckIn({ userId }) {
   const { t } = useTranslation()
+  const toast = useToast()
   const [overwhelmed, setOverwhelmed] = useState(5)
   const [anxiety, setAnxiety] = useState(5)
   const [support, setSupport] = useState(5)
@@ -31,10 +33,11 @@ function EmotionalCheckIn({ userId }) {
       console.error('Check-in error:', error)
       toast.error(error?.message || 'Check-in failed. Please try again.')
       setResult({
-        assessment: "Thank you for checking in. Remember, it's okay to ask for help.",
-        risk_level: "low",
+        assessment: 'Your check-in could not be assessed. Please try again or contact a healthcare professional for support.',
+        risk_level: 'unknown',
+        analysis_available: false,
         suggestions: ["Consider reaching out to a support person", "Contact your healthcare provider if concerns persist"],
-        escalation_needed: false,
+        escalation_needed: null,
         resources: ["Postpartum Support International", "National Suicide Prevention Lifeline"]
       })
     } finally {
@@ -133,12 +136,16 @@ function EmotionalCheckIn({ userId }) {
         {result && (
           <div className="checkin-result">
             <p className="checkin-disclaimer">{t('checkin.disclaimerNonClinical')}</p>
-            <div 
-              className="risk-badge"
-              style={{ backgroundColor: getRiskColor(result.risk_level) }}
-            >
-              Risk Level: {result.risk_level.toUpperCase()}
-            </div>
+            {result.analysis_available === true ? (
+              <div className="risk-badge" style={{ backgroundColor: getRiskColor(result.risk_level) }}>
+                Risk Level: {result.risk_level.toUpperCase()}
+              </div>
+            ) : (
+              <div role="status">
+                <p>Assessment unavailable. Your risk level has not been determined.</p>
+                <button type="button" onClick={handleSubmit} disabled={loading}>Try again</button>
+              </div>
+            )}
 
             <div className="assessment">
               <h3>Assessment</h3>

@@ -10,7 +10,7 @@ _CORE_DIR = Path(__file__).resolve().parent.parent / "core"
 if str(_CORE_DIR) not in sys.path:
     sys.path.insert(0, str(_CORE_DIR))
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 from dotenv import load_dotenv
@@ -18,6 +18,8 @@ from dotenv import load_dotenv
 from models.database import init_db
 from dependencies.container import get_container
 from config.settings import get_settings
+from middleware.admin import require_admin
+from models.schemas import User
 from api.auth_routes import router as auth_router
 from api.task_routes import router as task_router
 from api.monitoring_routes import router as monitoring_router
@@ -169,25 +171,12 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint (basic)"""
-    try:
-        # Check AI provider status
-        provider_name = settings.ai_provider.lower()
-        return {
-            "status": "healthy",
-            "timestamp": datetime.now().isoformat(),
-            "ai_provider": provider_name
-        }
-    except Exception as e:
-        return {
-            "status": "degraded",
-            "timestamp": datetime.now().isoformat(),
-            "error": str(e)
-        }
+    """Public liveness probe. Database readiness is /api/monitoring/health."""
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 
 @app.get("/metrics")
-async def get_metrics():
+async def get_metrics(current_user: User = Depends(require_admin)):
     """Get performance metrics (basic endpoint)"""
     from middleware.performance import performance_metrics
     return performance_metrics.get_stats()

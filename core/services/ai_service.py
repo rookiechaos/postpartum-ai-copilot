@@ -618,15 +618,17 @@ Assess:
                 "validation": {
                     "suggestions_validated": len(validated_suggestions),
                     "risk_assessment_validated": True
-                }
+                },
+                "analysis_available": True,
             }
         except Exception as e:
             logger.log_error(e, context={"action": "ai_emotional_state"})
             return {
-                "assessment": "Thank you for checking in. Remember, it's okay to ask for help.",
-                "risk_level": "low",
+                "assessment": "Your check-in could not be assessed. Please try again or contact a healthcare professional for support.",
+                "risk_level": "unknown",
+                "analysis_available": False,
                 "suggestions": ["Consider reaching out to a support person", "Contact your healthcare provider if concerns persist"],
-                "escalation_needed": False,
+                "escalation_needed": None,
                 "resources": ["Postpartum Support International", "National Suicide Prevention Lifeline"],
                 "error": PUBLIC_AI_ERROR,
                 "provider": self.provider_name

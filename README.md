@@ -64,7 +64,7 @@ This product is a **companion and support tool**, not a medical product or devic
 ### Quick Start
 
 See [docs/deployment/SETUP.md](docs/deployment/SETUP.md) for detailed setup.
-See [the October 9 security fixes](docs/security/SECURITY_FIXES_2026-10-09.md) for authentication, privacy, payment restrictions, and validation limits.
+See [the October 10 review fixes](docs/security/SECURITY_FIXES_2026-10-10.md) for administrator provisioning, session handling, diagnostics, and validation limits, and [the October 9 fixes](docs/security/SECURITY_FIXES_2026-10-09.md) for earlier authentication, privacy, and payment changes.
 
 **Backend:**
 ```bash

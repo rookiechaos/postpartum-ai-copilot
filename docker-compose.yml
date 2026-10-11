@@ -35,6 +35,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY before starting the services}
+      ADMIN_USER_IDS: ${ADMIN_USER_IDS:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
       ASYNC_MODE: ${ASYNC_MODE:-true}
       RAG_ENABLED: ${RAG_ENABLED:-true}

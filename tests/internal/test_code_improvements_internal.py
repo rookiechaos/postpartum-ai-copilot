@@ -29,7 +29,7 @@ from services.notification_service import NotificationService
 from services.data_analysis_service import DataAnalysisService
 from utils.user_preferences import get_user_language_preference, invalidate_language_cache
 from utils.webhook_verification import verify_stripe_webhook, verify_paypal_webhook
-from middleware.admin import get_admin_emails, require_admin
+from middleware.admin import get_admin_user_ids, require_admin
 from services.cache_service import get_cache
 from exceptions import ValidationError, DatabaseError
 import json
@@ -422,10 +422,9 @@ def test_admin_middleware():
     print("Testing Admin Middleware")
     print("="*60)
     
-    # Test get_admin_emails
-    admin_emails = get_admin_emails()
-    assert isinstance(admin_emails, list)
-    print("✅ get_admin_emails: PASSED")
+    admin_user_ids = get_admin_user_ids()
+    assert isinstance(admin_user_ids, list)
+    print("✅ get_admin_user_ids: PASSED")
     
     print("✅ All admin middleware tests passed")
 

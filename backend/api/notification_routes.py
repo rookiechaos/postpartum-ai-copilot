@@ -67,7 +67,7 @@ async def create_notification(
             is_recurring=notification.is_recurring,
             recurrence_pattern=notification.recurrence_pattern,
             action_url=notification.action_url,
-            metadata=notification.notification_metadata
+            metadata=notification.metadata
         )
         return NotificationResponse(**created)
     except (ValidationError, DatabaseError):

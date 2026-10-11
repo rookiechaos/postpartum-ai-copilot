@@ -248,15 +248,17 @@ async def emotional_checkin(
         recent_moods = await tracking_service.get_mood_history(user_id, db, days=7)
 
         analysis = await ai_service.analyze_emotional_state(
-            current_checkin=checkin.model_copy(update={"user_id": user_id}),
+            current_checkin={**checkin.model_dump(mode="json"), "user_id": user_id},
             mood_history=recent_moods
         )
 
         return {
             "assessment": analysis.get("assessment", ""),
-            "risk_level": analysis.get("risk_level", "low"),
+            "risk_level": analysis.get("risk_level", "unknown"),
+            "analysis_available": analysis.get("analysis_available", False),
+            "error": analysis.get("error"),
             "suggestions": analysis.get("suggestions", []),
-            "escalation_needed": analysis.get("escalation_needed", False),
+            "escalation_needed": analysis.get("escalation_needed"),
             "resources": analysis.get("resources", []),
             "timestamp": datetime.now().isoformat()
         }

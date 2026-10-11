@@ -152,3 +152,20 @@ test('expired /auth/me access can still refresh the verified session', async () 
   assert.equal(fixture.stored.get('access_token'), 'renewed-access')
   assert.equal(calls.length, 3)
 })
+
+test('disabling second factor clears the previous credentials and requests a new sign-in', async () => {
+  let url, unauthorized = 0
+  const fixture = apiFixture(async endpoint => {
+    url = endpoint
+    return new Response(JSON.stringify({ is_enabled: false }))
+  })
+  fixture.stored.set('access_token', 'old-access')
+  fixture.stored.set('refresh_token', 'old-refresh')
+  fixture.stored.set('userId', 'review-account')
+  fixture.api.setOnUnauthorized(() => { unauthorized++ })
+  const response = await fixture.api.disable2FA()
+  assert.equal(response.is_enabled, false)
+  assert.match(url, /\/api\/security\/2fa\/disable$/)
+  assert.equal(fixture.stored.size, 0)
+  assert.equal(unauthorized, 1)
+})
