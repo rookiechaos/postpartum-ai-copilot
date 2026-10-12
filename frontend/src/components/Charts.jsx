@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import api from '../utils/api'
-import { japanDay } from '../utils/japanTime'
+import { japanDay, utcDate } from '../utils/japanTime'
 import { useToast } from './Toast'
-import { Calendar, TrendingUp } from 'lucide-react'
+import { Calendar } from 'lucide-react'
 import EmptyState from './EmptyState'
 import './Charts.css'
 
@@ -48,10 +48,9 @@ function Charts({ userId, onRecord }) {
         date,
         feeding: 0,
         diaper: 0,
-        sleep: 0,
         mood: null,
+        moodTimestamp: null,
         sleepDuration: 0,
-        sleepCount: 0
       }
     })
     
@@ -63,21 +62,17 @@ function Charts({ userId, onRecord }) {
         } else if (entry.entry_type === 'diaper') {
           groupedByDate[entryDate].diaper++
         } else if (entry.entry_type === 'sleep') {
-          groupedByDate[entryDate].sleep++
           groupedByDate[entryDate].sleepDuration += entry.sleep_duration_minutes || 0
-          groupedByDate[entryDate].sleepCount++
         } else if (entry.entry_type === 'mood') {
-          // Convert mood level to number for chart
+          // Select by timestamp rather than relying on the API's record order.
           const moodMap = { 'very_low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'very_good': 5 }
-          groupedByDate[entryDate].mood = moodMap[entry.mood_level] ?? null
+          const timestamp = utcDate(entry.timestamp).getTime()
+          const day = groupedByDate[entryDate]
+          if (day.moodTimestamp === null || timestamp > day.moodTimestamp) {
+            day.mood = moodMap[entry.mood_level] ?? null
+            day.moodTimestamp = timestamp
+          }
         }
-      }
-    })
-    
-    // Calculate average sleep duration
-    Object.values(groupedByDate).forEach(day => {
-      if (day.sleepCount > 0) {
-        day.sleepDuration = Math.round(day.sleepDuration / day.sleepCount)
       }
     })
     

@@ -145,10 +145,10 @@
     "lastMonth": "過去1ヶ月",
     "feedingFrequency": "授乳頻度",
     "diaperChanges": "おむつ交換",
-    "sleepDuration": "睡眠時間",
-    "moodTrend": "気分の傾向",
+    "sleepDuration": "記録した睡眠時間の合計",
+    "moodTrend": "気分（その日の最新記録）",
     "feedsPerDay": "1日の授乳回数",
-    "sleepMinutes": "睡眠（分）",
+    "sleepMinutes": "1日の記録した睡眠（分）",
     "loading": "グラフを読み込み中...",
     "noData": "データがまだありません",
     "noDataSubtext": "記録を始めてパターンを確認しましょう！"

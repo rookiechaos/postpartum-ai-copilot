@@ -190,7 +190,11 @@ class StructuredLogger:
             "timestamp": datetime.utcnow().isoformat(),
             "error_type": type(error).__name__,
             "error_message": sanitize_log_path(str(error)),
-            "traceback": sanitize_log_path(traceback.format_exc()),
+            # A handler may replace an unsafe exception with a safe one. Never
+            # include the ambient exception or its request input through a chain.
+            "traceback": sanitize_log_path("".join(traceback.format_exception(
+                type(error), error, error.__traceback__, chain=False
+            ))),
             "user_id": user_id,
             "context": context or {}
         }

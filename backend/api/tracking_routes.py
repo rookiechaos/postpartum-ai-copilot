@@ -13,13 +13,11 @@ from middleware.authorization import check_user_authorization
 from middleware.rate_limit import rate_limit, RATE_LIMITS
 from models.schemas import User, TrackingEntry, TrackingSummary, EmotionalCheckIn
 from services.task_queue import TaskPriority
-from services.nsfw_detector import get_nsfw_detector
 from exceptions import (
     PostpartumException,
     DatabaseError,
     AIServiceError,
     TaskQueueError,
-    ValidationError
 )
 from config.settings import get_settings
 from dependencies.container import get_container
@@ -40,10 +38,10 @@ async def add_tracking_entry(
     db: Session = Depends(get_db),
 ):
     """
-    Add a new tracking entry (feeding, diaper, sleep, mood).
+    Save a private care record without external AI processing.
 
     Requires authentication. user_id is always taken from the JWT token.
-    NSFW detection is applied to notes and mood_notes fields.
+    Request validation is local; AI analysis is a separate user action.
     """
     if entry.user_id and entry.user_id != current_user.user_id:
         check_user_authorization(current_user, entry.user_id, "tracking entry")
@@ -53,18 +51,6 @@ async def add_tracking_entry(
     tracking_service = container.get("tracking_service")
 
     try:
-        nsfw_detector = get_nsfw_detector()
-
-        if entry_data.notes:
-            notes_check = await nsfw_detector.check(entry_data.notes, check_type="input")
-            if nsfw_detector.should_block(notes_check):
-                raise ValidationError("Notes contain inappropriate content. Please use appropriate language.")
-
-        if entry_data.mood_notes:
-            mood_check = await nsfw_detector.check(entry_data.mood_notes, check_type="input")
-            if nsfw_detector.should_block(mood_check):
-                raise ValidationError("Mood notes contain inappropriate content. Please use appropriate language.")
-
         result = await tracking_service.add_entry(entry_data, db)
         return result
     except PostpartumException:

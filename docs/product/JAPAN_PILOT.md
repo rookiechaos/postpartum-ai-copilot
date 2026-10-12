@@ -8,8 +8,9 @@ Both entrances share account authentication. Entrance selection does not grant p
 
 This release replaces the old nine-step tutorial with a two-step welcome flow. Optional profile information can be skipped.
 The home page keeps recording, guided questions and human support visible even when records are empty or a request fails.
-Record loading and saving do not automatically request AI summaries. AI actions require an explicit UI acknowledgement of external processing.
+Record loading and saving do not invoke external moderation or AI summaries. AI actions require an explicit UI acknowledgement of external processing.
 This acknowledgement is an interaction safeguard, not a server-side legal consent ledger.
+Sleep charts show the total recorded minutes per Japan calendar day. Mood charts use the latest record for each day; a missing value stays blank.
 
 ## Organization access
 
@@ -75,12 +76,13 @@ Have Japanese-speaking care professionals review public-facing wording and local
 `tests/regression/japan_pilot_checks.py` exercises actual HTTP routes and SQLite persistence with controlled authentication and provider fixtures.
 `tests/regression/japan_pilot.test.cjs` exercises actual transpiled components and pure summary/time utilities with controlled React hooks.
 Existing security, task/session and privacy suites remain part of verification.
+HTTP regressions also verify that validation logs exclude passwords and health notes and that private record saving never calls external moderation.
 These tests do not establish clinical accuracy, a live provider integration, PostgreSQL compatibility or browser usability.
 
 ### Validation of this change
 
-- 85 backend regression checks passed: 14 Japan pilot checks plus the existing 33 + 17 + 21 checks.
-- 54 frontend regression checks passed, including 16 new Japan pilot scenarios.
+- 89 backend regression checks passed: 18 Japan pilot checks plus the existing 33 + 17 + 21 checks.
+- 58 frontend regression checks passed, including 20 Japan pilot scenarios.
 - 14 privacy-scanner tests passed; the repository privacy scan passed for publishable worktree files, the current index, reachable history and commit metadata.
 - Python fatal-error checks and syntax checks passed. Frontend syntax, application undefined-name checks, local documentation links and active-flow translation keys passed.
 - No new dependencies were downloaded. Project frontend dependencies are not installed in this workspace, so a production frontend build and real-browser acceptance were not run.

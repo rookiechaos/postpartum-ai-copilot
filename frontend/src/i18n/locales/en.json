@@ -145,10 +145,10 @@
     "lastMonth": "Last month",
     "feedingFrequency": "Feeding Frequency",
     "diaperChanges": "Diaper Changes",
-    "sleepDuration": "Sleep Duration",
-    "moodTrend": "Mood Trend",
+    "sleepDuration": "Total recorded sleep",
+    "moodTrend": "Mood (latest record each day)",
     "feedsPerDay": "Feeds per day",
-    "sleepMinutes": "Sleep (minutes)",
+    "sleepMinutes": "Recorded sleep per day (minutes)",
     "loading": "Loading charts...",
     "noData": "No data available yet",
     "noDataSubtext": "Start tracking to see your patterns!"

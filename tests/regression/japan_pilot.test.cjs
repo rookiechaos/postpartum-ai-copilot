@@ -160,6 +160,58 @@ test('national contacts stay visible when the directory API is down', async () =
   assert.doesNotMatch(text(tree), /911|988/)
 })
 
+test('mood charts use the latest daily record regardless of API ordering and timestamp offset', async () => {
+  for (const newestFirst of [true, false]) {
+    const h = harness('frontend/src/components/Charts.jsx', { api: { getTracking: async () => {
+      const { japanDay } = h.load('frontend/src/utils/japanTime.js')
+      const day = japanDay()
+      const newer = { entry_type: 'mood', mood_level: 'low',
+        timestamp: new Date(`${day}T10:00:00+09:00`).toISOString().replace(/Z$/, '') }
+      const older = { entry_type: 'mood', mood_level: 'good', timestamp: `${day}T07:00:00+09:00` }
+      return newestFirst ? [newer, older] : [older, newer]
+    } } })
+    const charts = h.mount({ userId: 'sample_family' })
+    charts.render()
+    await flush()
+    const data = find(charts.render(), node => node.type === 'chart.LineChart').props.data
+    assert.equal(data.at(-1).mood, 2)
+  }
+})
+
+test('a latest mood record without a value remains missing instead of showing an older mood', async () => {
+  const h = harness('frontend/src/components/Charts.jsx', { api: { getTracking: async () => {
+    const { japanDay } = h.load('frontend/src/utils/japanTime.js')
+    const day = japanDay()
+    return [
+      { entry_type: 'mood', mood_level: null, timestamp: `${day}T10:00:00+09:00` },
+      { entry_type: 'mood', mood_level: 'good', timestamp: `${day}T07:00:00+09:00` },
+      { entry_type: 'feeding', timestamp: `${day}T06:00:00+09:00` },
+    ]
+  } } })
+  const charts = h.mount({ userId: 'sample_family' })
+  charts.render()
+  await flush()
+  const data = find(charts.render(), node => node.type === 'chart.LineChart').props.data
+  assert.equal(data.at(-1).mood, null)
+})
+
+test('sleep charts show daily recorded totals rather than averages per entry', async () => {
+  const h = harness('frontend/src/components/Charts.jsx', { api: { getTracking: async () => {
+    const { japanDay } = h.load('frontend/src/utils/japanTime.js')
+    const day = japanDay()
+    return [
+      { entry_type: 'sleep', sleep_duration_minutes: 90, timestamp: `${day}T10:00:00+09:00` },
+      { entry_type: 'sleep', sleep_duration_minutes: 30, timestamp: `${day}T07:00:00+09:00` },
+    ]
+  } } })
+  const charts = h.mount({ userId: 'sample_family' })
+  charts.render()
+  await flush()
+  const data = find(charts.render(), node => node.type === 'chart.LineChart').props.data
+  assert.equal(data.at(-1).sleepMinutes, 120)
+  assert.equal(data.at(-2).sleepMinutes, 0)
+})
+
 test('ordinary accounts see an access request instead of the organization editor', async () => {
   const h = harness('frontend/src/components/OrganizationPortal.jsx', { api: { get: async () => { throw { status: 403 } } } })
   const portal = h.mount({ userId: 'sample_family' })
@@ -210,6 +262,30 @@ test('summary uses an allowlist and separate opt-ins for parent records and note
   const both = buildCareSummary(entries, { t: h.t, includeParent: true, includeNotes: true })
   assert.match(both, /private-mood-note|private-recovery-note/)
   assert.doesNotMatch(both, /private-identity|private-email-marker|private-unknown/)
+})
+
+test('clearing optional organization resource text preserves empty strings and permits publishing', async () => {
+  const profile = { name: '支援拠点', municipality: '', contact: '', hours: '', retention_notice: '', resources: [
+    { name: '資料', url: 'https://example.com', description: '説明', hours: '受付時間', checked_on: '2026-01-01' },
+  ] }
+  let saved
+  const h = harness('frontend/src/components/OrganizationPortal.jsx', { api: {
+    get: async () => ({ profile }), post: async (_url, value) => { saved = value; return { profile: value } },
+  } })
+  const portal = h.mount({ userId: 'sample_staff' })
+  portal.render()
+  await flush()
+  for (const index of [2, 3, 4]) {
+    const resource = find(portal.render(), node => node.type === 'fieldset')
+    all(resource).filter(node => node?.type === 'input')[index].props.onChange({ target: { value: '' } })
+  }
+  await find(portal.render(), node => node.type === 'form').props.onSubmit(event)
+  assert.equal(saved.resources[0].description, '')
+  assert.equal(saved.resources[0].hours, '')
+  assert.equal(saved.resources[0].checked_on, null)
+  assert.equal(saved.resources[0].name, '資料')
+  assert.equal(saved.resources[0].url, 'https://example.com')
+  assert.match(text(portal.render()), /保存しました/)
 })
 
 test('changing summary choices invalidates the previous preview', async () => {

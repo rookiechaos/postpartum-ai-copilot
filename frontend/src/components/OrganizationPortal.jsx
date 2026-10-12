@@ -89,7 +89,7 @@ export default function OrganizationPortal({ userId, onFamily, onExit }) {
               <input type={key === 'checked_on' ? 'date' : key === 'url' ? 'url' : 'text'}
                 required={key === 'name' || key === 'url'} value={resource[key] || ''}
                 maxLength={key === 'name' ? 100 : key === 'hours' ? 200 : 500}
-                onChange={event => updateResource(index, key, event.target.value || null)} />
+                onChange={event => updateResource(index, key, key === 'checked_on' ? event.target.value || null : event.target.value)} />
             </label>)}
             <button type="button" className="pilot-button secondary" onClick={() => setProfile({ ...profile,
               resources: profile.resources.filter((_, i) => i !== index),

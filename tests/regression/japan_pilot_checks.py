@@ -15,9 +15,11 @@ review = runpy.run_path(str(ROOT / "tests/regression/review_235a4c9_checks.py"))
 fixture, database, settings = review["fixture"], review["database"], review["SETTINGS"]
 
 from fastapi import Header, HTTPException
-from api import pilot_routes, tracking_routes
+from api import auth_routes, pilot_routes, tracking_routes
 from models.schemas import TrackingEntry, User
+from services import nsfw_detector
 from services.cache_service import get_cache
+from services.logging_service import logger
 from services.suggestion_validator import SuggestionValidator
 from services.tracking_service import TrackingService
 
@@ -32,14 +34,11 @@ async def pilot_user(x_review_user: Optional[str] = Header(None)):
 class JapanPilotTests(unittest.TestCase):
     def setUp(self):
         fixture["ReviewFixTests"].setUp(self)
+        self.client.app.include_router(auth_routes.router)
         self.client.app.include_router(pilot_routes.router)
         self.client.app.include_router(tracking_routes.router)
         self.client.app.dependency_overrides[fixture["fixture_current_user"]] = pilot_user
         self.container.register_singleton("tracking_service", TrackingService())
-        detector = patch.object(tracking_routes, "get_nsfw_detector", return_value=types.SimpleNamespace(
-            check=AsyncMock(return_value={"safe": True}), should_block=lambda result: False))
-        detector.start()
-        self.addCleanup(detector.stop)
         for name, value in [("institution_user_ids", "review_staff"), ("ai_provider", "fixture")]:
             change = patch.object(settings, name, value, create=True)
             change.start()
@@ -88,6 +87,14 @@ class JapanPilotTests(unittest.TestCase):
         with patch.object(settings, "institution_user_ids", ""):
             self.assertEqual(self.client.get("/api/pilot/organization", headers=self.staff).status_code, 403)
             self.assertEqual(self.client.post("/api/pilot/organization", headers=self.staff, json=self.profile()).status_code, 403)
+
+    def test_staff_can_clear_optional_resource_text_and_checked_date(self):
+        profile = self.profile()
+        self.assertEqual(self.client.post("/api/pilot/organization", headers=self.staff, json=profile).status_code, 200)
+        profile["resources"][0].update(description="", hours="", checked_on=None)
+        response = self.client.post("/api/pilot/organization", headers=self.staff, json=profile)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(self.client.get("/api/pilot").json()["profile"], profile)
 
     def test_source_urls_and_dates_are_validated_without_changing_saved_data(self):
         self.client.post("/api/pilot/organization", headers=self.staff, json=self.profile())
@@ -140,6 +147,53 @@ class JapanPilotTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         entry = self.db.query(database.TrackingEntryDB).one()
         self.assertEqual(entry.timestamp, datetime(2026, 10, 10, 15, 30))
+
+    def test_private_record_notes_save_without_external_moderation(self):
+        moderation = AsyncMock(return_value=types.SimpleNamespace(results=[types.SimpleNamespace(
+            flagged=False, categories=types.SimpleNamespace(model_dump=lambda: {}),
+            category_scores=types.SimpleNamespace(model_dump=lambda: {}))]))
+        detector = object.__new__(nsfw_detector.NSFWDetector)
+        detector.provider = "openai"
+        detector.enabled = True
+        detector.strict_mode = False
+        detector._unsafe_keywords = []
+        detector._openai_client = types.SimpleNamespace(moderations=types.SimpleNamespace(create=moderation))
+        records = [
+            {"entry_type": "feeding", "notes": "private-care-note"},
+            {"entry_type": "mood", "mood_notes": "private-mood-note"},
+            {"entry_type": "recovery", "recovery_notes": "private-recovery-note", "notes": "private-parent-note"},
+        ]
+        with patch.object(nsfw_detector, "_nsfw_detector", detector):
+            for record in records:
+                response = self.client.post("/api/tracking", headers=self.family, json=record)
+                self.assertEqual(response.status_code, 200, response.text)
+            saved = self.client.get("/api/tracking/review_family", headers=self.family)
+        moderation.assert_not_awaited()
+        self.assertEqual(saved.status_code, 200)
+        by_type = {entry["entry_type"]: entry for entry in saved.json()}
+        for record in records:
+            for key, value in record.items():
+                self.assertEqual(by_type[record["entry_type"]][key], value)
+
+    def test_registration_validation_logs_never_include_password_input(self):
+        marker = "PrivatePasswordFixture123!"
+        with patch.object(logger.logger, "error") as logged:
+            response = self.client.post("/api/auth/register", json={"password": marker})
+        self.assertEqual(response.status_code, 422)
+        self.assertNotIn(marker, response.text)
+        self.assertTrue(logged.called)
+        self.assertNotIn(marker, str(logged.call_args_list))
+        self.assertIn("Request validation failed", str(logged.call_args_list))
+
+    def test_tracking_validation_logs_never_include_health_notes(self):
+        marker = "private-health-note-fixture"
+        with patch.object(logger.logger, "error") as logged:
+            response = self.client.post("/api/tracking", headers=self.family, json={"notes": marker})
+        self.assertEqual(response.status_code, 422)
+        self.assertNotIn(marker, response.text)
+        self.assertTrue(logged.called)
+        self.assertNotIn(marker, str(logged.call_args_list))
+        self.assertIn("entry_type", str(logged.call_args_list))
 
     def ai(self, fail=False):
         ai = review["followup"]["FollowupReviewTests"].ai_service(self)

@@ -3,7 +3,7 @@
 
 ## 执行摘要
 
-本报告确认Postpartum AI Copilot应用已实施全面的NSFW（不当内容）检测系统，确保所有用户交互和AI生成内容都经过安全审核。
+本报告描述NSFW（不当内容）检测服务及AI交互流程的审核机制。私人记录保存仅做本地结构校验，不向外部审核服务发送备注；各流程的覆盖范围以当前实现和回归测试为准。
 
 ## 已实施的安全措施
 
@@ -25,7 +25,7 @@
 
 ### 2. 用户输入检测 ✅
 
-所有用户输入端点都已集成NSFW检测：
+以下AI输入流程使用NSFW检测；私人记录保存采用本地校验：
 
 #### 聊天端点 (`/api/chat`)
 - ✅ 检测用户查询
@@ -37,8 +37,8 @@
 - ✅ `/api/voice/text-to-speech`: 检测输入文本
 
 #### 追踪端点 (`/api/tracking`)
-- ✅ 检测`notes`字段
-- ✅ 检测`mood_notes`字段
+- 私人记录直接保存，不调用外部内容审核。
+- `notes`、`mood_notes`、`recovery_notes`不会因保存或读取记录而发送给AI服务。
 
 #### 危机模式 (`/api/crisis`)
 - ✅ 检测用户查询
@@ -159,7 +159,7 @@ NSFW_DETECTION_STRICT=true   # 默认: true（推荐）
 
 - ✅ 聊天端点NSFW检测
 - ✅ 语音端点NSFW检测
-- ✅ 追踪端点NSFW检测
+- ✅ 追踪记录保存不调用外部审核（`tests/regression/japan_pilot_checks.py`）
 - ✅ AI响应NSFW检测
 
 ## 合规性
@@ -225,7 +225,7 @@ NSFW_DETECTION_STRICT=true   # 默认: true（推荐）
 
 ✅ **NSFW检测系统已全面实施并集成**
 
-所有用户交互和AI生成内容都经过NSFW检测，确保：
+针对已接入审核的AI流程，检测机制用于：
 - 用户输入被审核
 - AI响应被审核
 - 不当内容被阻止
