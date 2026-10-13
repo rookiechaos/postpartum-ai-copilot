@@ -7,7 +7,7 @@ const ts = require(process.env.REVIEW_TYPESCRIPT_PATH || 'typescript')
 const root = path.resolve(__dirname, '../..')
 const flush = () => new Promise(setImmediate)
 
-function harness(file, { api = {}, pathname = '/family', language = 'ja', env = {}, taskManager = {} } = {}) {
+function harness(file, { api = {}, pathname = '/family', language = 'ja', env = {}, taskManager = {}, globals = {} } = {}) {
   let current
   const stored = new Map(), modules = new Map(), errors = [], events = new Map()
   const translations = JSON.parse(fs.readFileSync(path.join(root, `frontend/src/i18n/locales/${language}.json`), 'utf8'))
@@ -69,6 +69,7 @@ function harness(file, { api = {}, pathname = '/family', language = 'ja', env = 
       exports: {}, require: fixture, __env: { VITE_ASYNC_MODE: 'false', ...env },
       console: { log() {}, error() {} }, Date, Intl, URL, Blob, window: browser, navigator: {},
       localStorage: { getItem: key => stored.get(key) || null, setItem: (key, value) => stored.set(key, value), removeItem: key => stored.delete(key) },
+      ...globals,
     }
     vm.runInNewContext(compiled, sandbox, { filename: relative })
     modules.set(absolute, sandbox.exports)

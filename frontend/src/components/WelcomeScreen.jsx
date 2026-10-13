@@ -9,10 +9,10 @@ export default function WelcomeScreen({ onComplete, onExit }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [formData, setFormData] = useState({ babyAge: '', birthType: '', feedingType: '', babyName: '' })
-  const complete = async () => {
+  const complete = async (profile = formData) => {
     setSaving(true)
     setError('')
-    try { await onComplete(formData) }
+    try { await onComplete(profile) }
     catch { setError(t('pilot.saveFailed', 'Unable to save your settings. Please try again.')) }
     finally { setSaving(false) }
   }
@@ -47,10 +47,10 @@ export default function WelcomeScreen({ onComplete, onExit }) {
         <p>{step + 1} / 2</p>
         <div className="welcome-actions">
           {step > 0 && <button className="btn-secondary" disabled={saving} onClick={() => setStep(0)}>{t('welcome.back')}</button>}
-          <button className="btn-primary" disabled={saving} onClick={step === 0 ? () => setStep(1) : complete}>
+          <button className="btn-primary" disabled={saving} onClick={step === 0 ? () => setStep(1) : () => complete()}>
             {saving ? t('settings.saving') : t(step === 0 ? 'welcome.next' : 'pilot.startRecording')}
           </button>
-          <button className="btn-link" disabled={saving} onClick={complete}>{t('welcome.skip')}</button>
+          <button className="btn-link" disabled={saving} onClick={() => complete({})}>{t('welcome.skip')}</button>
         </div>
       </footer>
       <SupportDirectory compact />

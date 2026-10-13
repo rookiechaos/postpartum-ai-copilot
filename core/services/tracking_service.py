@@ -175,7 +175,7 @@ class TrackingService:
         context: Dict[str, Any],
         db: Session
     ) -> Dict[str, Any]:
-        """Update user context"""
+        """Update supplied context fields while preserving omitted fields."""
         # Get old context to check for language changes
         def _get_old_context():
             user_context = db.query(UserContextDB).filter(
@@ -195,7 +195,7 @@ class TrackingService:
             ).first()
             
             if context_db:
-                context_db.context = context
+                context_db.context = {**(context_db.context or {}), **context}
                 context_db.updated_at = datetime.utcnow()
             else:
                 context_db = UserContextDB(
@@ -223,7 +223,7 @@ class TrackingService:
         
         # Invalidate language cache if language changed
         old_language = old_context.get("language") if old_context else None
-        new_language = context.get("language")
+        new_language = updated_context.get("language")
         if old_language != new_language:
             from utils.user_preferences import invalidate_language_cache
             invalidate_language_cache(user_id)

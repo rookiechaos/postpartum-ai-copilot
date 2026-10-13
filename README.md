@@ -180,6 +180,7 @@ python -W ignore tests/regression/security_checks.py
 python -W ignore tests/regression/followup_checks.py
 python -W ignore tests/regression/review_235a4c9_checks.py
 node --test tests/regression/frontend_security.test.cjs tests/regression/frontend_tasks.test.cjs tests/regression/frontend_review.test.cjs
+node --test tests/regression/review_3961c93.test.cjs
 python -m unittest discover -s tests/privacy -v
 ./check-privacy.sh
 ```

@@ -173,8 +173,9 @@ function AuthenticatedApp({ userId, onChooseEntry }) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  const handleWelcomeComplete = async (formData) => {
-    const saved = await api.updateUserContext(userId, { ...formData, language: i18n.resolvedLanguage || 'ja' })
+  const handleWelcomeComplete = async (formData = {}) => {
+    const suppliedFields = Object.fromEntries(Object.entries(formData).filter(([, value]) => value !== ''))
+    const saved = await api.updateUserContext(userId, { ...suppliedFields, language: i18n.resolvedLanguage || 'ja' })
     localStorage.setItem(`hasCompletedWelcome:${userId}`, 'true')
     setUserContext(saved.context)
     setShowWelcome(false)

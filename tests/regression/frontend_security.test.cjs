@@ -38,8 +38,8 @@ function workerFixture(fetch) {
   }
 }
 
-function apiFixture(fetch) {
-  const stored = new Map()
+function apiFixture(fetch, initialStorage = {}) {
+  const stored = new Map(Object.entries(initialStorage))
   const deleted = []
   const context = {
     console, AbortController, setTimeout, clearTimeout, fetch,
@@ -158,10 +158,7 @@ test('disabling second factor clears the previous credentials and requests a new
   const fixture = apiFixture(async endpoint => {
     url = endpoint
     return new Response(JSON.stringify({ is_enabled: false }))
-  })
-  fixture.stored.set('access_token', 'old-access')
-  fixture.stored.set('refresh_token', 'old-refresh')
-  fixture.stored.set('userId', 'review-account')
+  }, { access_token: 'old-access', refresh_token: 'old-refresh', userId: 'review-account' })
   fixture.api.setOnUnauthorized(() => { unauthorized++ })
   const response = await fixture.api.disable2FA()
   assert.equal(response.is_enabled, false)

@@ -83,7 +83,7 @@ export default function TrackingPanel({ userId, initialEntryType }) {
     </section>
     <details className="pilot-panel"><summary>{t('pilot.optionalAnalysis')}</summary>
       <button className="pilot-button secondary" onClick={() => setShowCharts(value => !value)}>{t(showCharts ? 'tracking.hideCharts' : 'tracking.showCharts')}</button>
-      {showCharts && <Charts userId={userId} onRecord={() => setShowAddForm(true)} />}
+      {showCharts && <Charts userId={userId} refreshKey={attempt} onRecord={() => setShowAddForm(true)} />}
       <AIUseNotice accepted={acceptedAI} onChange={setAcceptedAI} />
       <button className="pilot-button secondary" disabled={!acceptedAI || summaryLoading || entries.length === 0} onClick={loadSummary}>{t(summaryLoading ? 'common.loading' : 'pilot.analyzeRecords')}</button>
       {summary && <div className="ai-summary"><p>{t('pilot.aiLabel')}</p>

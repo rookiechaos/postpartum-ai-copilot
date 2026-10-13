@@ -8,7 +8,7 @@ import { Calendar } from 'lucide-react'
 import EmptyState from './EmptyState'
 import './Charts.css'
 
-function Charts({ userId, onRecord }) {
+function Charts({ userId, onRecord, refreshKey = 0 }) {
   const { t, i18n } = useTranslation()
   const toast = useToast()
   const [chartData, setChartData] = useState([])
@@ -16,23 +16,24 @@ function Charts({ userId, onRecord }) {
   const [timeRange, setTimeRange] = useState(7) // days
 
   useEffect(() => {
-    loadChartData()
-  }, [userId, timeRange])
-
-  const loadChartData = async () => {
-    setLoading(true)
-    try {
-      const entries = await api.getTracking(userId, timeRange)
-      // Process data for charts
-      const processed = processDataForCharts(entries)
-      setChartData(processed)
-    } catch (error) {
-      console.error('Error loading chart data:', error)
-      toast.error(t('pilot.loadFailed'))
-    } finally {
-      setLoading(false)
+    let active = true
+    const loadChartData = async () => {
+      setLoading(true)
+      try {
+        const entries = await api.getTracking(userId, timeRange)
+        if (active) setChartData(processDataForCharts(entries))
+      } catch (error) {
+        if (active) {
+          console.error('Error loading chart data:', error)
+          toast.error(t('pilot.loadFailed'))
+        }
+      } finally {
+        if (active) setLoading(false)
+      }
     }
-  }
+    loadChartData()
+    return () => { active = false }
+  }, [userId, timeRange, refreshKey])
 
   const processDataForCharts = (entries) => {
     // Enhanced data processing for better visualization

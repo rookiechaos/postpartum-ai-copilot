@@ -15,11 +15,12 @@ review = runpy.run_path(str(ROOT / "tests/regression/review_235a4c9_checks.py"))
 fixture, database, settings = review["fixture"], review["database"], review["SETTINGS"]
 
 from fastapi import Header, HTTPException
-from api import auth_routes, pilot_routes, tracking_routes
+from api import auth_routes, night_mode_routes, personalization_routes, pilot_routes, tracking_routes
 from models.schemas import TrackingEntry, User
 from services import nsfw_detector
 from services.cache_service import get_cache
 from services.logging_service import logger
+from services.relaxation_service import RelaxationService
 from services.suggestion_validator import SuggestionValidator
 from services.tracking_service import TrackingService
 
@@ -37,8 +38,11 @@ class JapanPilotTests(unittest.TestCase):
         self.client.app.include_router(auth_routes.router)
         self.client.app.include_router(pilot_routes.router)
         self.client.app.include_router(tracking_routes.router)
+        self.client.app.include_router(personalization_routes.router)
+        self.client.app.include_router(night_mode_routes.router)
         self.client.app.dependency_overrides[fixture["fixture_current_user"]] = pilot_user
         self.container.register_singleton("tracking_service", TrackingService())
+        self.container.register_singleton("relaxation_service", RelaxationService())
         for name, value in [("institution_user_ids", "review_staff"), ("ai_provider", "fixture")]:
             change = patch.object(settings, name, value, create=True)
             change.start()
@@ -231,6 +235,76 @@ class JapanPilotTests(unittest.TestCase):
         self.assertIn("1–2 weeks", context)
         self.assertIn("mixed", context)
         self.assertNotIn("days old", context)
+
+    def save_context(self, context, user_id="review_family"):
+        response = self.client.post("/api/user/context", headers=self.family,
+                                    json={"user_id": user_id, "context": context})
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()["context"]
+
+    def test_partial_context_updates_preserve_omitted_fields_and_allow_explicit_clearing(self):
+        original = {"babyName": "saved nickname", "babyAge": "2-3m", "language": "en",
+                    "notifications": True, "preferences": {"tone": "warm"}}
+        self.save_context(original)
+        updated = self.save_context({"babyName": "", "notifications": False})
+        self.assertEqual(updated, {**original, "babyName": "", "notifications": False})
+        self.assertEqual(self.client.get("/api/user/review_family/context", headers=self.family).json(), updated)
+        self.db.expire_all()
+        self.assertEqual(self.db.query(database.UserContextDB).one().context, updated)
+        from utils.user_preferences import get_user_language_preference
+        self.assertEqual(asyncio.run(get_user_language_preference("review_family", self.db)), "en")
+
+    def test_welcome_skip_preserves_existing_server_profile(self):
+        original = {"babyName": "saved nickname", "babyAge": "2-3m", "birthType": "c-section",
+                    "feedingType": "mixed", "language": "ja", "notifications": True}
+        self.save_context(original)
+        self.assertEqual(self.save_context({"language": "ja"}), original)
+        self.assertEqual(self.client.get("/api/user/review_family/context", headers=self.family).json(), original)
+
+    def test_partial_context_update_does_not_authorize_another_account(self):
+        original = {"babyName": "private nickname", "language": "ja"}
+        self.save_context(original)
+        response = self.client.post("/api/user/context", headers=self.staff,
+                                    json={"user_id": "review_family", "context": {"babyName": ""}})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.client.get("/api/user/review_family/context", headers=self.family).json(), original)
+
+    def assert_night_language(self, language, suffix):
+        service = self.container.get("relaxation_service")
+        for method, path, field, expected in [
+            ("post", "relaxation", "guide", service.relaxation_guides[language]),
+            ("post", "breathing", "exercise", service.breathing_exercises[language]),
+            ("get", "safety-tips", "tips", service.get_safety_tips(language)["tips"]),
+            ("get", "quick-calm", "tips", service.quick_calm_tips[language]),
+        ]:
+            with self.subTest(path=path, language=language, suffix=suffix):
+                response = getattr(self.client, method)(f"/api/night-mode/{path}{suffix}", headers=self.family)
+                self.assertEqual(response.status_code, 200, response.text)
+                result = response.json()[field]
+                if path == "quick-calm":
+                    self.assertTrue(all(tip in expected for tip in result))
+                elif path == "safety-tips":
+                    self.assertEqual(result, expected)
+                else:
+                    self.assertIn(result, expected)
+
+    def test_night_mode_honors_explicit_language_and_regional_tags(self):
+        self.save_context({"language": "en"})
+        self.assert_night_language("ja", "?language=ja")
+        self.assert_night_language("ja", "?language=ja-JP")
+        self.save_context({"language": "ja"})
+        self.assert_night_language("en", "?language=en")
+        self.assert_night_language("en", "?language=en-US")
+
+    def test_night_mode_without_query_keeps_saved_language_fallback(self):
+        for language in ["ja", "en", "ja-JP", "en-US"]:
+            self.save_context({"language": language})
+            self.assert_night_language(language.split("-")[0], "")
+
+    def test_night_mode_rejects_unsupported_language(self):
+        for method, path in [("post", "relaxation"), ("post", "breathing"), ("get", "safety-tips"), ("get", "quick-calm")]:
+            response = getattr(self.client, method)(f"/api/night-mode/{path}?language=unsupported", headers=self.family)
+            self.assertEqual(response.status_code, 422)
 
 
 if __name__ == "__main__":

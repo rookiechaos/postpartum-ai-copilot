@@ -105,7 +105,7 @@ async def update_user_context(
     db: Session = Depends(get_db)
 ):
     """
-    Update user context (baby age, birth type, feeding preferences, etc.)
+    Update supplied user context fields; omitted fields are preserved.
     """
     if request.user_id is not None:
         check_user_authorization(current_user, request.user_id, "user context")

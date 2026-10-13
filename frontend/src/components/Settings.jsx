@@ -26,35 +26,45 @@ function Settings({ userId, onContextUpdate, onLogout }) {
   })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [loadState, setLoadState] = useState('loading')
+  const [loadAttempt, setLoadAttempt] = useState(0)
   const [activeSubTab, setActiveSubTab] = useState('profile')
   const toast = useToast()
 
   useEffect(() => {
-    loadSettings()
-  }, [userId])
-
-  const loadSettings = async () => {
-    try {
-      const context = await api.getUserContext(userId)
-      setSettings({
-        babyName: context.babyName || '',
-        babyAge: context.babyAge || '',
-        birthType: context.birthType || '',
-        feedingType: context.feedingType || '',
-        notifications: context.notifications === true,
-        darkMode: context.darkMode || false,
-        language: context.language || i18n.language
-      })
-      // Set language if available.
-      if (context.language && context.language !== i18n.language) {
-        i18n.changeLanguage(context.language)
+    let active = true
+    const loadSettings = async () => {
+      setLoadState('loading')
+      setSaved(false)
+      try {
+        const context = await api.getUserContext(userId)
+        if (!active) return
+        setSettings({
+          babyName: context.babyName || '',
+          babyAge: context.babyAge || '',
+          birthType: context.birthType || '',
+          feedingType: context.feedingType || '',
+          notifications: context.notifications === true,
+          darkMode: context.darkMode || false,
+          language: context.language || i18n.language
+        })
+        if (context.language && context.language !== i18n.language) {
+          i18n.changeLanguage(context.language)
+        }
+        setLoadState('ready')
+      } catch (error) {
+        if (active) {
+          console.error('Error loading settings:', error)
+          setLoadState('error')
+        }
       }
-    } catch (error) {
-      console.error('Error loading settings:', error)
     }
-  }
+    loadSettings()
+    return () => { active = false }
+  }, [userId, loadAttempt])
 
   const handleSave = async () => {
+    if (loadState !== 'ready' || saving) return
     setSaving(true)
     try {
       // Update language if changed.
@@ -63,7 +73,7 @@ function Settings({ userId, onContextUpdate, onLogout }) {
         localStorage.setItem('preferred-language', settings.language)
       }
       
-      await api.updateUserContext(userId, {
+      const savedContext = await api.updateUserContext(userId, {
         babyName: settings.babyName,
         babyAge: settings.babyAge,
         birthType: settings.birthType,
@@ -74,7 +84,7 @@ function Settings({ userId, onContextUpdate, onLogout }) {
       })
       setSaved(true)
       if (onContextUpdate) {
-        onContextUpdate(settings)
+        onContextUpdate(savedContext.context)
       }
       toast.success(t('settings.saved'))
       setTimeout(() => setSaved(false), 3000)
@@ -147,7 +157,11 @@ function Settings({ userId, onContextUpdate, onLogout }) {
 
       {activeSubTab === 'profile' && (
       <>
-      <div className="settings-sections">
+      {loadState === 'loading' && <p role="status">{t('common.loading')}</p>}
+      {loadState === 'error' && <div role="alert"><p>{t('pilot.loadFailed')}</p>
+        <button className="pilot-button secondary" onClick={() => setLoadAttempt(value => value + 1)}>{t('pilot.retry')}</button>
+      </div>}
+      <fieldset className="settings-sections" disabled={loadState !== 'ready' || saving}>
         <motion.div
           className="settings-section"
           initial={{ opacity: 0, y: 20 }}
@@ -272,13 +286,13 @@ function Settings({ userId, onContextUpdate, onLogout }) {
             </p>
           </div>
         </motion.div>
-      </div>
+      </fieldset>
 
       <div className="settings-footer">
         <motion.button
           className="save-button"
           onClick={handleSave}
-          disabled={saving}
+          disabled={loadState !== 'ready' || saving}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
         >

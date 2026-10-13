@@ -15,11 +15,23 @@ from utils.user_preferences import get_user_language_preference
 
 router = APIRouter(prefix="/api/night-mode", tags=["night-mode"])
 container = get_container()
+LANGUAGE_PATTERN = r"^(en|ja)(-[A-Za-z0-9]{1,8})*$"
+
+
+async def resolve_night_language(language: Optional[str], current_user: Optional[User], db: Session) -> str:
+    if language is None:
+        language = await get_user_language_preference(
+            user_id=current_user.user_id if current_user else None,
+            db=db,
+            default="en"
+        )
+    return language.split("-")[0]
 
 
 @router.post("/relaxation")
 async def get_relaxation_guide(
     guide_type: Optional[str] = Query(None, description="Specific guide type"),
+    language: Optional[str] = Query(None, pattern=LANGUAGE_PATTERN, description="Display language; defaults to saved preference"),
     current_user: Optional[User] = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
@@ -36,11 +48,7 @@ async def get_relaxation_guide(
     """
     try:
         relaxation_service = container.get("relaxation_service")
-        language = await get_user_language_preference(
-            user_id=current_user.user_id if current_user else None,
-            db=db,
-            default="en"
-        )
+        language = await resolve_night_language(language, current_user, db)
         
         guide = relaxation_service.get_relaxation_guide(
             language=language,
@@ -55,6 +63,7 @@ async def get_relaxation_guide(
 @router.post("/breathing")
 async def get_breathing_exercise(
     exercise_type: Optional[str] = Query(None, description="Specific exercise type"),
+    language: Optional[str] = Query(None, pattern=LANGUAGE_PATTERN, description="Display language; defaults to saved preference"),
     current_user: Optional[User] = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
@@ -71,11 +80,7 @@ async def get_breathing_exercise(
     """
     try:
         relaxation_service = container.get("relaxation_service")
-        language = await get_user_language_preference(
-            user_id=current_user.user_id if current_user else None,
-            db=db,
-            default="en"
-        )
+        language = await resolve_night_language(language, current_user, db)
         
         exercise = relaxation_service.get_breathing_exercise(
             language=language,
@@ -89,6 +94,7 @@ async def get_breathing_exercise(
 
 @router.get("/safety-tips")
 async def get_safety_tips(
+    language: Optional[str] = Query(None, pattern=LANGUAGE_PATTERN, description="Display language; defaults to saved preference"),
     current_user: Optional[User] = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
@@ -104,11 +110,7 @@ async def get_safety_tips(
     """
     try:
         relaxation_service = container.get("relaxation_service")
-        language = await get_user_language_preference(
-            user_id=current_user.user_id if current_user else None,
-            db=db,
-            default="en"
-        )
+        language = await resolve_night_language(language, current_user, db)
         
         tips = relaxation_service.get_safety_tips(language=language)
         return tips
@@ -120,6 +122,7 @@ async def get_safety_tips(
 @router.get("/quick-calm")
 async def get_quick_calm_tips(
     count: int = Query(3, ge=1, le=10, description="Number of tips"),
+    language: Optional[str] = Query(None, pattern=LANGUAGE_PATTERN, description="Display language; defaults to saved preference"),
     current_user: Optional[User] = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
@@ -136,11 +139,7 @@ async def get_quick_calm_tips(
     """
     try:
         relaxation_service = container.get("relaxation_service")
-        language = await get_user_language_preference(
-            user_id=current_user.user_id if current_user else None,
-            db=db,
-            default="en"
-        )
+        language = await resolve_night_language(language, current_user, db)
         
         tips = relaxation_service.get_quick_calm_tips(language=language, count=count)
         return tips

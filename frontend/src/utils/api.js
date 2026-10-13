@@ -32,18 +32,63 @@ const setStoredUserId = (id) => {
 }
 
 const getRefreshToken = () => localStorage.getItem('refresh_token')
+const AUTH_SESSION_KEY = 'auth_session_id'
+const AUTH_STORAGE_KEYS = new Set([AUTH_SESSION_KEY, 'access_token', 'refresh_token', 'userId'])
 const authListeners = new Set()
 let authSession = 0
+const readAuthState = () => ({
+  sessionId: localStorage.getItem(AUTH_SESSION_KEY),
+  userId: getStoredUserId(),
+  token: getToken(),
+})
+let observedAuthState = readAuthState()
 
 function notifyAuthChange(preserveTasks = false) {
+  observedAuthState = readAuthState()
   const change = { token: getToken(), preserveTasks }
   authListeners.forEach(callback => {
     try { callback(change) } catch (error) { console.error('Auth listener failed:', error) }
   })
 }
 
+function synchronizeAuthStorage() {
+  const current = readAuthState()
+  const changed = current.sessionId !== observedAuthState.sessionId ||
+    (observedAuthState.userId !== null && current.userId !== observedAuthState.userId) ||
+    Boolean(current.token) !== Boolean(observedAuthState.token)
+  const tokenChanged = current.token !== observedAuthState.token
+  observedAuthState = current
+  if (changed) {
+    authSession++
+    notifyAuthChange()
+    clearPrivateCaches().catch(() => {})
+  } else if (tokenChanged) {
+    // A refresh within the same login keeps private state and active tasks.
+    notifyAuthChange(true)
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', event => {
+    if (event.storageArea && event.storageArea !== localStorage) return
+    if (event.key === null || AUTH_STORAGE_KEYS.has(event.key)) synchronizeAuthStorage()
+  })
+}
+
+function isCurrentSession(session) {
+  // Storage events are queued: check shared state before accepting any response.
+  synchronizeAuthStorage()
+  return session === authSession
+}
+
 function assertSession(session) {
-  if (session !== authSession) throw new Error('Authentication session changed')
+  if (!isCurrentSession(session)) throw new Error('Authentication session changed')
+}
+
+function getAuthSession() {
+  const session = authSession
+  assertSession(session)
+  return session
 }
 
 async function responseError(response, session) {
@@ -86,8 +131,8 @@ function withTimeout(options, defaultTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {
 
 /** Call /api/auth/refresh with refresh_token; does NOT retry on 401 (avoids loop). */
 async function refreshAccessToken() {
+  const session = getAuthSession()
   const refreshToken = getRefreshToken()
-  const session = authSession
   if (!refreshToken) return null
   const response = await fetch(`${API_BASE}/api/auth/refresh`, {
     method: 'POST',
@@ -97,11 +142,11 @@ async function refreshAccessToken() {
     },
     body: JSON.stringify({ refresh_token: refreshToken })
   })
-  if (session !== authSession) return null
+  if (!isCurrentSession(session)) return null
   if (refreshToken !== getRefreshToken()) return getToken()
   if (!response.ok) return null
   const data = await response.json().catch(() => null)
-  if (session !== authSession) return null
+  if (!isCurrentSession(session)) return null
   if (refreshToken !== getRefreshToken()) return getToken()
   if (data?.access_token) {
     setToken(data.access_token)
@@ -116,7 +161,7 @@ async function refreshAccessToken() {
 
 export const api = {
   async get(endpoint, options = {}, isRetry = false) {
-    const session = authSession
+    const session = getAuthSession()
     const { signal, timeoutId } = withTimeout(options)
     try {
       const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -165,7 +210,7 @@ export const api = {
   },
 
   async post(endpoint, data, options = {}, isRetry = false) {
-    const session = authSession
+    const session = getAuthSession()
     const { signal, timeoutId } = withTimeout(options)
     try {
       const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -213,7 +258,7 @@ export const api = {
   },
 
   async delete(endpoint, options = {}, isRetry = false) {
-    const session = authSession
+    const session = getAuthSession()
     const { signal, timeoutId } = withTimeout(options)
     try {
       const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -277,7 +322,7 @@ export const api = {
   // Authentication methods
   async login(email, password, verificationToken = null) {
     const clearing = this.logout()
-    const session = authSession
+    const session = getAuthSession()
     await clearing
     assertSession(session)
     const response = await this.post('/api/auth/login', {
@@ -285,6 +330,8 @@ export const api = {
     })
     assertSession(session)
     if (response.access_token) {
+      // A login marker stays stable through token refreshes and changes on sign-in.
+      localStorage.setItem(AUTH_SESSION_KEY, globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`)
       setToken(response.access_token)
       if (response.refresh_token) {
         localStorage.setItem('refresh_token', response.refresh_token)
@@ -308,6 +355,7 @@ export const api = {
     setToken(null)
     setStoredUserId(null)
     localStorage.removeItem('refresh_token')
+    localStorage.removeItem(AUTH_SESSION_KEY)
     notifyAuthChange()
     return clearPrivateCaches().catch(() => {})
   },
@@ -320,7 +368,9 @@ export const api = {
     return getStoredUserId()
   },
   setUserId(uid) {
+    getAuthSession()
     setStoredUserId(uid)
+    observedAuthState = readAuthState()
   },
 
   // User context (settings)
@@ -395,7 +445,7 @@ export const api = {
 
   // Voice methods
   async speechToText(audioFile, language = 'en') {
-    const session = authSession
+    const session = getAuthSession()
     const formData = new FormData()
     formData.append('audio', audioFile)
     formData.append('language', language)
@@ -419,7 +469,7 @@ export const api = {
   },
 
   async textToSpeech(text, language = 'en', voice = null, speed = 1.0) {
-    const session = authSession
+    const session = getAuthSession()
     const response = await fetch(`${API_BASE}/api/voice/text-to-speech`, {
       method: 'POST',
       headers: {
