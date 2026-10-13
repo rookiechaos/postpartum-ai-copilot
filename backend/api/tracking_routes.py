@@ -5,14 +5,16 @@ Tracking Routes - API endpoints for tracking data management
 from fastapi import APIRouter, Depends, Query, Request
 from typing import List, Dict, Any
 from datetime import datetime
+from uuid import UUID
 from sqlalchemy.orm import Session
 
 from dependencies.database import get_db
 from middleware.auth import get_current_user
 from middleware.authorization import check_user_authorization
 from middleware.rate_limit import rate_limit, RATE_LIMITS
-from models.schemas import User, TrackingEntry, TrackingSummary, EmotionalCheckIn
+from models.schemas import User, TrackingEntry, TrackingEntryCreate, TrackingEntryUpdate, TrackingSummary, EmotionalCheckIn
 from services.task_queue import TaskPriority
+from services.ai_data_scope import profile_for_ai, records_for_ai
 from exceptions import (
     PostpartumException,
     DatabaseError,
@@ -29,11 +31,38 @@ container = get_container()
 settings = get_settings()
 
 
+@router.post("/api/tracking/entries/{entry_id}/update", response_model=TrackingEntry)
+@rate_limit(RATE_LIMITS["tracking"])
+async def update_tracking_entry(
+    request: Request,
+    entry_id: int,
+    entry: TrackingEntryUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if entry.user_id and entry.user_id != current_user.user_id:
+        check_user_authorization(current_user, entry.user_id, "tracking entry")
+    return await container.get("tracking_service").update_entry(entry_id, current_user.user_id, entry, db)
+
+
+@router.delete("/api/tracking/entries/{entry_id}")
+@rate_limit(RATE_LIMITS["tracking"])
+async def delete_tracking_entry(
+    request: Request,
+    entry_id: int,
+    record_key: UUID,
+    revision: int = Query(..., ge=1),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return await container.get("tracking_service").delete_entry(entry_id, current_user.user_id, str(record_key), revision, db)
+
+
 @router.post("/api/tracking", response_model=Dict[str, Any])
 @rate_limit(RATE_LIMITS["tracking"])
 async def add_tracking_entry(
     request: Request,
-    entry: TrackingEntry,
+    entry: TrackingEntryCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -81,12 +110,22 @@ async def get_tracking_entries(
         raise DatabaseError(f"Failed to get tracking entries: {str(e)}")
 
 
+@router.get("/api/tracking/{user_id}/recent", response_model=List[TrackingEntry])
+async def get_latest_tracking(user_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    check_user_authorization(current_user, user_id, "tracking entries")
+    return await container.get("tracking_service").get_latest_entries(user_id, db)
+
+
 @router.get("/api/tracking/{user_id}/summary", response_model=TrackingSummary)
 @rate_limit(RATE_LIMITS["default"])
 async def get_tracking_summary(
     request: Request,
     user_id: str,
     days: int = Query(7, ge=1, le=90),
+    include_parent: bool = False,
+    include_notes: bool = False,
+    include_profile: bool = False,
+    language: str = Query("ja", pattern="^(ja|en)$"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -106,14 +145,16 @@ async def get_tracking_summary(
     if not async_mode:
         try:
             entries = await tracking_service.get_entries(user_id, db, days=days)
-            context = await tracking_service.get_user_context(user_id, db)
-            language = context.get("language", "en") or "en"
+            entries = records_for_ai(entries, include_parent, include_notes)
+            context = profile_for_ai(await tracking_service.get_user_context(user_id, db), include_profile)
 
             summary = await ai_service.analyze_tracking(
                 entries=entries,
                 context=context,
                 language=language
             )
+            if summary.get("error"):
+                raise AIServiceError("AI analysis unavailable")
 
             return TrackingSummary(
                 patterns=summary.get("patterns", []),
@@ -130,7 +171,8 @@ async def get_tracking_summary(
     try:
         task_data = {
             "user_id": user_id,
-            "days": days
+            "days": days, "language": language, "include_parent": include_parent,
+            "include_notes": include_notes, "include_profile": include_profile,
         }
 
         task_id = task_queue.create_task(
@@ -231,7 +273,7 @@ async def emotional_checkin(
     ai_service = container.get("ai_service")
 
     try:
-        recent_moods = await tracking_service.get_mood_history(user_id, db, days=7)
+        recent_moods = await tracking_service.get_mood_history(user_id, db, days=7) if checkin.include_history else []
 
         analysis = await ai_service.analyze_emotional_state(
             current_checkin={**checkin.model_dump(mode="json"), "user_id": user_id},

@@ -4,6 +4,8 @@ import LanguageDetector from 'i18next-browser-languagedetector'
 
 import enTranslations from './locales/en.json'
 import jaTranslations from './locales/ja.json'
+import polishEnglish from './locales/polish.en.json'
+import polishJapanese from './locales/polish.ja.json'
 
 i18n
   .use(LanguageDetector)
@@ -11,10 +13,10 @@ i18n
   .init({
     resources: {
       en: {
-        translation: enTranslations
+        translation: { ...enTranslations, polish: polishEnglish }
       },
       ja: {
-        translation: jaTranslations
+        translation: { ...jaTranslations, polish: polishJapanese }
       }
     },
     fallbackLng: 'ja',

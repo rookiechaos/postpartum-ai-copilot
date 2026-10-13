@@ -2,26 +2,23 @@ import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
-import { Save, User, Baby, Bell, Shield, HelpCircle, Download, Globe, BarChart3, Eye, Lock } from 'lucide-react'
+import { Save, User, Baby, Shield, HelpCircle, Eye } from 'lucide-react'
 import { useToast } from './Toast'
-import ExportData from './ExportData'
-import Help from './Help'
-import HelpCenter from './HelpCenter'
-import ProductAnalytics from './ProductAnalytics'
+import PrivacyCenter from './PrivacyCenter'
+import FamilyHelp from './FamilyHelp'
 import NotificationManager from './NotificationManager'
 import AccessibilitySettings from './AccessibilitySettings'
 import SecuritySettings from './SecuritySettings'
+import { InstallInstructions } from './InstallPrompt'
 import './Settings.css'
 
-function Settings({ userId, onContextUpdate, onLogout }) {
+function Settings({ userId, onContextUpdate, onLogout, onFindHelp }) {
   const { t, i18n } = useTranslation()
   const [settings, setSettings] = useState({
     babyName: '',
     babyAge: '',
     birthType: '',
     feedingType: '',
-    notifications: false,
-    darkMode: false,
     language: i18n.language
   })
   const [saving, setSaving] = useState(false)
@@ -44,8 +41,6 @@ function Settings({ userId, onContextUpdate, onLogout }) {
           babyAge: context.babyAge || '',
           birthType: context.birthType || '',
           feedingType: context.feedingType || '',
-          notifications: context.notifications === true,
-          darkMode: context.darkMode || false,
           language: context.language || i18n.language
         })
         if (context.language && context.language !== i18n.language) {
@@ -78,8 +73,6 @@ function Settings({ userId, onContextUpdate, onLogout }) {
         babyAge: settings.babyAge,
         birthType: settings.birthType,
         feedingType: settings.feedingType,
-        notifications: settings.notifications,
-        darkMode: settings.darkMode,
         language: settings.language
       })
       setSaved(true)
@@ -90,7 +83,7 @@ function Settings({ userId, onContextUpdate, onLogout }) {
       setTimeout(() => setSaved(false), 3000)
     } catch (error) {
       console.error('Error saving settings:', error)
-      toast.error(error?.message || t('common.error'))
+      toast.error(t('common.error'))
     } finally {
       setSaving(false)
     }
@@ -115,15 +108,8 @@ function Settings({ userId, onContextUpdate, onLogout }) {
           className={activeSubTab === 'export' ? 'active' : ''}
           onClick={() => setActiveSubTab('export')}
         >
-          <Download size={18} />
-          {t('settings.export')}
-        </button>
-        <button
-          className={activeSubTab === 'notifications' ? 'active' : ''}
-          onClick={() => setActiveSubTab('notifications')}
-        >
-          <Bell size={18} />
-          {t('settings.notifications')}
+          <Shield size={18} />
+          {t('work.dataPrivacy')}
         </button>
         <button
           className={activeSubTab === 'help' ? 'active' : ''}
@@ -133,25 +119,11 @@ function Settings({ userId, onContextUpdate, onLogout }) {
           {t('settings.help')}
         </button>
         <button
-          className={activeSubTab === 'analytics' ? 'active' : ''}
-          onClick={() => setActiveSubTab('analytics')}
-        >
-          <BarChart3 size={18} />
-          {t('settings.analytics')}
-        </button>
-        <button
           className={activeSubTab === 'accessibility' ? 'active' : ''}
           onClick={() => setActiveSubTab('accessibility')}
         >
           <Eye size={18} />
-          {t('settings.accessibility', 'Accessibility')}
-        </button>
-        <button
-          className={activeSubTab === 'security' ? 'active' : ''}
-          onClick={() => setActiveSubTab('security')}
-        >
-          <Lock size={18} />
-          {t('settings.security', 'Security')}
+          {t('accessibility.title')}
         </button>
       </div>
 
@@ -242,38 +214,6 @@ function Settings({ userId, onContextUpdate, onLogout }) {
           className="settings-section"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <div className="section-header">
-            <Bell size={20} />
-            <h3>{t('settings.preferences')}</h3>
-          </div>
-          <div className="section-content">
-            <div className="toggle-group">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={settings.notifications}
-                  onChange={(e) => setSettings({ ...settings, notifications: e.target.checked })} />
-                <span>{t('settings.enableNotifications')}</span>
-              </label>
-            </div>
-            <div className="toggle-group">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={settings.darkMode}
-                  onChange={(e) => setSettings({ ...settings, darkMode: e.target.checked })} />
-                <span>{t('settings.darkMode')}</span>
-              </label>
-            </div>
-          </div>
-        </motion.div>
-
-        <motion.div
-          className="settings-section"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
           <div className="section-header">
@@ -308,12 +248,11 @@ function Settings({ userId, onContextUpdate, onLogout }) {
       </>
       )}
 
-      {activeSubTab === 'export' && <ExportData userId={userId} />}
-      {activeSubTab === 'notifications' && <NotificationManager userId={userId} />}
-      {activeSubTab === 'help' && <HelpCenter />}
-      {activeSubTab === 'analytics' && <ProductAnalytics userId={userId} />}
-      {activeSubTab === 'accessibility' && <AccessibilitySettings />}
-      {activeSubTab === 'security' && <SecuritySettings userId={userId} />}
+      {activeSubTab === 'export' && <PrivacyCenter userId={userId} />}
+      {activeSubTab === 'help' && <><FamilyHelp onPrivacy={() => setActiveSubTab('export')} onFindHelp={onFindHelp} /><InstallInstructions /></>}
+      {activeSubTab === 'accessibility' && <><AccessibilitySettings />
+        <details className="pilot-panel"><summary>{t('settings.notifications')}</summary><NotificationManager userId={userId} /></details></>}
+      {activeSubTab === 'profile' && <details className="pilot-panel"><summary>{t('settings.security')}</summary><SecuritySettings userId={userId} /></details>}
     </div>
   )
 }

@@ -18,6 +18,7 @@ from services.rag_service import RAGService
 from services.personalization_service import PersonalizationService
 from services.task_queue import TaskQueue, TaskPriority
 from services.nsfw_detector import get_nsfw_detector
+from services.ai_data_scope import profile_for_ai, records_for_ai, previous_exchange_for_ai
 from exceptions import (
     PostpartumException,
     AIServiceError,
@@ -59,6 +60,9 @@ async def chat(
     Requires authentication. user_id is always taken from the JWT token.
     """
     language = message.language or "en"
+    previous_exchange = previous_exchange_for_ai(
+        message.previous_exchange.model_dump() if message.previous_exchange else None, message.include_previous,
+    )
     await _check_nsfw_input(message.query, language)
 
     ai_service = container.get("ai_service")
@@ -71,7 +75,7 @@ async def chat(
 
     if not async_mode:
         try:
-            context = await tracking_service.get_user_context(user_id, db)
+            context = profile_for_ai(await tracking_service.get_user_context(user_id, db), message.include_profile)
             rag_context = ""
             if rag_service and message.query:
                 rag_context = await rag_service.search(message.query)
@@ -84,7 +88,10 @@ async def chat(
                 rag_context=rag_context,
                 user_id=user_id,
                 language=language,
+                previous_exchange=previous_exchange,
             )
+            if response.get("error"):
+                raise AIServiceError("AI response unavailable")
 
             return ChatResponse(
                 response=response["text"],
@@ -103,6 +110,9 @@ async def chat(
             "query": message.query,
             "language": message.language or "en",
             "conversation_id": message.conversation_id,
+            "include_profile": message.include_profile,
+            "include_previous": message.include_previous,
+            "previous_exchange": previous_exchange,
         }
 
         priority = TaskPriority.MEDIUM
@@ -144,6 +154,9 @@ async def chat_stream(
 ):
     """Streaming chat endpoint for real-time responses (authenticated)."""
     language = message.language or "en"
+    previous_exchange = previous_exchange_for_ai(
+        message.previous_exchange.model_dump() if message.previous_exchange else None, message.include_previous,
+    )
     await _check_nsfw_input(message.query, language)
 
     tracking_service = container.get("tracking_service")
@@ -154,7 +167,7 @@ async def chat_stream(
 
     async def generate():
         try:
-            context = await tracking_service.get_user_context(user_id, db)
+            context = profile_for_ai(await tracking_service.get_user_context(user_id, db), message.include_profile)
             rag_context = ""
             if rag_service and message.query:
                 rag_context = await rag_service.search(message.query)
@@ -165,6 +178,7 @@ async def chat_stream(
                 rag_context=rag_context,
                 user_id=user_id,
                 language=language,
+                previous_exchange=previous_exchange,
             ):
                 yield f"data: {json.dumps(chunk)}\n\n"
         except Exception:
@@ -190,8 +204,8 @@ async def crisis_mode(
     await _check_nsfw_input(crisis_query, language)
 
     try:
-        context = await tracking_service.get_user_context(user_id, db)
-        recent_entries = await tracking_service.get_recent_entries(user_id, db, hours=6)
+        context = profile_for_ai(await tracking_service.get_user_context(user_id, db), crisis_request.include_profile)
+        recent_entries = records_for_ai(await tracking_service.get_recent_entries(user_id, db, hours=6)) if crisis_request.include_records else []
 
         response = await ai_service.crisis_response(
             query=crisis_query,
@@ -200,6 +214,8 @@ async def crisis_mode(
             language=language,
             night_mode=crisis_request.night_mode,
         )
+        if response.get("error"):
+            raise AIServiceError("AI response unavailable")
 
         return {
             "response": response["text"],
@@ -230,40 +246,33 @@ async def personalized_chat(
     await _check_nsfw_input(message.query, language)
 
     tracking_service = container.get("tracking_service")
-    personalization_service = container.get("personalization_service")
     rag_service = container.get("rag_service")
     ai_service = container.get("ai_service")
 
     try:
-        context = await tracking_service.get_user_context(user_id, db)
-        profile = await personalization_service.get_personalization_profile(user_id, db)
-        enhanced_context = await personalization_service.optimize_response_context(
-            user_id,
-            context,
-            db,
-        )
+        context = profile_for_ai(await tracking_service.get_user_context(user_id, db), message.include_profile)
 
         rag_context = ""
         if rag_service and message.query:
             rag_context = await rag_service.search(message.query)
 
-        language = message.language or profile.get("language", "en")
+        language = message.language or "ja"
         base_prompt = ai_service._get_system_prompt(language)
-        optimized_prompt = await personalization_service.optimize_ai_prompt(
-            user_id,
-            base_prompt,
-            message.query,
-            db,
-        )
+        optimized_prompt = base_prompt
 
         response = await ai_service.chat(
             query=message.query,
-            context=enhanced_context,
+            context=context,
             rag_context=rag_context,
             user_id=user_id,
             language=language,
             system_prompt=optimized_prompt,
+            previous_exchange=previous_exchange_for_ai(
+                message.previous_exchange.model_dump() if message.previous_exchange else None, message.include_previous,
+            ),
         )
+        if response.get("error"):
+            raise AIServiceError("AI response unavailable")
 
         return ChatResponse(
             response=response["text"],
@@ -271,7 +280,7 @@ async def personalized_chat(
             red_flags=response.get("red_flags", []),
             timestamp=datetime.now().isoformat(),
             validation=response.get("validation"),
-            personalization_applied=True,
+            personalization_applied=message.include_profile,
         )
     except PostpartumException:
         raise

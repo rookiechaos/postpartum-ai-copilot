@@ -2,10 +2,11 @@
 Pydantic schemas for API requests and responses
 """
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, StrictBool, validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from enum import Enum
+from uuid import UUID
 
 
 class EntryType(str, Enum):
@@ -39,6 +40,11 @@ class MoodLevel(str, Enum):
 
 
 # Chat Models
+class ChatFollowUp(BaseModel):
+    previous_question: str = Field(min_length=1, max_length=2000)
+    previous_answer: str = Field(min_length=1, max_length=4000)
+
+
 class ChatMessage(BaseModel):
     """Chat message model with input validation"""
     
@@ -68,6 +74,9 @@ class ChatMessage(BaseModel):
         description="Deprecated: user identity comes from JWT when authenticated",
     )
     conversation_id: Optional[str] = None
+    include_profile: StrictBool = False
+    include_previous: StrictBool = False
+    previous_exchange: Optional[ChatFollowUp] = None
     context: Optional[Dict[str, Any]] = None
     language: Optional[str] = Field(default="en", description="User's preferred language (en, ja)")
 
@@ -84,6 +93,8 @@ class ChatResponse(BaseModel):
 # Tracking Models
 class TrackingEntry(BaseModel):
     id: Optional[int] = None
+    record_key: Optional[UUID] = None
+    revision: Optional[int] = Field(default=None, ge=1)
     user_id: Optional[str] = Field(
         default=None,
         description="Deprecated: user identity comes from JWT when authenticated",
@@ -120,6 +131,15 @@ class TrackingEntry(BaseModel):
     notes: Optional[str] = None
 
 
+class TrackingEntryUpdate(TrackingEntry):
+    record_key: UUID
+    revision: int = Field(..., ge=1)
+
+
+class TrackingEntryCreate(TrackingEntry):
+    request_key: Optional[UUID] = None
+
+
 class TrackingSummary(BaseModel):
     patterns: List[str]
     insights: List[str]
@@ -146,6 +166,7 @@ class RecoveryEntry(BaseModel):
 
 # Emotional Check-in Models
 class EmotionalCheckIn(BaseModel):
+    include_history: StrictBool = False
     language: str = Field(default="ja", pattern="^(ja|en)(-[A-Za-z]+)?$")
     user_id: Optional[str] = Field(
         default=None,
@@ -160,6 +181,8 @@ class EmotionalCheckIn(BaseModel):
 
 # Crisis Mode Models
 class CrisisRequest(BaseModel):
+    include_profile: StrictBool = False
+    include_records: StrictBool = False
     query: Optional[str] = None
     urgency: str = "high"  # "high", "medium", "low"
     language: Optional[str] = Field(default="en", description="User's preferred language")

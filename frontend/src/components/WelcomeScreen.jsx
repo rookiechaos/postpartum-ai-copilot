@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import SupportDirectory from './SupportDirectory'
+import RecordingExample from './RecordingExample'
 import './WelcomeScreen.css'
 
 export default function WelcomeScreen({ onComplete, onExit }) {
@@ -24,6 +25,7 @@ export default function WelcomeScreen({ onComplete, onExit }) {
         {step === 0 ? <>
           <ul className="welcome-benefits"><li>{t('pilot.familyBenefit1')}</li><li>{t('pilot.familyBenefit2')}</li><li>{t('pilot.familyBenefit3')}</li></ul>
           <p>{t('pilot.entryPrivacy')}</p><p>{t('pilot.chatBoundary')}</p>
+          <RecordingExample />
         </> : <div className="form-content">
           <label>{t('welcome.babyName')}<input maxLength={50} placeholder={t('pilot.nicknamePlaceholder')}
             value={formData.babyName} onChange={event => setFormData({ ...formData, babyName: event.target.value })} /></label>

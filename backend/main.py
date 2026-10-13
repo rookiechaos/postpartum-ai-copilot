@@ -152,6 +152,11 @@ app.include_router(help_router, prefix="/api/help", tags=["help"])
 from api.product_analytics_routes import router as product_analytics_router
 app.include_router(product_analytics_router, prefix="/api/analytics/product", tags=["product-analytics"])
 
+from api.account_request_routes import router as account_request_router
+app.include_router(account_request_router)
+from api.draft_routes import router as draft_router
+app.include_router(draft_router)
+
 # Initialize database
 init_db()
 

@@ -7,6 +7,7 @@ import './NightMode.css'
 
 function NightMode({ userId, onExit }) {
   const [acceptedAI, setAcceptedAI] = useState(false)
+  const [includeProfile, setIncludeProfile] = useState(false)
   const { t, i18n } = useTranslation()
   const [query, setQuery] = useState('')
   const [response, setResponse] = useState(null)
@@ -39,8 +40,9 @@ function NightMode({ userId, onExit }) {
       const result = await api.postCrisis({
         user_id: userId,
         query: queryToSend,
+        include_profile: includeProfile,
         urgency: 'high',
-        language: i18n.language
+        language: i18n.resolvedLanguage || 'ja'
       })
 
       setResponse(result.error ? { response: t('pilot.nightUnavailable'), actions: [], red_flags: [] } : { ...result, generated: true })
@@ -111,7 +113,8 @@ function NightMode({ userId, onExit }) {
         </div>
 
         <SupportDirectory compact />
-        <AIUseNotice accepted={acceptedAI} onChange={setAcceptedAI} />
+      <AIUseNotice scope="crisis" accepted={acceptedAI} onChange={setAcceptedAI} disabled={loading}
+        includeProfile={includeProfile} onProfileChange={setIncludeProfile} />
 
         <div className="night-mode-tabs">
           <button

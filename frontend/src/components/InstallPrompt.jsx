@@ -1,94 +1,44 @@
 import React, { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import { Download, X } from 'lucide-react'
 import './InstallPrompt.css'
 
-function InstallPrompt() {
-  const [deferredPrompt, setDeferredPrompt] = useState(null)
-  const [showPrompt, setShowPrompt] = useState(false)
-
-  useEffect(() => {
-    // Check if already installed
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-      return
-    }
-
-    // Listen for beforeinstallprompt event
-    const handleBeforeInstallPrompt = (e) => {
-      e.preventDefault()
-      setDeferredPrompt(e)
-      setShowPrompt(true)
-    }
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
-
-    // Check if user dismissed before
-    const dismissed = localStorage.getItem('pwa-install-dismissed')
-    if (dismissed) {
-      const dismissedTime = parseInt(dismissed)
-      const daysSinceDismissed = (Date.now() - dismissedTime) / (1000 * 60 * 60 * 24)
-      if (daysSinceDismissed < 7) {
-        setShowPrompt(false)
-      }
-    }
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
-    }
-  }, [])
-
-  const handleInstall = async () => {
-    if (!deferredPrompt) return
-
-    deferredPrompt.prompt()
-    const { outcome } = await deferredPrompt.userChoice
-    
-    if (outcome === 'accepted') {
-      console.log('User accepted the install prompt')
-    } else {
-      console.log('User dismissed the install prompt')
-    }
-
-    setDeferredPrompt(null)
-    setShowPrompt(false)
-  }
-
-  const handleDismiss = () => {
-    setShowPrompt(false)
-    localStorage.setItem('pwa-install-dismissed', Date.now().toString())
-  }
-
-  if (!showPrompt) return null
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        className="install-prompt"
-        initial={{ y: 100, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 100, opacity: 0 }}
-        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-      >
-        <div className="install-prompt-content">
-          <div className="install-icon">
-            <Download size={24} />
-          </div>
-          <div className="install-text">
-            <strong>Install App</strong>
-            <p>Add Postpartum AI Copilot to your home screen for quick access</p>
-          </div>
-          <div className="install-actions">
-            <button onClick={handleInstall} className="install-button">
-              Install
-            </button>
-            <button onClick={handleDismiss} className="dismiss-button" aria-label="Dismiss">
-              <X size={20} />
-            </button>
-          </div>
-        </div>
-      </motion.div>
-    </AnimatePresence>
-  )
+export function InstallInstructions() {
+  const { t } = useTranslation()
+  return <section className="pilot-panel"><h3>{t('work.installTitle')}</h3>
+    <p>{t('work.installManual')}</p><p>{t('work.installNetwork')}</p>
+  </section>
 }
 
-export default InstallPrompt
+export default function InstallPrompt({ ready = false }) {
+  const { t } = useTranslation()
+  const [deferredPrompt, setDeferredPrompt] = useState(null)
+  const [dismissed, setDismissed] = useState(() => {
+    const previous = Number(localStorage.getItem('pwa-install-dismissed') || 0)
+    return Date.now() - previous < 7 * 86400000
+  })
+  const [installed, setInstalled] = useState(false)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    if (window.matchMedia?.('(display-mode: standalone)').matches) { setInstalled(true); return }
+    const available = event => { event.preventDefault(); setDeferredPrompt(event) }
+    const completed = () => { setInstalled(true); setDeferredPrompt(null) }
+    window.addEventListener('beforeinstallprompt', available)
+    window.addEventListener('appinstalled', completed)
+    return () => { window.removeEventListener('beforeinstallprompt', available); window.removeEventListener('appinstalled', completed) }
+  }, [])
+  if (!ready || dismissed || installed || !deferredPrompt) return null
+  return <aside className="install-prompt" aria-label={t('work.installTitle')}>
+    <div className="install-prompt-content"><Download aria-hidden="true" size={24} />
+      <div className="install-text"><strong>{t('work.installTitle')}</strong><p>{t('work.installDescription')}</p>
+        {failed && <p role="status">{t('work.installManual')}</p>}</div>
+      <div className="install-actions"><button className="install-button" onClick={async () => {
+        try { await deferredPrompt.prompt(); await deferredPrompt.userChoice; setDeferredPrompt(null) }
+        catch { setFailed(true) }
+      }}>{t('work.install')}</button>
+        <button className="dismiss-button" aria-label={t('common.close')} onClick={() => {
+          localStorage.setItem('pwa-install-dismissed', String(Date.now())); setDismissed(true)
+        }}><X size={20} /></button></div>
+    </div>
+  </aside>
+}

@@ -143,7 +143,8 @@ class AIWorker:
 
             raise ValidationError(nsfw_detector.get_block_message(language))
 
-        context = await self.tracking_service.get_user_context(user_id, db)
+        from services.ai_data_scope import profile_for_ai, previous_exchange_for_ai
+        context = profile_for_ai(await self.tracking_service.get_user_context(user_id, db), task_data.get("include_profile"))
 
         rag_context = ""
         if self.rag_service and query:
@@ -152,7 +153,7 @@ class AIWorker:
             except Exception as e:
                 logger.log_warning(
                     f"RAG search failed: {e}",
-                    context={"user_id": user_id, "query_preview": query[:50]},
+                    context={"user_id": user_id},
                 )
 
         response = await self.ai_service.chat(
@@ -161,7 +162,11 @@ class AIWorker:
             rag_context=rag_context,
             user_id=user_id,
             language=language,
+            previous_exchange=previous_exchange_for_ai(task_data.get("previous_exchange"), task_data.get("include_previous")),
         )
+        if response.get("error"):
+            from exceptions import AIServiceError
+            raise AIServiceError("AI response unavailable")
 
         return {
             "response": response["text"],
@@ -181,14 +186,19 @@ class AIWorker:
         days = task_data.get("days", 7)
 
         entries = await self.tracking_service.get_entries(user_id, db, days=days)
-        context = await self.tracking_service.get_user_context(user_id, db)
-        language = task_data.get("language") or context.get("language") or "ja"
+        from services.ai_data_scope import profile_for_ai, records_for_ai
+        entries = records_for_ai(entries, task_data.get("include_parent"), task_data.get("include_notes"))
+        context = profile_for_ai(await self.tracking_service.get_user_context(user_id, db), task_data.get("include_profile"))
+        language = task_data.get("language") or "ja"
 
         summary = await self.ai_service.analyze_tracking(
             entries=entries,
             context=context,
             language=language,
         )
+        if summary.get("error"):
+            from exceptions import AIServiceError
+            raise AIServiceError("AI analysis unavailable")
 
         return {
             "patterns": summary.get("patterns", []),
@@ -205,48 +215,8 @@ class AIWorker:
         db,
     ) -> Dict[str, Any]:
         """Process personalized chat task"""
-        query = task_data.get("query", "")
-        language = task_data.get("language", "en")
-
-        context = await self.tracking_service.get_user_context(user_id, db)
-        profile = await self.personalization_service.get_personalization_profile(user_id, db)
-        enhanced_context = await self.personalization_service.optimize_response_context(
-            user_id, context, db
-        )
-
-        rag_context = ""
-        if self.rag_service and query:
-            try:
-                rag_context = await self.rag_service.search(query)
-            except Exception as e:
-                logger.log_warning(
-                    f"RAG search failed: {e}",
-                    context={"user_id": user_id, "query_preview": query[:50]},
-                )
-
-        language = language or profile.get("language", "en")
-        base_prompt = self.ai_service._get_system_prompt(language)
-        optimized_prompt = await self.personalization_service.optimize_ai_prompt(
-            user_id, base_prompt, query, db
-        )
-
-        response = await self.ai_service.chat(
-            query=query,
-            context=enhanced_context,
-            rag_context=rag_context,
-            user_id=user_id,
-            language=language,
-            system_prompt=optimized_prompt,
-        )
-
-        return {
-            "response": response["text"],
-            "suggestions": response.get("suggestions", []),
-            "red_flags": response.get("red_flags", []),
-            "validation": response.get("validation"),
-            "personalization_applied": True,
-            "timestamp": datetime.now().isoformat(),
-        }
+        # Legacy task names use the same opt-in scope as the family chat.
+        return await self._process_chat_task(task_data, user_id, db)
 
     async def run(self, poll_interval: float = 1.0):
         """Main worker loop - continuously poll for and process tasks"""

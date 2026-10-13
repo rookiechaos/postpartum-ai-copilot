@@ -3,10 +3,11 @@ import { useTranslation } from 'react-i18next'
 import { Lock, Shield, Smartphone, History, CheckCircle, X, QrCode } from 'lucide-react'
 import api from '../utils/api'
 import errorTracker from '../utils/errorTracker'
+import { japanDateTime } from '../utils/japanTime'
 import './SecuritySettings.css'
 
 function SecuritySettings({ userId }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [twoFAStatus, setTwoFAStatus] = useState(null)
   const [devices, setDevices] = useState([])
   const [loginHistory, setLoginHistory] = useState([])
@@ -14,6 +15,7 @@ function SecuritySettings({ userId }) {
   const [show2FASetup, setShow2FASetup] = useState(false)
   const [twoFASetupData, setTwoFASetupData] = useState(null)
   const [verificationToken, setVerificationToken] = useState('')
+  const [error, setError] = useState('')
 
   useEffect(() => {
     loadSecurityData()
@@ -21,6 +23,7 @@ function SecuritySettings({ userId }) {
 
   const loadSecurityData = async () => {
     setLoading(true)
+    setError('')
     try {
       const [statusRes, devicesRes, historyRes] = await Promise.all([
         api.get2FAStatus(),
@@ -33,6 +36,7 @@ function SecuritySettings({ userId }) {
       setLoginHistory(historyRes.history || [])
     } catch (error) {
       errorTracker.trackError(error, { action: 'load_security_data' })
+      setError(t('pilot.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -46,6 +50,7 @@ function SecuritySettings({ userId }) {
       setShow2FASetup(true)
     } catch (error) {
       errorTracker.trackError(error, { action: 'setup_2fa' })
+      setError(t('security.actionFailed'))
     } finally {
       setLoading(false)
     }
@@ -59,9 +64,9 @@ function SecuritySettings({ userId }) {
       await api.enable2FA(verificationToken)
       setShow2FASetup(false)
       setVerificationToken('')
-      await loadSecurityData()
     } catch (error) {
       errorTracker.trackError(error, { action: 'enable_2fa' })
+      setError(t('security.actionFailed'))
     } finally {
       setLoading(false)
     }
@@ -75,9 +80,9 @@ function SecuritySettings({ userId }) {
     setLoading(true)
     try {
       await api.disable2FA()
-      await loadSecurityData()
     } catch (error) {
       errorTracker.trackError(error, { action: 'disable_2fa' })
+      setError(t('security.actionFailed'))
     } finally {
       setLoading(false)
     }
@@ -93,15 +98,17 @@ function SecuritySettings({ userId }) {
       await loadSecurityData()
     } catch (error) {
       errorTracker.trackError(error, { action: 'remove_device' })
+      setError(t('security.actionFailed'))
     }
   }
 
   if (loading && !twoFAStatus) {
-    return <div className="security-settings-loading">Loading...</div>
+    return <div className="security-settings-loading">{t('common.loading')}</div>
   }
 
   return (
     <div className="security-settings">
+      {error && <p role="alert">{error} <button disabled={loading} onClick={loadSecurityData}>{t('pilot.retry')}</button></p>}
       <div className="security-header">
         <h2>{t('security.title', 'Security Settings')}</h2>
         <p>{t('security.description', 'Manage your account security')}</p>
@@ -135,17 +142,20 @@ function SecuritySettings({ userId }) {
             {show2FASetup && twoFASetupData && (
               <div className="two-fa-setup">
                 <h4>{t('security.scanQRCode', 'Scan QR Code')}</h4>
-                <img src={twoFASetupData.qr_code} alt="2FA QR Code" className="qr-code" />
+                <img src={twoFASetupData.qr_code} alt={t('security.qrAlt')} className="qr-code" />
                 <p>{t('security.enterVerificationCode', 'Enter verification code from your authenticator app')}</p>
                 <input
                   type="text"
                   value={verificationToken}
                   onChange={(e) => setVerificationToken(e.target.value)}
                   placeholder="000000"
+                  aria-label={t('security.enterVerificationCode')}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
                   maxLength={6}
                   className="verification-input"
                 />
-                <button className="btn-primary" onClick={handleEnable2FA}>
+                <button className="btn-primary" disabled={loading || !/^\d{6}$/.test(verificationToken)} onClick={handleEnable2FA}>
                   {t('security.enable', 'Enable 2FA')}
                 </button>
                 <button className="btn-secondary" onClick={() => setShow2FASetup(false)}>
@@ -192,7 +202,7 @@ function SecuritySettings({ userId }) {
                   <div>
                     <h4>{device.device_name}</h4>
                     <p className="device-meta">
-                      {device.device_type} • {device.ip_address} • {new Date(device.last_used).toLocaleDateString()}
+                      {device.device_type} • {device.ip_address} • {japanDateTime(device.last_used, i18n.language)}
                     </p>
                   </div>
                 </div>
@@ -239,7 +249,7 @@ function SecuritySettings({ userId }) {
                     <span>{entry.success ? t('security.successful', 'Successful') : t('security.failed', 'Failed')}</span>
                   </div>
                   <p className="login-meta">
-                    {entry.ip_address} • {entry.login_method} • {new Date(entry.created_at).toLocaleString()}
+                    {entry.ip_address} • {entry.login_method} • {japanDateTime(entry.created_at, i18n.language)}
                   </p>
                   {entry.failure_reason && (
                     <p className="failure-reason">{entry.failure_reason}</p>

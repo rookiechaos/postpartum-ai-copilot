@@ -7,6 +7,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from typing import Callable
 from functools import wraps
 import time
@@ -101,7 +102,10 @@ def rate_limit(limit: str = "100/minute", key_func: Callable = get_remote_addres
         @wraps(func)
         async def wrapper(*args, **kwargs):
             try:
-                response = await wrapped(*args, **kwargs)
+                if inspect.iscoroutinefunction(wrapped):
+                    response = await wrapped(*args, **kwargs)
+                else:
+                    response = await run_in_threadpool(wrapped, *args, **kwargs)
                 
                 # Add rate limit headers
                 if isinstance(response, Response):

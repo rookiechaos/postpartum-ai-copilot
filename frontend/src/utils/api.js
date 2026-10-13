@@ -385,11 +385,31 @@ export const api = {
   getTracking(userId, days = 7) {
     return this.get(`/api/tracking/${userId}?days=${days}`)
   },
-  getTrackingSummary(userId, days = 7) {
-    return this.get(`/api/tracking/${userId}/summary?days=${days}`)
+  getTrackingSummary(userId, days = 7, scope = {}) {
+    const params = new URLSearchParams({ days, ...scope })
+    return this.get(`/api/tracking/${userId}/summary?${params}`)
   },
   addTrackingEntry(data) {
     return this.post('/api/tracking', data)
+  },
+  updateTrackingEntry(entryId, data) {
+    return this.post(`/api/tracking/entries/${entryId}/update`, data)
+  },
+  deleteTrackingEntry(entryId, { record_key, revision }) {
+    const query = new URLSearchParams({ record_key, revision })
+    return this.delete(`/api/tracking/entries/${entryId}?${query}`)
+  },
+  requestAccountAccess(email, language) {
+    return this.post('/api/pilot/account-help', { email, language })
+  },
+  getAccountRequestStatus(reference) {
+    return this.get(`/api/pilot/account-help/${encodeURIComponent(reference)}`)
+  },
+  getAccountRequests() {
+    return this.get('/api/account/requests')
+  },
+  createAccountRequest(kind, language) {
+    return this.post('/api/account/requests', { kind, language })
   },
   getDailySummary(userId) {
     return this.get(`/api/tracking/${userId}/daily-summary`)

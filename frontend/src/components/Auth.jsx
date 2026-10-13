@@ -3,6 +3,9 @@ import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 import LanguageSelector from './LanguageSelector'
 import SupportDirectory from './SupportDirectory'
+import AccountRequests from './AccountRequests'
+import ServicePrivacyInfo from './ServicePrivacyInfo'
+import RecordingExample from './RecordingExample'
 import './Auth.css'
 
 function Auth({ onSuccess, entry = 'family', onBack }) {
@@ -77,10 +80,12 @@ function Auth({ onSuccess, entry = 'family', onBack }) {
         </div>
         <div className="auth-header">
           <h1>🤱 {t('app.title')}</h1>
-          <p className="auth-subtitle">{t(entry === 'organization' ? 'pilot.organizationTitle' : 'pilot.familyTitle')}</p>
-          <p>{t(entry === 'organization' ? 'pilot.organizationAuthNote' : 'pilot.familyAuthNote')}</p>
+          <p className="auth-subtitle">{t(entry === 'organization' ? 'pilot.organizationTitle' : entry === 'operator' ? 'work.operatorTitle' : 'pilot.familyTitle')}</p>
+          <p>{t(entry === 'organization' ? 'pilot.organizationAuthNote' : entry === 'operator' ? 'work.operatorScope' : 'pilot.familyAuthNote')}</p>
         </div>
 
+        <details className="pilot-panel"><summary>{t('work.beforeRegistration')}</summary><ServicePrivacyInfo /></details>
+        {entry === 'family' && <RecordingExample />}
         <div className="auth-tabs">
           <button
             type="button"
@@ -167,6 +172,7 @@ function Auth({ onSuccess, entry = 'family', onBack }) {
             </>
           )}
         </p>
+        <details className="pilot-panel"><summary>{t('work.accessHelp')}</summary><AccountRequests publicAccess /></details>
         <SupportDirectory compact />
       </div>
     </div>

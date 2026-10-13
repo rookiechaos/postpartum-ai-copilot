@@ -3,15 +3,19 @@ Family Service - Family sharing and multi-user support
 """
 
 from typing import Dict, Any, Optional, List, TYPE_CHECKING
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 import uuid
 import json
 import asyncio
-from models.database import FamilyDB, FamilyMemberDB, TrackingEntryDB, TaskDB
+from models.database import FamilyDB, FamilyMemberDB, TrackingEntryDB, TaskDB, UserDB
+from sqlalchemy.exc import IntegrityError
 from services.logging_service import logger
-from exceptions import NotFoundError, ValidationError
+from exceptions import NotFoundError, ValidationError, ConflictError
+from services.ai_data_scope import CARE_TYPES, PARENT_TYPES, records_for_ai
+
+FAMILY_SHARED_DAYS = 7
 
 if TYPE_CHECKING:
     from services.tracking_service import TrackingService
@@ -23,7 +27,8 @@ class FamilyService:
 
     @staticmethod
     def _shares_tracking(member: FamilyMemberDB) -> bool:
-        return (member.permissions or {}).get("share_tracking") is True
+        permissions = member.permissions or {}
+        return permissions.get("share_baby") is True or permissions.get("share_parent") is True
     
     def create_family(
         self,
@@ -115,6 +120,8 @@ class FamilyService:
                 raise ValidationError("Only owners and admins can invite members")
             if role == "admin" and not is_creator:
                 raise ValidationError("Only the family creator can invite admins")
+            if not db.query(UserDB).filter(UserDB.user_id == invitee_user_id, UserDB.is_active.is_(True)).first():
+                raise ValidationError("Cannot invite this account")
             
             # Check if already a member
             existing = db.query(FamilyMemberDB).filter(
@@ -127,10 +134,13 @@ class FamilyService:
             if existing:
                 if existing.status == "active":
                     raise ValidationError("User is already a member")
-                # Reactivate if previously inactive
-                existing.status = "pending"
-                existing.invited_by = inviter_user_id
-                existing.role = role
+                # Keep the version monotonic across invitations and re-joining.
+                changed = db.query(FamilyMemberDB).filter(FamilyMemberDB.id == existing.id,
+                    FamilyMemberDB.status == existing.status, FamilyMemberDB.revision == existing.revision,
+                ).update({"status": "pending", "invited_by": inviter_user_id, "role": role,
+                    "permissions": {}, "revision": existing.revision + 1}, synchronize_session=False)
+                if changed != 1:
+                    raise ConflictError("Membership changed; refresh before inviting again")
             else:
                 # Create new invitation
                 member = FamilyMemberDB(
@@ -149,6 +159,9 @@ class FamilyService:
             )
             
             return {"status": "invited", "family_id": family_id, "user_id": invitee_user_id}
+        except IntegrityError:
+            db.rollback()
+            raise ConflictError("Membership changed; refresh before inviting again") from None
         except Exception as e:
             db.rollback()
             logger.log_error(e, context={"action": "invite_member", "family_id": family_id})
@@ -175,8 +188,12 @@ class FamilyService:
             if member.role not in {"admin", "member", "viewer"}:
                 raise ValidationError("Invalid invitation role; request a new invitation")
             
-            member.status = "active"
-            member.joined_at = datetime.utcnow()
+            changed = db.query(FamilyMemberDB).filter(FamilyMemberDB.id == member.id,
+                FamilyMemberDB.status == "pending", FamilyMemberDB.revision == member.revision,
+            ).update({"status": "active", "joined_at": datetime.utcnow(),
+                "revision": member.revision + 1}, synchronize_session=False)
+            if changed != 1:
+                raise NotFoundError("Invitation is no longer available")
             db.commit()
             
             logger.log_info(f"User {user_id} accepted invitation to family {family_id}")
@@ -211,7 +228,7 @@ class FamilyService:
             return [self._family_to_dict(f) for f in families]
         except Exception as e:
             logger.log_error(e, context={"action": "get_user_families", "user_id": user_id})
-            return []
+            raise
     
     def get_family_members(
         self,
@@ -236,7 +253,7 @@ class FamilyService:
             members = db.query(FamilyMemberDB).filter(
                 and_(
                     FamilyMemberDB.family_id == family_id,
-                    FamilyMemberDB.status == "active"
+                    FamilyMemberDB.status.in_(["active", "pending"] if user_member.role in {"owner", "admin"} else ["active"])
                 )
             ).all()
             
@@ -254,6 +271,8 @@ class FamilyService:
     ) -> List[Dict[str, Any]]:
         """Get shared tracking data from all family members"""
         try:
+            if not 1 <= days <= FAMILY_SHARED_DAYS:
+                raise ValidationError("Family sharing is limited to the last 7 days")
             # Check if user is a member
             user_member = db.query(FamilyMemberDB).filter(
                 and_(
@@ -287,22 +306,19 @@ class FamilyService:
                 )
             ).order_by(TrackingEntryDB.timestamp.desc()).all()
             
-            # Convert to dict format
+            preferences = {member.user_id: member.permissions or {} for member in members}
             result = []
             for entry in entries:
-                result.append({
-                    "id": entry.id,
-                    "user_id": entry.user_id,
-                    "entry_type": entry.entry_type,
-                    "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
-                    "feeding_type": entry.feeding_type,
-                    "duration_minutes": entry.duration_minutes,
-                    "amount_ml": entry.amount_ml,
-                    "diaper_type": entry.diaper_type,
-                    "sleep_duration_minutes": entry.sleep_duration_minutes,
-                    "mood_level": entry.mood_level,
-                    "notes": entry.notes
-                })
+                scope = preferences[entry.user_id]
+                allowed = (CARE_TYPES if scope.get("share_baby") is True else set()) | (
+                    PARENT_TYPES if scope.get("share_parent") is True else set())
+                if entry.entry_type not in allowed:
+                    continue
+                raw = {column.name: getattr(entry, column.name) for column in TrackingEntryDB.__table__.columns}
+                raw["timestamp"] = entry.timestamp.isoformat() if entry.timestamp else None
+                selected = records_for_ai([raw], scope.get("share_parent"), scope.get("share_notes"))[0]
+                result.append({**selected, "record_key": entry.record_key, "recorded_by": entry.user_id,
+                    "recorder_label": scope.get("display_label", "")})
             
             return result
         except Exception as e:
@@ -348,7 +364,12 @@ class FamilyService:
                 raise ValidationError("Only the family creator can remove admins or legacy owners")
             
             if member:
-                member.status = "inactive"
+                changed = db.query(FamilyMemberDB).filter(FamilyMemberDB.id == member.id,
+                    FamilyMemberDB.revision == member.revision,
+                ).update({"status": "inactive", "permissions": {},
+                    "revision": member.revision + 1}, synchronize_session=False)
+                if changed != 1:
+                    raise ConflictError("Membership changed; refresh before revoking again")
                 db.commit()
                 logger.log_info(f"Member {member_user_id} removed from family {family_id}")
                 return True
@@ -377,6 +398,7 @@ class FamilyService:
             "user_id": member.user_id,
             "role": member.role,
             "status": member.status,
+            "revision": member.revision,
             "joined_at": member.joined_at.isoformat() if member.joined_at else None,
             "permissions": member.permissions or {}
         }
@@ -390,19 +412,9 @@ class FamilyService:
         ai_service: Optional["AIService"] = None,
         db: Optional[Session] = None
     ) -> Dict[str, Any]:
-        """
-        Generate family summary for partner viewing
-        
-        Args:
-            family_id: Family ID
-            user_id: User ID requesting summary
-            period: "daily" or "weekly"
-            tracking_service: TrackingService instance
-            ai_service: AIService instance
-            db: Database session
-        
-        Returns:
-            Family summary with tracking data and AI insights
+        """Count consented records by Japan calendar day without external AI.
+
+        The service arguments remain accepted for compatibility with older callers.
         """
         try:
             # Check if user is a member
@@ -417,7 +429,7 @@ class FamilyService:
             if not user_member:
                 raise ValidationError("You are not a member of this family")
             
-            # Get all active members (excluding the requester if they want to see others' data)
+            # Count current members without broadening any member's sharing scope.
             members = db.query(FamilyMemberDB).filter(
                 and_(
                     FamilyMemberDB.family_id == family_id,
@@ -425,28 +437,19 @@ class FamilyService:
                 )
             ).all()
             
-            # Get shared tracking data
-            shared_data = self.get_shared_tracking_data(family_id, user_id, days=7 if period == "daily" else 30, db=db)
-            
-            # Summaries must enforce the same sharing policy as the raw records.
-            shared_members = [member for member in members if self._shares_tracking(member)]
-            shared_members.sort(key=lambda member: (member.role != "owner", member.id))
-            primary_user_id = shared_members[0].user_id if shared_members else None
-            
-            summary = {}
-            if primary_user_id and tracking_service and ai_service:
-                if period == "daily":
-                    summary = await tracking_service.generate_daily_summary(
-                        user_id=primary_user_id,
-                        db=db,
-                        ai_service=ai_service
-                    )
-                else:
-                    summary = await tracking_service.generate_weekly_summary(
-                        user_id=primary_user_id,
-                        db=db,
-                        ai_service=ai_service
-                    )
+            if period not in {"daily", "weekly"}:
+                raise ValidationError("Choose a daily or weekly family overview")
+            japan = timezone(timedelta(hours=9))
+            today = datetime.now(japan).date()
+            first_day = today - timedelta(days=0 if period == "daily" else 6)
+            shared_data = self.get_shared_tracking_data(family_id, user_id,
+                days=2 if period == "daily" else FAMILY_SHARED_DAYS, db=db)
+            shared_data = [entry for entry in shared_data if first_day <= datetime.fromisoformat(
+                entry["timestamp"]).replace(tzinfo=timezone.utc).astimezone(japan).date() <= today]
+            # Sharing never grants AI permission or access to excluded categories.
+            summary = {"from": first_day.isoformat(), "through": today.isoformat(),
+                "record_counts": {kind: sum(entry["entry_type"] == kind for entry in shared_data)
+                for kind in CARE_TYPES | PARENT_TYPES}}
             
             return {
                 "family_id": family_id,
@@ -464,8 +467,14 @@ class FamilyService:
         self,
         family_id: str,
         user_id: str,
-        share_enabled: bool = True,
-        db: Optional[Session] = None
+        share_enabled: bool = False,
+        db: Optional[Session] = None,
+        share_baby: Optional[bool] = None,
+        share_parent: bool = False,
+        share_notes: bool = False,
+        display_label: str = "",
+        *,
+        expected_revision: int,
     ) -> Dict[str, Any]:
         """
         Enable/disable sharing of tracking data with family
@@ -491,16 +500,27 @@ class FamilyService:
             
             if not member:
                 raise ValidationError("You are not a member of this family")
+            if member.revision != expected_revision:
+                raise ConflictError("Membership or sharing changed; review the latest settings")
             
             # Update permissions
-            member.permissions = {**(member.permissions or {}), "share_tracking": share_enabled}
+            baby = share_enabled is True if share_baby is None else share_baby is True
+            permissions = {"share_tracking": False, "share_baby": baby,
+                "share_parent": share_parent is True, "share_notes": share_notes is True,
+                "display_label": display_label}
+            changed = db.query(FamilyMemberDB).filter(FamilyMemberDB.id == member.id,
+                FamilyMemberDB.status == "active", FamilyMemberDB.revision == expected_revision,
+            ).update({"permissions": permissions, "revision": expected_revision + 1}, synchronize_session=False)
+            if changed != 1:
+                raise ConflictError("Membership or sharing changed; review the latest settings")
             db.commit()
-            db.refresh(member)
             
             return {
                 "family_id": family_id,
                 "user_id": user_id,
-                "share_enabled": share_enabled,
+                "share_enabled": baby or share_parent is True,
+                "permissions": permissions,
+                "revision": expected_revision + 1,
                 "message": "Sharing preference updated"
             }
         except Exception as e:

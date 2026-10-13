@@ -1,69 +1,121 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Baby, MessageCircle, Phone, Heart, Moon } from 'lucide-react'
 import api from '../utils/api'
-import { japanDay } from '../utils/japanTime'
+import { japanDay, japanDateTime } from '../utils/japanTime'
+import { recordOperation, isRecordOperation } from '../utils/recordOperations'
+import RecordingExample from './RecordingExample'
+import useAccountDraft from '../utils/useAccountDraft'
+import { DraftRecoveryNotice } from './DraftRecovery'
 import './Dashboard.css'
 
-export default function Dashboard({ userId, userContext, onNavigate, onNightMode }) {
-  const { t } = useTranslation()
+const quickChoices = [
+  ['wet', { entry_type: 'diaper', diaper_type: 'wet' }],
+  ['dirty', { entry_type: 'diaper', diaper_type: 'dirty' }],
+  ['breast', { entry_type: 'feeding', feeding_type: 'breast' }],
+  ['formula', { entry_type: 'feeding', feeding_type: 'formula' }],
+]
+
+export default function Dashboard({ userId, userContext, onNavigate, onRecordsChanged, refreshKey = 0, visible = true }) {
+  const { t, i18n } = useTranslation()
   const [entries, setEntries] = useState(null)
+  const [recent, setRecent] = useState([])
   const [error, setError] = useState(false)
   const [attempt, setAttempt] = useState(0)
+  const [pending, setPending] = useState(null)
+  const [saveStatus, setSaveStatus] = useState('')
+  const [undo, setUndo] = useState(null)
+  const writing = useRef(false)
+  const draft = useAccountDraft('quick', userId, pending ? { pending } : null, content => {
+    if (!isRecordOperation(content.pending)) return false
+    setPending(content.pending); setSaveStatus('unsaved')
+  })
+  const refresh = () => { setAttempt(value => value + 1); onRecordsChanged?.() }
 
   useEffect(() => {
+    if (!visible) return
     let active = true
     setError(false)
-    api.getTracking(userId, 2).then(data => {
-      if (active) setEntries(data.filter(entry => japanDay(entry.timestamp) === japanDay()))
+    Promise.all([api.getTracking(userId, 2), api.get(`/api/tracking/${userId}/recent`)]).then(([today, latest]) => {
+      if (active) { setEntries(today.filter(entry => japanDay(entry.timestamp) === japanDay())); setRecent(latest) }
     }).catch(() => { if (active) setError(true) })
     return () => { active = false }
-  }, [userId, attempt])
+  }, [userId, attempt, refreshKey, visible])
+  useEffect(() => {
+    if (!visible) return
+    const update = () => setAttempt(value => value + 1)
+    const onVisibility = () => { if (document.visibilityState === 'visible') update() }
+    const midnight = new Date(`${japanDay()}T00:00:00+09:00`).getTime() + 86400000
+    const timer = setTimeout(update, Math.max(1000, midnight - Date.now() + 100))
+    window.addEventListener('focus', update)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => { clearTimeout(timer); window.removeEventListener('focus', update); document.removeEventListener('visibilitychange', onVisibility) }
+  }, [visible, attempt])
+  useEffect(() => {
+    if (!undo) return
+    const timer = setTimeout(() => setUndo(null), 8000)
+    return () => clearTimeout(timer)
+  }, [undo])
 
-  const actions = [
-    { icon: <Baby />, title: t('pilot.recordTitle'), description: t('pilot.recordDescription'), action: () => onNavigate('tracking', 'feeding') },
-    { icon: <MessageCircle />, title: t('pilot.askTitle'), description: t('pilot.askDescription'), action: () => onNavigate('chat') },
-    { icon: <Phone />, title: t('pilot.supportTitle'), description: t('pilot.findHelpDescription'), action: () => onNavigate('support') },
-  ]
+  const saveQuick = async operation => {
+    if (writing.current) return
+    writing.current = true
+    setPending(operation); setSaveStatus('saving')
+    try {
+      const result = await api.addTrackingEntry(operation)
+      await draft.clear()
+      setUndo(result); setPending(null); setSaveStatus('saved'); refresh()
+    } catch { setSaveStatus('unsaved'); setAttempt(value => value + 1) }
+    finally { writing.current = false }
+  }
+  const undoQuick = async () => {
+    if (writing.current || !undo) return
+    writing.current = true; setSaveStatus('saving')
+    try { await api.deleteTrackingEntry(undo.id, undo); setUndo(null); setSaveStatus('undone'); refresh() }
+    catch { setSaveStatus('undoFailed'); setAttempt(value => value + 1) }
+    finally { writing.current = false }
+  }
+
   return <div className="dashboard family-dashboard">
-    <header className="dashboard-header">
-      <div><h2>{t('pilot.familyHeading')}</h2><p>{userContext?.babyName ? t('dashboard.howIsBaby', { name: userContext.babyName }) : t('pilot.todayIntro')}</p></div>
-    </header>
-    <div className="family-primary-actions">
-      {actions.map(action => <button key={action.title} className="family-action" onClick={action.action}>
-        {action.icon}<strong>{action.title}</strong><span>{action.description}</span>
-      </button>)}
-    </div>
-    <section className="pilot-panel">
-      <h3>{t('pilot.quickRecord')}</h3>
-      <div className="pilot-actions">
-        {['feeding', 'diaper', 'sleep', 'pumping'].map(type => <button key={type} className="pilot-button secondary"
-          onClick={() => onNavigate('tracking', type)}>{t(`tracking.${type}`)}</button>)}
-      </div>
+    <header className="dashboard-header"><div><h2>{t('pilot.familyHeading')}</h2>
+      <p>{userContext?.babyName ? t('dashboard.howIsBaby', { name: userContext.babyName }) : t('pilot.todayIntro')}</p></div></header>
+    <section className="pilot-panel quick-record-panel"><h3>{t('polish.recordNow')}</h3><p>{t('polish.quickNotice')}</p>
+      <div className="record-choices">{quickChoices.map(([key, data]) => <button type="button" key={key}
+        className="pilot-button" disabled={Boolean(pending) || Boolean(draft.candidate) || draft.status === 'loading' || saveStatus === 'saving'}
+        onClick={() => saveQuick(recordOperation(data))}>{t(`polish.quick.${key}`)}</button>)}</div>
+      {saveStatus && <p role="status">{t(`polish.saveStatus.${saveStatus}`)}</p>}
+      <DraftRecoveryNotice draft={draft} disabled={saveStatus === 'saving'} />
+      {pending && saveStatus !== 'saving' && <div className="pilot-actions"><p>{t('polish.pendingWriteNotice')}</p>
+        <button className="pilot-button secondary" onClick={() => saveQuick(pending)}>{t('polish.retrySameSave')}</button>
+        <button className="pilot-button secondary" onClick={() => {
+          if (window.confirm(t('polish.abandonWrite'))) { setPending(null); draft.clear(); setSaveStatus(''); refresh() }
+        }}>{t('polish.checkBeforeNew')}</button></div>}
+      {undo && <button className="pilot-button secondary" disabled={saveStatus === 'saving'} onClick={undoQuick}>{t('polish.undoQuick')}</button>}
+      <button className="pilot-button secondary" onClick={() => onNavigate('tracking', 'feeding')}>{t('polish.detailedRecord')}</button>
       <p>{t('pilot.noPressure')}</p>
     </section>
-    <section className="pilot-panel">
-      <h3>{t('pilot.todayRecords')}</h3>
-      <p>{t('pilot.japanTime')}</p>
-      {error ? <div role="status"><p>{t('pilot.loadFailed')}</p><button className="pilot-button secondary" onClick={() => setAttempt(value => value + 1)}>{t('pilot.retry')}</button></div>
-        : entries === null ? <p>{t('common.loading')}</p>
-        : entries.length === 0 ? <p>{t('tracking.noEntries')}</p>
-        : <div className="stats-grid">
-          <div className="stat-card"><strong>{entries.filter(entry => entry.entry_type === 'feeding').length}</strong><span>{t('dashboard.todayFeeds')}</span></div>
-          <div className="stat-card"><strong>{entries.filter(entry => entry.entry_type === 'diaper').length}</strong><span>{t('dashboard.diaperChanges')}</span></div>
-          <div className="stat-card"><strong>{entries.reduce((sum, entry) => sum + (entry.entry_type === 'sleep' ? entry.sleep_duration_minutes || 0 : 0), 0)}</strong><span>{t('pilot.totalSleep')}</span></div>
-        </div>}
+    <section className="pilot-panel"><h3>{t('polish.recentRecords')}</h3><p>{t('pilot.japanTime')}</p>
+      {error ? <p role="status">{t('pilot.loadFailed')} <button onClick={() => setAttempt(value => value + 1)}>{t('pilot.retry')}</button></p>
+        : entries === null ? <p role="status">{t('common.loading')}</p>
+        : recent.length === 0 ? <p>{t('tracking.noEntries')}</p>
+        : <ol className="recent-records">{recent.map(entry => <li key={entry.record_key}>
+          <strong>{t(`tracking.${entry.entry_type}`)}{entry.diaper_type ? ` · ${t(`tracking.${entry.diaper_type}`)}` : ''}
+            {entry.feeding_type ? ` · ${t(`tracking.${entry.feeding_type}`)}` : ''}</strong>
+          <time>{japanDateTime(entry.timestamp, i18n.resolvedLanguage || 'ja')}</time><small>{t('polish.recordedByYou')}</small>
+        </li>)}</ol>}
+      <button className="pilot-button secondary" onClick={() => onNavigate('tracking')}>{t('polish.allRecords')}</button>
+      {entries && <details><summary>{t('pilot.todayRecords')}</summary><p>{t('polish.recordedCountsOnly')}</p>
+        <p>{t('dashboard.todayFeeds')}: {entries.filter(entry => entry.entry_type === 'feeding').length} · {t('dashboard.diaperChanges')}: {entries.filter(entry => entry.entry_type === 'diaper').length}</p>
+        <p>{t('pilot.totalSleep')}: {entries.reduce((total, entry) => total + (entry.entry_type === 'sleep' ? entry.sleep_duration_minutes || 0 : 0), 0)}</p>
+      </details>}
     </section>
-    <section className="pilot-panel">
-      <h3>{t('pilot.startWithSituation')}</h3>
-      <div className="pilot-actions">
-        {['crying', 'feeding', 'rest', 'appointment'].map(scene => <button key={scene} className="pilot-button secondary"
-          onClick={() => onNavigate('chat', t(`pilot.questions.${scene}`))}>{t(`pilot.scenes.${scene}`)}</button>)}
-      </div>
-    </section>
-    <div className="pilot-actions">
-      <button className="pilot-button secondary" onClick={() => onNavigate('checkin')}><Heart size={18} />{t('checkin.title')}</button>
-      <button className="pilot-button secondary" onClick={onNightMode}><Moon size={18} />{t('nightMode.title')}</button>
+    <div className="pilot-actions family-secondary-actions">
+      <button className="pilot-button secondary" onClick={() => onNavigate('chat')}>{t('pilot.askTitle')}</button>
+      <button className="pilot-button secondary" onClick={() => onNavigate('support')}>{t('pilot.supportTitle')}</button>
+      <button className="pilot-button secondary" onClick={() => onNavigate('family')}>{t('polish.familyHandoff')}</button>
     </div>
+    <details className="pilot-panel"><summary>{t('polish.selfCare')}</summary>
+      <button className="pilot-button secondary" onClick={() => onNavigate('checkin')}>{t('checkin.title')}</button>
+    </details>
+    <RecordingExample />
   </div>
 }

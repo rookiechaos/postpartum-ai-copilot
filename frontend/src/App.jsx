@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import api from './utils/api'
+import useEntranceNavigation from './utils/useEntranceNavigation'
+import { applyDisplaySettings, readDisplaySettings } from './utils/displaySettings'
 import ChatInterface from './components/ChatInterface'
 import TrackingPanel from './components/TrackingPanel'
 import NightMode from './components/NightMode'
@@ -11,46 +13,32 @@ import Settings from './components/Settings'
 import WelcomeScreen from './components/WelcomeScreen'
 import EntryScreen from './components/EntryScreen'
 import OrganizationPortal from './components/OrganizationPortal'
+import FamilySharing from './components/FamilySharing'
 import SupportDirectory from './components/SupportDirectory'
 import ShareSummary from './components/ShareSummary'
 import InstallPrompt from './components/InstallPrompt'
 import LanguageSelector from './components/LanguageSelector'
-import FeedbackWidget from './components/FeedbackWidget'
+import OperatorPortal from './components/OperatorPortal'
 import Auth from './components/Auth'
 import { Home, MessageCircle, BarChart3, Phone, Settings as SettingsIcon, Moon } from 'lucide-react'
 import './App.css'
 import './components/Pilot.css'
+import './components/ProductFlows.css'
 
 function App() {
   const { t } = useTranslation()
   const [authChecked, setAuthChecked] = useState(false)
   const [userId, setUserId] = useState(null)
   const [sessionKey, setSessionKey] = useState(0)
-  const [entry, setEntry] = useState(() => {
-    const path = window.location?.pathname
-    return path === '/family' ? 'family' : path === '/organization' ? 'organization' : null
-  })
-
-  const chooseEntry = value => {
-    window.history.pushState({}, '', value ? `/${value}` : '/')
-    setEntry(value)
-  }
-
-  useEffect(() => {
-    const onPopState = () => {
-      const path = window.location.pathname
-      setEntry(path === '/family' ? 'family' : path === '/organization' ? 'organization' : null)
-    }
-    window.addEventListener('popstate', onPopState)
-    return () => window.removeEventListener('popstate', onPopState)
-  }, [])
-
+  const { entry, navigate: chooseEntry, registerLeaveGuard, clearLeaveGuard } = useEntranceNavigation()
+  useEffect(() => { applyDisplaySettings(readDisplaySettings()) }, [])
   useEffect(() => {
     let active = true
     let generation = 0
     const clearAccount = () => {
       generation++
       if (!active) return
+      clearLeaveGuard()
       setUserId(null)
       setSessionKey(key => key + 1)
       setAuthChecked(true)
@@ -105,8 +93,9 @@ function App() {
   }
   if (!entry) return <EntryScreen onChoose={chooseEntry} />
   if (!userId) return <Auth entry={entry} onBack={() => chooseEntry(null)} onSuccess={setUserId} />
+  if (entry === 'operator') return <OperatorPortal key={`${sessionKey}:${userId}:operator`} onExit={() => chooseEntry(null)} />
   if (entry === 'organization') return <OrganizationPortal key={`${sessionKey}:${userId}:organization`}
-    userId={userId} onFamily={() => chooseEntry('family')} onExit={() => chooseEntry(null)} />
+    userId={userId} registerLeaveGuard={registerLeaveGuard} onFamily={() => chooseEntry('family')} onExit={() => chooseEntry(null)} />
   return <AuthenticatedApp key={`${sessionKey}:${userId}:family`} userId={userId} onChooseEntry={chooseEntry} />
 }
 
@@ -119,6 +108,12 @@ function AuthenticatedApp({ userId, onChooseEntry }) {
   const [userContext, setUserContext] = useState(null)
   const [trackingRequest, setTrackingRequest] = useState(null)
   const [chatDraft, setChatDraft] = useState('')
+  const [chatRequestKey, setChatRequestKey] = useState(0)
+  const [trackingRequestKey, setTrackingRequestKey] = useState(0)
+  const [visitedTabs, setVisitedTabs] = useState(['dashboard'])
+  const [recordVersion, setRecordVersion] = useState(0)
+  const [sheetRequest, setSheetRequest] = useState('')
+  const [sheetRequestKey, setSheetRequestKey] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -152,7 +147,7 @@ function AuthenticatedApp({ userId, onChooseEntry }) {
       } else if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
         e.preventDefault()
         // Open help
-        setActiveTab('settings')
+        navigate('settings')
         // Trigger help tab if available
         const helpButton = document.querySelector('[data-tab="help"]')
         if (helpButton) {
@@ -179,8 +174,7 @@ function AuthenticatedApp({ userId, onChooseEntry }) {
     localStorage.setItem(`hasCompletedWelcome:${userId}`, 'true')
     setUserContext(saved.context)
     setShowWelcome(false)
-    setTrackingRequest('feeding')
-    setActiveTab('tracking')
+    navigate('dashboard')
   }
 
   const handleContextUpdate = (newContext) => {
@@ -188,17 +182,15 @@ function AuthenticatedApp({ userId, onChooseEntry }) {
   }
 
   const navigate = (tab, detail) => {
-    if (tab === 'tracking') setTrackingRequest(detail || null)
-    if (tab === 'chat') setChatDraft(detail || '')
+    if (tab === 'tracking' && detail) { setTrackingRequest(detail); setTrackingRequestKey(value => value + 1) }
+    if (tab === 'chat' && detail) { setChatDraft(detail); setChatRequestKey(value => value + 1) }
+    if (tab === 'support' && detail) { setSheetRequest(detail); setSheetRequestKey(value => value + 1) }
+    setVisitedTabs(previous => previous.includes(tab) ? previous : [...previous, tab])
     setActiveTab(tab)
   }
 
   if (showWelcome) {
     return <WelcomeScreen onComplete={handleWelcomeComplete} onExit={() => onChooseEntry(null)} />
-  }
-
-  if (nightMode) {
-    return <NightMode userId={userId} onExit={() => setNightMode(false)} />
   }
 
   const tabs = [
@@ -210,7 +202,7 @@ function AuthenticatedApp({ userId, onChooseEntry }) {
   ]
 
   return (
-    <div className="app">
+    <><div className="app family-app" hidden={nightMode}>
       <header className="app-header">
         <div className="header-content">
           <h1>🤱 {t('app.title')}</h1>
@@ -236,6 +228,7 @@ function AuthenticatedApp({ userId, onChooseEntry }) {
         {tabs.map((tab) => (
           <button
             key={tab.id}
+            id={`family-tab-${tab.id}`}
             className={activeTab === tab.id ? 'active' : ''}
             onClick={() => navigate(tab.id)}
             aria-current={activeTab === tab.id ? 'page' : undefined}
@@ -247,33 +240,34 @@ function AuthenticatedApp({ userId, onChooseEntry }) {
       </nav>
 
       <main className="app-main">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.3 }}
-          >
-            {activeTab === 'dashboard' && (
-              <Dashboard userId={userId} userContext={userContext} onNavigate={navigate} onNightMode={() => setNightMode(true)} />
+        {visitedTabs.map(tab => <section key={tab} className="family-tab-panel" hidden={activeTab !== tab}
+          aria-labelledby={tabs.some(item => item.id === tab) ? `family-tab-${tab}` : undefined}
+          aria-label={tab === 'checkin' ? t('checkin.title') : tab === 'family' ? t('polish.familyHandoff') : undefined}>
+            {tab === 'dashboard' && (
+              <Dashboard userId={userId} userContext={userContext} refreshKey={recordVersion} visible={activeTab === 'dashboard' && !nightMode}
+                onNavigate={navigate} onRecordsChanged={() => setRecordVersion(value => value + 1)} />
             )}
-            {activeTab === 'chat' && <ChatInterface userId={userId} initialDraft={chatDraft} />}
-            {activeTab === 'tracking' && <TrackingPanel userId={userId} initialEntryType={trackingRequest} />}
-            {activeTab === 'checkin' && <EmotionalCheckIn userId={userId} />}
-            {activeTab === 'support' && <><SupportDirectory /><ShareSummary userId={userId} /></>}
-            {activeTab === 'settings' && (
+            {tab === 'chat' && <ChatInterface userId={userId} initialDraft={chatDraft} draftVersion={chatRequestKey} visible={activeTab === 'chat' && !nightMode}
+              onPrepareSheet={script => navigate('support', script)} />}
+            {tab === 'tracking' && <TrackingPanel userId={userId} initialEntryType={trackingRequest} requestKey={trackingRequestKey}
+              visible={activeTab === 'tracking' && !nightMode}
+              onRecordsChanged={() => setRecordVersion(value => value + 1)} />}
+            {tab === 'checkin' && <EmotionalCheckIn userId={userId} />}
+            {tab === 'support' && <><SupportDirectory visible={activeTab === 'support' && !nightMode} onPrepareSheet={script => navigate('support', script)} />
+              <ShareSummary userId={userId} refreshKey={recordVersion} initialQuestion={sheetRequest} requestKey={sheetRequestKey} /></>}
+            {tab === 'family' && <FamilySharing userId={userId} refreshKey={recordVersion} visible={activeTab === 'family' && !nightMode} />}
+            {tab === 'settings' && (
               <Settings
                 userId={userId}
                 onContextUpdate={handleContextUpdate}
                 onLogout={() => api.logout()}
+                onFindHelp={() => navigate('support')}
               />
             )}
-          </motion.div>
-        </AnimatePresence>
+          </section>)}
       </main>
-      <InstallPrompt />
-    </div>
+      <InstallPrompt ready={recordVersion > 0} />
+    </div>{nightMode && <NightMode userId={userId} onExit={() => setNightMode(false)} />}</>
   )
 }
 

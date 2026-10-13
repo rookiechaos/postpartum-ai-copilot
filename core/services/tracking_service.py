@@ -6,14 +6,82 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc, or_
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
-from models.database import TrackingEntryDB, UserContextDB
-from models.schemas import TrackingEntry
-from exceptions import DatabaseError, ValidationError
+from hashlib import sha256
+import json
+from sqlalchemy.exc import IntegrityError
+from models.database import TrackingEntryDB, TrackingWriteDB, UserContextDB
+from models.schemas import TrackingEntry, TrackingEntryUpdate
+from exceptions import DatabaseError, ValidationError, NotFoundError, ConflictError
 from utils.db_helpers import query_in_executor
+from services.tracking_policy import validate_record_time
 
 
 class TrackingService:
     """Service for managing tracking data"""
+
+    async def update_entry(self, entry_id: int, user_id: str, entry: TrackingEntryUpdate, db: Session) -> Dict[str, Any]:
+        """Replace an owned record; record identity and ownership are immutable."""
+        timestamp = validate_record_time(entry.timestamp) if entry.timestamp is not None else None
+
+        def _update_entry():
+            record = db.query(TrackingEntryDB).filter(
+                TrackingEntryDB.id == entry_id, TrackingEntryDB.user_id == user_id
+            ).first()
+            if record is None:
+                db.rollback()
+                return "missing", None
+            if record.record_key != str(entry.record_key) or record.revision != entry.revision:
+                db.rollback()
+                return "conflict", None
+            values = entry.model_dump(exclude={"id", "user_id", "record_key", "revision", "timestamp"}, mode="python")
+            values = {key: value.value if hasattr(value, "value") else value for key, value in values.items()}
+            values.update(timestamp=timestamp or record.timestamp, revision=entry.revision + 1)
+            # Snapshot before committing; never refetch a possibly reused numeric ID.
+            result = self._entry_to_dict(record)
+            result.update(values)
+            result["timestamp"] = values["timestamp"].isoformat()
+            affected = db.query(TrackingEntryDB).filter(
+                TrackingEntryDB.id == entry_id, TrackingEntryDB.user_id == user_id,
+                TrackingEntryDB.record_key == str(entry.record_key), TrackingEntryDB.revision == entry.revision,
+            ).update(values, synchronize_session=False)
+            if affected != 1:
+                db.rollback()
+                return "conflict", None
+            db.commit()
+            return "updated", result
+
+        status, result = await query_in_executor(_update_entry, db, error_message="Failed to update tracking entry")
+        if status == "missing":
+            raise NotFoundError("Tracking entry not found")
+        if status == "conflict":
+            raise ConflictError("Tracking entry has changed; reload it before editing")
+        return result
+
+    async def delete_entry(self, entry_id: int, user_id: str, record_key: str, revision: int, db: Session) -> Dict[str, Any]:
+        """Delete only the caller's record without returning another owner's data."""
+        def _delete_entry():
+            record = db.query(TrackingEntryDB).filter(
+                TrackingEntryDB.id == entry_id, TrackingEntryDB.user_id == user_id
+            ).first()
+            if record is None:
+                db.rollback()
+                return "missing"
+            affected = db.query(TrackingEntryDB).filter(
+                TrackingEntryDB.id == entry_id, TrackingEntryDB.user_id == user_id,
+                TrackingEntryDB.record_key == record_key, TrackingEntryDB.revision == revision,
+            ).delete(synchronize_session=False)
+            if affected != 1:
+                db.rollback()
+                return "conflict"
+            db.commit()
+            return "deleted"
+
+        result = await query_in_executor(_delete_entry, db, error_message="Failed to delete tracking entry")
+        if result == "missing":
+            raise NotFoundError("Tracking entry not found")
+        if result == "conflict":
+            raise ConflictError("Tracking entry has changed; reload it before deleting")
+        return {"deleted": True}
     
     async def add_entry(
         self,
@@ -21,10 +89,31 @@ class TrackingService:
         db: Session
     ) -> Dict[str, Any]:
         """Add a new tracking entry"""
+        timestamp = validate_record_time(entry.timestamp)
+        request_key = str(entry.request_key) if getattr(entry, "request_key", None) else None
+        if request_key and entry.timestamp is None:
+            raise ValidationError("Retryable writes require an explicit record timestamp")
+        values = entry.model_dump(exclude={"id", "user_id", "record_key", "revision", "request_key"}, mode="json")
+        values["timestamp"] = timestamp.isoformat()
+        fingerprint = sha256(json.dumps(values, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+        def _receipt():
+            receipt = db.get(TrackingWriteDB, (entry.user_id, request_key))
+            if receipt is None:
+                return None
+            if receipt.fingerprint != fingerprint:
+                return "conflict", None
+            present = db.query(TrackingEntryDB.id).filter(
+                TrackingEntryDB.user_id == entry.user_id, TrackingEntryDB.record_key == receipt.record_key,
+            ).first()
+            return ("saved", receipt.result) if present else ("deleted", None)
+
         def _add_entry():
-            timestamp = entry.timestamp or datetime.utcnow()
-            if timestamp.tzinfo is not None:
-                timestamp = timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+            if request_key:
+                previous = _receipt()
+                if previous is not None:
+                    db.rollback()
+                    return previous
             db_entry = TrackingEntryDB(
                 user_id=entry.user_id,
                 entry_type=entry.entry_type.value,
@@ -46,20 +135,38 @@ class TrackingService:
             )
             
             db.add(db_entry)
-            db.commit()
-            db.refresh(db_entry)
-            
-            return {
+            db.flush()
+            result = {
                 "id": db_entry.id,
+                "record_key": db_entry.record_key,
+                "revision": db_entry.revision,
                 "message": "Entry added successfully",
-                "timestamp": db_entry.timestamp.isoformat()
+                "timestamp": db_entry.timestamp.isoformat(),
             }
+            if request_key:
+                db.add(TrackingWriteDB(user_id=entry.user_id, request_key=request_key,
+                    fingerprint=fingerprint, record_key=db_entry.record_key, result=result))
+            try:
+                db.commit()
+            except IntegrityError:
+                db.rollback()
+                previous = _receipt() if request_key else None
+                if previous is None:
+                    raise
+                db.rollback()
+                return previous
+            return "saved", result
         
-        return await query_in_executor(
+        status, result = await query_in_executor(
             _add_entry,
             db,
             error_message="Failed to add tracking entry"
         )
+        if status == "conflict":
+            raise ConflictError("This save request already has different content")
+        if status == "deleted":
+            raise ConflictError("This save request belongs to a deleted record")
+        return result
     
     async def get_entries(
         self,
@@ -83,6 +190,14 @@ class TrackingService:
             error_message=f"Failed to get tracking entries for user {user_id}"
         )
     
+    async def get_latest_entries(self, user_id: str, db: Session) -> List[Dict[str, Any]]:
+        def _latest():
+            rows = db.query(TrackingEntryDB).filter(TrackingEntryDB.user_id == user_id,
+                TrackingEntryDB.timestamp >= datetime.utcnow() - timedelta(days=365),
+            ).order_by(desc(TrackingEntryDB.timestamp), desc(TrackingEntryDB.id)).limit(6).all()
+            return [self._entry_to_dict(row) for row in rows]
+        return await query_in_executor(_latest, db, error_message="Failed to load recent records")
+
     async def get_recent_entries(
         self,
         user_id: str,
@@ -237,6 +352,8 @@ class TrackingService:
         """Convert database entry to dictionary"""
         return {
             "id": entry.id,
+            "record_key": entry.record_key,
+            "revision": entry.revision,
             "user_id": entry.user_id,
             "entry_type": entry.entry_type,
             "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,

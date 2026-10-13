@@ -16,6 +16,7 @@ function EmotionalCheckIn({ userId }) {
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [acceptedAI, setAcceptedAI] = useState(false)
+  const [includeHistory, setIncludeHistory] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -26,6 +27,7 @@ function EmotionalCheckIn({ userId }) {
     try {
       const data = await api.postEmotionalCheckin({
         user_id: userId,
+        include_history: includeHistory,
         language: i18n.resolvedLanguage || i18n.language,
         overwhelmed_level: overwhelmed,
         anxiety_level: anxiety,
@@ -124,7 +126,8 @@ function EmotionalCheckIn({ userId }) {
             />
           </div>
 
-          <AIUseNotice accepted={acceptedAI} onChange={setAcceptedAI} />
+          <AIUseNotice scope="checkin" accepted={acceptedAI} onChange={setAcceptedAI} disabled={loading}
+            includeHistory={includeHistory} onHistoryChange={setIncludeHistory} />
           <button type="submit" disabled={loading || !acceptedAI} className="submit-button">
             {t(loading ? 'checkin.processing' : 'checkin.checkIn')}
           </button>

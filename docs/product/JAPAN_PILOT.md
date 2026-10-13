@@ -5,6 +5,10 @@
 The first deployment supports a small number of Japanese households and one local service directory.
 Use `/family` for personal care records and guided questions; use `/organization` for public information management.
 Both entrances share account authentication. Entrance selection does not grant privileges.
+An independent `/operator` area handles manual account/privacy requests and operational statistics for `ADMIN_USER_IDS` only.
+
+The seven current product improvements and their limits are in [PRODUCT_IMPROVEMENTS.md](PRODUCT_IMPROVEMENTS.md).
+This revision is source-only: no application, installation, build, tests, scanner, browser, print or QR execution was performed, as requested by the user.
 
 This release replaces the old nine-step tutorial with a two-step welcome flow. Optional profile information can be skipped.
 Skipped or unfilled welcome fields preserve existing profile data, including when returning from a new browser.
@@ -13,7 +17,10 @@ The home page keeps recording, guided questions and human support visible even w
 Record loading and saving do not invoke external moderation or AI summaries. AI actions require an explicit UI acknowledgement of external processing.
 This acknowledgement is an interaction safeguard, not a server-side legal consent ledger.
 Sleep charts show the total recorded minutes per Japan calendar day. Mood charts use the latest record for each day; a missing value stays blank.
-Saving a record refreshes open charts without resetting the selected time range. Night resources honor the current interface language, including regional tags such as `ja-JP`.
+Saving, correcting, deleting or restoring a record refreshes home/charts and invalidates the consultation preview without resetting chart range.
+Records accept a chosen JST time; deletion offers 8 seconds to recreate the most recent deleted entry from screen memory.
+Visited family panels stay mounted within one login session. Drafts and AI progress remain across page switches, and clear on reload, entrance changes or logout.
+Night resources honor the current interface language, including regional tags such as `ja-JP`.
 
 ## Organization access
 
@@ -21,6 +28,9 @@ Configure `INSTITUTION_USER_IDS` using verified staff account IDs, not email add
 The permission grants only GET/POST access to the deployment's public directory. Existing owner checks continue to protect private APIs.
 Organization editors do not receive family lists, chat histories, mood information or alerts.
 The family entrance link is a navigation link, not an invitation token, enrollment mechanism or consent to sharing.
+Templates fill only a name and area; staff verify real contact/source details. Publication requires a UI preview and is invalidated by further edits.
+QR generation is local to the browser; the public family link can be saved as an image or printed with a short getting-started guide.
+Missing/30-day-old review dates appear in a maintenance list and on family service cards. No review date is automatically invented or refreshed.
 
 All directory editors manage one shared profile. Deploy separate instances for separate organizations until tenant isolation is implemented.
 Public fields must contain business contacts and public source information only. URLs require HTTPS without embedded credentials.
@@ -43,17 +53,28 @@ Official sources checked for the product review on 2026-10-11:
 - [Children and Families Agency: maternal and child health](https://www.cfa.go.jp/policies/boshihoken).
 - [PPC: generative AI and personal information](https://www.ppc.go.jp/news/careful_information/230602_AI_utilize_alert/).
 
+The [Children and Families Agency's community parenting consultation guidance](https://www.cfa.go.jp/policies/kosodateshien/sodankikan) was also read for this change on 2026-10-13. It describes low-barrier, nearby consultation; it is not a live appointment directory.
+
 ## Sharing and retention
 
-The consultation summary is generated from the signed-in user's own recent tracking entries, without AI.
+The latest [product polish contracts](PRODUCT_POLISH.md) add quick saves/retries, explicit follow-up previews, optional account-bound recovery, telephone preparation, saved institution drafts/history and granular family handoff. These are source changes only; rollout and acceptance remain pending.
+
+The consultation sheet is generated from the signed-in user's own records for 3/7/14/30 Japan calendar days, without AI, with up to three user-written questions.
 By default, it includes feeding, diapers, baby sleep and pumping only. Parent mood/recovery and free text have separate opt-ins.
+Recorded counts, total recorded sleep and coverage days explicitly distinguish missing records from an absence of events. Detail inclusion is optional and limited to the latest five selected records.
 Identity fields, chat content and unknown record types are excluded. Users preview and can edit the actual text downloaded.
+Browser print/PDF is available for the reviewed sheet; length and browser settings determine pagination.
+Record or sharing-option changes retain manual text while disabling stale print/download. Regeneration offers an updated candidate; accepting it retains previous manual edits for copying outside the printable content. Full CSV backups keep every supported tracking field, including sleep quality, separately from the compact consultation sheet.
 Nothing is automatically posted to an institution. Downloaded copies cannot be revoked through the app.
 
-Records remain server-side. External AI features transmit the relevant input/context to the configured provider.
+Backdated writes cover today and the previous 364 Japan calendar days. Type changes retain the selected time and general note. Corrections/deletions require an immutable record identity and revision, so an old page cannot mutate a different record after SQLite reuses a numeric ID. An idempotent startup migration is included for existing databases but has not been executed or validated in this source-only task. Staff drafts also have an entrance/Back/Forward guard; canceling retains the current draft.
+
+Records remain server-side. Normal chat and record analysis send only the current input/default care fields plus explicitly selected personal attachments; names/account identity are excluded from automatically attached context.
+Configured content checking and reference search can also use OpenAI. The provider notice describes configuration rather than runtime availability.
 Sign-out and account changes clear private state in other open tabs and invalidate old responses. Same-account token refresh preserves the mounted page and active tasks.
 Operators must describe actual retention, processing and deletion-request handling in the public profile.
-The description does not implement automatic deletion. Self-service account erasure, password reset, granular institutional teams and institution messaging are not part of this release.
+The description does not implement automatic deletion. Manual recovery/deletion/privacy requests now return a reference for status lookup and an admin-only response queue.
+This queue does not perform credential changes or erase data. Self-service erasure/reset, granular institutional teams and institution messaging remain outside this release.
 Do not treat a text notice or a local deployment as proof that information stays on the device.
 
 ## Pilot acceptance
@@ -84,7 +105,9 @@ Existing security, task/session and privacy suites remain part of verification.
 HTTP regressions also verify that validation logs exclude passwords and health notes and that private record saving never calls external moderation.
 These tests do not establish clinical accuracy, a live provider integration, PostgreSQL compatibility or browser usability.
 
-### Validation of this change
+### Historical validation before these product changes
+
+The figures below were recorded for the previously published revision `452ccdd`. **None of these checks were re-run for the current changes.** New API fields, components and dependency behavior remain unverified at runtime. Use the pending [acceptance list](PRODUCT_IMPROVEMENTS.md#acceptance-still-to-perform) in a later authorized session.
 
 - 95 backend regression checks passed: 24 Japan pilot checks plus the existing 33 + 17 + 21 checks.
 - 72 frontend regression checks passed, including 20 Japan pilot and 14 follow-up review scenarios.

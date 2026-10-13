@@ -1,141 +1,54 @@
 import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
-import { Download, FileText, FileSpreadsheet, Loader } from 'lucide-react'
+import { japanDateTime, japanDay, utcDate } from '../utils/japanTime'
 import { useToast } from './Toast'
 import './ExportData.css'
 
-function ExportData({ userId }) {
-  const [exporting, setExporting] = useState(false)
-  const toast = useToast()
+// Backups preserve every supported record field; consultation formatting is intentionally compact.
+const backupFields = ['id', 'record_key', 'revision', 'user_id', 'entry_type', 'timestamp',
+  'feeding_type', 'duration_minutes', 'amount_ml', 'side', 'diaper_type', 'sleep_duration_minutes',
+  'sleep_quality', 'mood_level', 'mood_notes', 'pumped_amount_ml', 'weight_kg', 'breast_condition', 'recovery_notes', 'notes']
 
-  const exportToCSV = async () => {
-    setExporting(true)
-    try {
-      const entries = await api.getTracking(userId, 365)
-      // Convert to CSV
-      const headers = ['Date', 'Type', 'Details', 'Notes']
-      const rows = entries.map(entry => {
-        const date = new Date(entry.timestamp).toLocaleString()
-        const type = entry.entry_type
-        let details = ''
-        
-        switch(entry.entry_type) {
-          case 'feeding':
-            details = `Type: ${entry.feeding_type || 'N/A'}, Duration: ${entry.duration_minutes || 0}min, Amount: ${entry.amount_ml || 0}ml`
-            break
-          case 'diaper':
-            details = `Type: ${entry.diaper_type || 'N/A'}`
-            break
-          case 'sleep':
-            details = `Duration: ${entry.sleep_duration_minutes || 0}min, Quality: ${entry.sleep_quality || 'N/A'}`
-            break
-          case 'mood':
-            details = `Level: ${entry.mood_level || 'N/A'}, Notes: ${entry.mood_notes || 'N/A'}`
-            break
-          default:
-            details = 'N/A'
-        }
-        
-        return [date, type, details, entry.notes || '']
-      })
-
-      const csvContent = [
-        headers.join(','),
-        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-      ].join('\n')
-
-      // Download
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-      const link = document.createElement('a')
-      const url = URL.createObjectURL(blob)
-      link.setAttribute('href', url)
-      link.setAttribute('download', `postpartum-data-${new Date().toISOString().split('T')[0]}.csv`)
-      link.style.visibility = 'hidden'
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-
-      toast.success('Data exported successfully!')
-    } catch (error) {
-      console.error('Export error:', error)
-      toast.error('Failed to export data. Please try again.')
-    } finally {
-      setExporting(false)
-    }
-  }
-
-  const exportToJSON = async () => {
-    setExporting(true)
-    try {
-      const entries = await api.getTracking(userId, 365)
-      const data = {
-        exportDate: new Date().toISOString(),
-        userId: userId,
-        entries
-      }
-
-      const jsonContent = JSON.stringify(data, null, 2)
-      const blob = new Blob([jsonContent], { type: 'application/json' })
-      const link = document.createElement('a')
-      const url = URL.createObjectURL(blob)
-      link.setAttribute('href', url)
-      link.setAttribute('download', `postpartum-data-${new Date().toISOString().split('T')[0]}.json`)
-      link.style.visibility = 'hidden'
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-
-      toast.success('Data exported successfully!')
-    } catch (error) {
-      console.error('Export error:', error)
-      toast.error(error?.message || 'Failed to export data. Please try again.')
-    } finally {
-      setExporting(false)
-    }
-  }
-
-  return (
-    <div className="export-data">
-      <div className="export-header">
-        <h3>Export Your Data</h3>
-        <p>Download your tracking data for backup or sharing with healthcare providers</p>
-      </div>
-
-      <div className="export-options">
-        <button
-          className="export-button"
-          onClick={exportToCSV}
-          disabled={exporting}
-        >
-          {exporting ? (
-            <Loader className="spinner" size={20} />
-          ) : (
-            <FileSpreadsheet size={20} />
-          )}
-          <span>Export as CSV</span>
-          <small>Excel compatible</small>
-        </button>
-
-        <button
-          className="export-button"
-          onClick={exportToJSON}
-          disabled={exporting}
-        >
-          {exporting ? (
-            <Loader className="spinner" size={20} />
-          ) : (
-            <FileText size={20} />
-          )}
-          <span>Export as JSON</span>
-          <small>Raw data format</small>
-        </button>
-      </div>
-
-      <div className="export-info">
-        <p>💡 <strong>Tip:</strong> Exported data includes all your tracking entries. You can share this with your healthcare provider.</p>
-      </div>
-    </div>
-  )
+// Quote all cells and neutralize spreadsheet formula prefixes in user-authored text.
+const csvCell = value => {
+  let cell = String(value ?? '')
+  if (/^[\s\uFEFF]*[=+\-@]/u.test(cell) || /^[\t\r\n]/u.test(cell)) cell = `'${cell}`
+  return `"${cell.replaceAll('"', '""')}"`
 }
 
-export default ExportData
+export default function ExportData({ userId }) {
+  const { t, i18n } = useTranslation()
+  const [exporting, setExporting] = useState(false)
+  const toast = useToast()
+  const download = async format => {
+    if (exporting) return
+    setExporting(true)
+    try {
+      const entries = await api.getTracking(userId, 365)
+      const language = i18n.resolvedLanguage || 'ja'
+      let content
+      if (format === 'json') {
+        content = JSON.stringify({ exportDate: new Date().toISOString(), userId, entries }, null, 2)
+      } else {
+        const headers = [t('work.exportDate'), ...backupFields.map(key => `${t(`work.backupFields.${key}`)} (${key})`)]
+        const rows = entries.map(entry => [entry.timestamp ? japanDateTime(entry.timestamp, language) : '',
+          ...backupFields.map(key => key === 'timestamp' && entry.timestamp ? utcDate(entry.timestamp).toISOString() : entry[key])])
+        content = '\uFEFF' + [headers, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n')
+      }
+      const url = URL.createObjectURL(new Blob([content], { type: format === 'json' ? 'application/json' : 'text/csv;charset=utf-8' }))
+      const link = document.createElement('a')
+      link.href = url; link.download = `postpartum-backup-${japanDay(new Date())}.${format}`
+      document.body.appendChild(link); link.click(); link.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      toast.success(t('work.exportSuccess'))
+    } catch { toast.error(t('work.exportFailed')) }
+    finally { setExporting(false) }
+  }
+  return <section className="export-data">
+    <div className="export-header"><h3>{t('work.exportTitle')}</h3><p>{t('work.exportNotice')}</p></div>
+    <div className="export-options">{['csv', 'json'].map(format => <button key={format} className="export-button" disabled={exporting} onClick={() => download(format)}>
+      {exporting ? t('common.loading') : t(`work.exportFormats.${format}`)}
+    </button>)}</div>
+  </section>
+}

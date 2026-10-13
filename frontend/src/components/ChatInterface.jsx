@@ -4,9 +4,11 @@ import api from '../utils/api'
 import taskManager from '../utils/taskManager'
 import AIUseNotice from './AIUseNotice'
 import SupportDirectory from './SupportDirectory'
+import useAccountDraft from '../utils/useAccountDraft'
+import { DraftRecoveryNotice } from './DraftRecovery'
 import './ChatInterface.css'
 
-function ChatInterface({ userId, initialDraft = '' }) {
+function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = true, onPrepareSheet }) {
   const { t, i18n } = useTranslation()
   const [messages, setMessages] = useState([
     {
@@ -17,8 +19,20 @@ function ChatInterface({ userId, initialDraft = '' }) {
   ])
   const [input, setInput] = useState(initialDraft)
   const [acceptedAI, setAcceptedAI] = useState(false)
+  const [includeProfile, setIncludeProfile] = useState(false)
+  const [failed, setFailed] = useState(false)
   const [loading, setLoading] = useState(false)
   const [taskStatus, setTaskStatus] = useState(null)
+  const [followUp, setFollowUp] = useState(null)
+  const [includePrevious, setIncludePrevious] = useState(false)
+  const draft = useAccountDraft('chat', userId, input.trim() ? { input, followUp } : null, content => {
+    if (typeof content.input !== 'string') return false
+    setInput(content.input.slice(0, 5000))
+    const previous = content.followUp
+    setFollowUp(previous && typeof previous.previous_question === 'string' && typeof previous.previous_answer === 'string'
+      ? { previous_question: [...previous.previous_question].slice(0, 2000).join(''), previous_answer: [...previous.previous_answer].slice(0, 4000).join('') } : null)
+    setIncludePrevious(false); setIncludeProfile(false); setAcceptedAI(false)
+  })
   const messagesEndRef = useRef(null)
 
   const scrollToBottom = () => {
@@ -28,6 +42,8 @@ function ChatInterface({ userId, initialDraft = '' }) {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+  useEffect(() => { if (initialDraft) setInput(initialDraft) }, [draftVersion])
+  useEffect(() => { setAcceptedAI(false) }, [includeProfile])
 
   const sendMessage = async (e) => {
     e.preventDefault()
@@ -41,8 +57,10 @@ function ChatInterface({ userId, initialDraft = '' }) {
 
     setMessages(prev => [...prev, userMessage])
     const queryText = input
+    const selectedPrevious = includePrevious ? followUp : null
     setInput('')
     setLoading(true)
+    setFailed(false)
     setTaskStatus('pending')
 
     try {
@@ -53,8 +71,10 @@ function ChatInterface({ userId, initialDraft = '' }) {
         // Use task manager for async processing.
         const taskData = {
           query: queryText,
-          language: i18n.language,
-          user_id: userId
+          language: i18n.resolvedLanguage || 'ja',
+          include_profile: includeProfile,
+          include_previous: Boolean(selectedPrevious),
+          previous_exchange: selectedPrevious,
         }
         // Determine priority based on query content.
         let priority = 'medium'
@@ -67,11 +87,13 @@ function ChatInterface({ userId, initialDraft = '' }) {
             priority,
             timeout: 300000 // 5 minutes
           })
+          if (result.error) throw new Error('AI response unavailable')
           
           const assistantMessage = {
             role: 'assistant',
             generated: !result.error,
             content: result.response || result.text || '',
+            question: queryText,
             suggestions: result.suggestions || [],
             red_flags: result.red_flags || [],
             validation: result.validation || null,
@@ -89,13 +111,18 @@ function ChatInterface({ userId, initialDraft = '' }) {
         const response = await api.post('/api/chat', {
           query: queryText,
           user_id: userId,
-          language: i18n.language
+          language: i18n.resolvedLanguage || 'ja',
+          include_profile: includeProfile,
+          include_previous: Boolean(selectedPrevious),
+          previous_exchange: selectedPrevious,
         })
+        if (response.error) throw new Error('AI response unavailable')
 
         const assistantMessage = {
           role: 'assistant',
           generated: !response.error,
           content: response.response || response.text || '',
+          question: queryText,
           suggestions: response.suggestions || [],
           red_flags: response.red_flags || [],
           validation: response.validation || null,
@@ -105,9 +132,13 @@ function ChatInterface({ userId, initialDraft = '' }) {
         setMessages(prev => [...prev, assistantMessage])
         setTaskStatus('completed')
       }
+      setFollowUp(null); setIncludePrevious(false); setAcceptedAI(false)
+      await draft.clear()
     } catch (error) {
       console.error('Chat error:', error)
       setTaskStatus('failed')
+      setFailed(true)
+      setInput(current => current.trim() ? current : queryText)
       const errorMessage = {
         role: 'assistant',
         content: t('pilot.chatUnavailable'),
@@ -131,7 +162,12 @@ function ChatInterface({ userId, initialDraft = '' }) {
         </div>
         <p>{t('pilot.chatBoundary')}</p>
       </div>
-      <details className="chat-support"><summary>{t('pilot.supportTitle')}</summary><SupportDirectory compact /></details>
+      <details className="chat-support"><summary>{t('work.humanHelp')}</summary><SupportDirectory visible={visible} onPrepareSheet={onPrepareSheet} /></details>
+      <p className="session-note">{t('work.sessionDraftNotice')}</p>
+      <DraftRecoveryNotice draft={draft} disabled={loading} />
+      {(input.trim() || followUp || draft.hasSavedDraft) && <button type="button" className="pilot-button secondary" disabled={loading} onClick={() => {
+        if (window.confirm(t('polish.deleteChatDraftConfirm'))) { setInput(''); setFollowUp(null); setIncludePrevious(false); setAcceptedAI(false); draft.clear() }
+      }}>{t('polish.deleteDraft')}</button>}
       <div className="chat-messages">
         {messages.map((msg, idx) => (
           <div key={idx} className={`message ${msg.role}`}>
@@ -160,7 +196,12 @@ function ChatInterface({ userId, initialDraft = '' }) {
                 </ul>
               </div>
             )}
-            {msg.generated && <small className="ai-label">{t('pilot.aiLabel')}</small>}
+            {msg.generated && <><small className="ai-label">{t('pilot.aiLabel')}</small>
+              {msg.question && msg.content && <button type="button" className="pilot-button secondary" disabled={loading} onClick={() => {
+                setFollowUp({ previous_question: [...msg.question].slice(0, 2000).join(''), previous_answer: [...msg.content].slice(0, 4000).join('') })
+                setIncludePrevious(false); setAcceptedAI(false)
+              }}>{t('polish.continueQuestion')}</button>}
+            </>}
           </div>
         ))}
             {loading && (
@@ -186,10 +227,29 @@ function ChatInterface({ userId, initialDraft = '' }) {
         <div ref={messagesEndRef} />
       </div>
 
-      <AIUseNotice accepted={acceptedAI} onChange={setAcceptedAI} />
+      {loading && <p role="status">{t('work.chatWaiting')}</p>}
+      {failed && <div role="alert"><p>{t('work.retryDraft')}</p>
+        <button className="pilot-button secondary" disabled={!acceptedAI || loading || !input.trim()} onClick={sendMessage}>{t('work.retrySend')}</button>
+      </div>}
+      {followUp && <section className="pilot-panel follow-up-preview"><h3>{t('polish.followUpTitle')}</h3>
+        <p>{t('polish.followUpNotice')}</p><details open><summary>{t('polish.previousExchange')}</summary>
+          <p>{t('polish.previousQuestion')}</p><pre>{followUp.previous_question}</pre>
+          <p>{t('polish.previousAnswer')}</p><pre>{followUp.previous_answer}</pre>
+        </details>
+        <label><input type="checkbox" disabled={loading} checked={includePrevious} onChange={event => {
+          setIncludePrevious(event.target.checked); setAcceptedAI(false)
+        }} />{t('polish.confirmPrevious')}</label>
+        <button type="button" disabled={loading} onClick={() => { setFollowUp(null); setIncludePrevious(false); setAcceptedAI(false) }}>{t('polish.removePrevious')}</button>
+      </section>}
+      <details className="pilot-panel"><summary>{t('polish.actualSubmission')}</summary><p>{t('polish.currentQuestion')}</p><pre>{input || t('pilot.notProvided')}</pre>
+        <p>{t(includePrevious && followUp ? 'polish.previousIncluded' : 'polish.previousExcluded')}</p>
+      </details>
+      <AIUseNotice accepted={acceptedAI} onChange={setAcceptedAI} disabled={loading}
+        includeProfile={includeProfile} onProfileChange={setIncludeProfile} />
       <form className="chat-input-form" onSubmit={sendMessage}>
         <input
           type="text"
+          maxLength={5000}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={t('chat.placeholder')}

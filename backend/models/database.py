@@ -6,6 +6,7 @@ from sqlalchemy import create_engine, Column, String, Integer, Float, DateTime, 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from datetime import datetime
+from uuid import uuid4
 from pathlib import Path
 from sqlalchemy.engine import make_url
 from config.settings import get_settings
@@ -46,6 +47,8 @@ class TrackingEntryDB(Base):
     __tablename__ = "tracking_entries"
     
     id = Column(Integer, primary_key=True, index=True)
+    record_key = Column(String(36), nullable=False, default=lambda: str(uuid4()))
+    revision = Column(Integer, nullable=False, default=1, server_default="1")
     user_id = Column(String, index=True)
     entry_type = Column(String)
     timestamp = Column(DateTime, default=datetime.utcnow)
@@ -81,6 +84,7 @@ class TrackingEntryDB(Base):
     # Composite indexes for common query patterns
     __table_args__ = (
         Index('idx_tracking_user_timestamp', 'user_id', 'timestamp'),
+        Index('uq_tracking_record_key', 'record_key', unique=True),
     )
 
 
@@ -92,6 +96,68 @@ class PilotProfileDB(Base):
     profile = Column(JSON, nullable=False)
     updated_by = Column(String, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class TrackingWriteDB(Base):
+    """Durable creation receipts, including after a record is deleted."""
+    __tablename__ = "tracking_writes"
+    user_id = Column(String, primary_key=True)
+    request_key = Column(String(36), primary_key=True)
+    fingerprint = Column(String(64), nullable=False)
+    record_key = Column(String(36), nullable=False)
+    result = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class DraftPreferenceDB(Base):
+    __tablename__ = "draft_preferences"
+    user_id = Column(String, primary_key=True)
+    enabled = Column(Boolean, default=False, nullable=False)
+    revision = Column(Integer, default=1, nullable=False)
+
+
+class UserDraftDB(Base):
+    __tablename__ = "user_drafts"
+    user_id = Column(String, primary_key=True)
+    kind = Column(String, primary_key=True)
+    content = Column(JSON, nullable=False)
+    revision = Column(Integer, nullable=False, default=1)
+    cleared = Column(Boolean, nullable=False, default=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class DirectoryWorkspaceDB(Base):
+    __tablename__ = "directory_workspaces"
+    id = Column(String, primary_key=True)
+    profile = Column(JSON, nullable=False)
+    revision = Column(Integer, nullable=False, default=1)
+    updated_by = Column(String, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class DirectoryHistoryDB(Base):
+    __tablename__ = "directory_history"
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    profile = Column(JSON, nullable=False)
+    revision = Column(Integer, nullable=False)
+    published_by = Column(String, nullable=False)
+    published_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+class AccountRequestDB(Base):
+    """Private manual-support queue. A random reference exposes status only."""
+    __tablename__ = "account_requests"
+
+    reference = Column(String, primary_key=True)
+    user_id = Column(String, nullable=True, index=True)
+    contact_email = Column(String, nullable=False)
+    kind = Column(String, nullable=False)
+    language = Column(String, nullable=False, default="ja")
+    status = Column(String, nullable=False, default="received", index=True)
+    public_response = Column(Text, nullable=False, default="")
+    updated_by = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class UserContextDB(Base):
@@ -208,6 +274,7 @@ class FamilyMemberDB(Base):
     role = Column(String, nullable=False, default="member")  # owner, admin, member, viewer
     invited_by = Column(String, nullable=True)  # user_id of inviter
     status = Column(String, default="pending")  # pending, active, inactive
+    revision = Column(Integer, nullable=False, default=1, server_default="1")
     permissions = Column(JSON, nullable=True)  # Custom permissions
     joined_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
@@ -216,6 +283,7 @@ class FamilyMemberDB(Base):
     # Composite indexes for common query patterns
     __table_args__ = (
         Index('idx_family_member_family_user', 'family_id', 'user_id'),
+        Index('uq_family_member_family_user', 'family_id', 'user_id', unique=True),
     )
 
 
@@ -393,3 +461,5 @@ def init_db():
     )
     
     Base.metadata.create_all(bind=engine)
+    from utils.tracking_migrations import migrate_tracking_identity
+    migrate_tracking_identity(engine)

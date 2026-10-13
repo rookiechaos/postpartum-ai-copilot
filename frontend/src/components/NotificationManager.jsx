@@ -1,256 +1,70 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Bell, BellOff, Clock, X } from 'lucide-react'
-import { useToast } from './Toast'
+import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 import websocketManager from '../utils/websocketManager'
+import { japanDateTime } from '../utils/japanTime'
 import './NotificationManager.css'
 
-function NotificationManager({ userId }) {
-  const [enabled, setEnabled] = useState(false)
-  const [permission, setPermission] = useState('default')
+export default function NotificationManager({ userId }) {
+  const { t, i18n } = useTranslation()
+  const [permission, setPermission] = useState(() => 'Notification' in window ? Notification.permission : 'unsupported')
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(false)
-  const toast = useToast()
-
+  const [error, setError] = useState('')
+  const load = useCallback(async () => {
+    setLoading(true); setError('')
+    try { setNotifications(await api.get('/api/notifications/?include_sent=false&limit=100')) }
+    catch { setError(t('pilot.loadFailed')) }
+    finally { setLoading(false) }
+  }, [userId, t])
+  useEffect(() => { load() }, [load])
   useEffect(() => {
-    checkPermission()
-    loadNotifications()
-    setupWebSocket()
-    
-    return () => {
-      websocketManager.off('notification', handleWebSocketNotification)
-    }
-  }, [userId])
-
-  const setupWebSocket = () => {
-    const token = localStorage.getItem('access_token')
-    if (token) {
-      websocketManager.connect(token)
-      websocketManager.on('notification', handleWebSocketNotification)
-    }
-  }
-
-  const handleWebSocketNotification = useCallback((notificationData) => {
-    // Show browser notification
-    if (permission === 'granted') {
-      showNotification(notificationData.title, {
-        body: notificationData.message,
-        icon: '/icon-192x192.png',
-        tag: `notification-${notificationData.notification_id}`,
-        data: notificationData.action_url
-      })
-    }
-    
-    // Reload notifications
-    loadNotifications()
-  }, [permission])
-
-  const checkPermission = () => {
-    if ('Notification' in window) {
-      setPermission(Notification.permission)
-      setEnabled(Notification.permission === 'granted')
-    }
-  }
-
-  const requestPermission = async () => {
-    if (!('Notification' in window)) {
-      toast.warning('Your browser does not support notifications')
-      return
-    }
-
-    try {
-      const permission = await Notification.requestPermission()
-      setPermission(permission)
-      setEnabled(permission === 'granted')
-      
-      if (permission === 'granted') {
-        toast.success('Notifications enabled!')
-        // Show a test notification
-        showNotification('Notifications Enabled', {
-          body: 'You will now receive reminders for feeding, check-ins, and more.',
-          icon: '/icon-192x192.png'
+    const visible = new Set()
+    const receive = data => {
+      load()
+      if (permission !== 'granted') return
+      try {
+        // Keep care details off the lock screen; the user can open the authenticated app.
+        const notification = new Notification(t('notifications.genericTitle'), {
+          body: t('notifications.genericBody'), icon: '/icon-192x192.png',
+          tag: `notification-${data.notification_id}`,
         })
-      } else {
-        toast.warning('Notification permission denied')
-      }
-    } catch (error) {
-      console.error('Error requesting notification permission:', error)
-      toast.error('Failed to enable notifications')
+        visible.add(notification)
+        notification.onclose = () => visible.delete(notification)
+        notification.onclick = () => { window.focus(); notification.close() }
+      } catch { setError(t('notifications.failed')) }
     }
+    const token = localStorage.getItem('access_token')
+    if (token) websocketManager.connect(token)
+    websocketManager.on('notification', receive)
+    return () => { websocketManager.off('notification', receive); visible.forEach(item => item.close()) }
+  }, [permission, load, t])
+  const requestPermission = async () => {
+    setError('')
+    try { setPermission(await Notification.requestPermission()) }
+    catch { setError(t('notifications.permissionFailed')) }
   }
-
-  const showNotification = useCallback((title, options = {}) => {
-    if (!enabled || permission !== 'granted') return
-
-    const notification = new Notification(title, {
-      icon: '/icon-192x192.png',
-      badge: '/icon-192x192.png',
-      tag: 'postpartum-copilot',
-      requireInteraction: false,
-      ...options
-    })
-
-    notification.onclick = () => {
-      window.focus()
-      notification.close()
-    }
-
-    return notification
-  }, [enabled, permission])
-
-  const loadNotifications = async () => {
-    if (!userId) return
-    
+  const disable = async id => {
+    if (loading) return
     setLoading(true)
-    try {
-      const data = await api.get('/api/notifications?include_sent=false&limit=100')
-      setNotifications(data || [])
-    } catch (error) {
-      console.error('Failed to load notifications:', error)
-      toast.error('Failed to load notifications')
-    } finally {
-      setLoading(false)
-    }
+    try { await api.delete(`/api/notifications/${encodeURIComponent(id)}`); await load() }
+    catch { setError(t('notifications.failed')) }
+    finally { setLoading(false) }
   }
-
-  const createSmartFeedingReminder = async () => {
-    try {
-      await api.post('/api/notifications/smart/feeding', { based_on_history: true })
-      toast.success('Smart feeding reminder created!')
-      loadNotifications()
-    } catch (error) {
-      console.error('Failed to create feeding reminder:', error)
-      toast.error('Failed to create reminder')
-    }
-  }
-
-  const createMoodCheckinReminder = async () => {
-    try {
-      await api.post('/api/notifications/smart/mood-check', { time_of_day: 'evening' })
-      toast.success('Mood check-in reminder created!')
-      loadNotifications()
-    } catch (error) {
-      console.error('Failed to create mood check-in reminder:', error)
-      toast.error('Failed to create reminder')
-    }
-  }
-
-  const disableNotification = async (notificationId) => {
-    try {
-      await api.delete(`/api/notifications/${notificationId}`)
-      toast.success('Reminder disabled')
-      loadNotifications()
-    } catch (error) {
-      console.error('Failed to disable notification:', error)
-      toast.error('Failed to disable reminder')
-    }
-  }
-
-  // Format scheduled time for display
-  const formatScheduledTime = (isoString) => {
-    const date = new Date(isoString)
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-  }
-
-  const getReminderBody = (type) => {
-    const bodies = {
-      feeding: 'Time for a feeding! 💙',
-      checkin: 'How are you feeling today? 💚',
-      diaper: 'Check diaper status 👶',
-      sleep: 'Time to track sleep 😴'
-    }
-    return bodies[type] || 'Reminder'
-  }
-
-  return (
-    <div className="notification-manager">
-      <div className="notification-header">
-        <h3>🔔 Notifications & Reminders</h3>
-        <p>Get reminders for feeding, check-ins, and more</p>
-      </div>
-
-      <div className="notification-permission">
-        <div className="permission-status">
-          <div className="permission-info">
-            <Bell size={24} className={enabled ? 'enabled' : 'disabled'} />
-            <div>
-              <strong>Notification Status</strong>
-              <p>{permission === 'granted' ? 'Enabled' : permission === 'denied' ? 'Denied' : 'Not Set'}</p>
-            </div>
-          </div>
-          {permission !== 'granted' && (
-            <button onClick={requestPermission} className="enable-button">
-              {permission === 'denied' ? 'Change in Browser Settings' : 'Enable Notifications'}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {enabled && (
-        <div className="reminders-section">
-          <div className="reminders-header">
-            <h4>Scheduled Reminders</h4>
-            <div className="reminder-actions">
-              <button onClick={createSmartFeedingReminder} className="add-reminder-btn" disabled={loading}>
-                + Smart Feeding Reminder
-              </button>
-              <button onClick={createMoodCheckinReminder} className="add-reminder-btn" disabled={loading}>
-                + Mood Check-in
-              </button>
-            </div>
-          </div>
-
-          <div className="reminders-list">
-            {loading ? (
-              <p className="no-reminders">Loading...</p>
-            ) : notifications.length === 0 ? (
-              <p className="no-reminders">No reminders set. Create one to get started!</p>
-            ) : (
-              notifications
-                .filter(n => n.is_enabled && !n.is_sent)
-                .map(notification => (
-                  <div key={notification.id} className="reminder-item">
-                    <div className="reminder-content">
-                      <div className="reminder-toggle">
-                        <Clock size={18} />
-                        <span>{formatScheduledTime(notification.scheduled_time)}</span>
-                      </div>
-                      <div className="reminder-details">
-                        <strong>{notification.title}</strong>
-                        <p>{notification.message}</p>
-                        <span className="reminder-type">{notification.notification_type}</span>
-                        {notification.is_recurring && (
-                          <span className="recurring-badge">Recurring: {notification.recurrence_pattern}</span>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => disableNotification(notification.id)}
-                      className="delete-reminder"
-                      aria-label="Disable reminder"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-                ))
-            )}
-          </div>
-        </div>
-      )}
-
-      {!enabled && (
-        <div className="notification-info">
-          <p>Enable notifications to receive helpful reminders for:</p>
-          <ul>
-            <li>Feeding schedules</li>
-            <li>Daily check-ins</li>
-            <li>Diaper changes</li>
-            <li>Sleep tracking</li>
-          </ul>
-        </div>
-      )}
-    </div>
-  )
+  const pending = notifications.filter(item => item.is_enabled && !item.is_sent)
+  return <section className="notification-manager">
+    <div className="notification-header"><h3>{t('notifications.title')}</h3><p>{t('notifications.description')}</p></div>
+    <p>{t('notifications.status')}: {t(`notifications.${permission}`)}</p>
+    {permission === 'default' && <button className="pilot-button secondary" onClick={requestPermission}>{t('notifications.enable')}</button>}
+    {permission === 'denied' && <p>{t('notifications.browserSettings')}</p>}
+    <p>{t('notifications.privacy')}</p>
+    {error && <p role="alert">{error} <button disabled={loading} onClick={load}>{t('pilot.retry')}</button></p>}
+    <h4>{t('notifications.scheduled')}</h4>
+    {loading ? <p role="status">{t('common.loading')}</p> : pending.length === 0 ? <p>{t('notifications.empty')}</p> : pending.map(item =>
+      <article className="reminder-item" key={item.id}><div>
+        <strong>{t(`notifications.types.${item.notification_type === 'mood_check' ? 'checkin' : item.notification_type}`, { defaultValue: t('notifications.genericTitle') })}</strong>
+        <p>{japanDateTime(item.scheduled_time, i18n.language)}</p>
+        {item.is_recurring && <span>{t('notifications.recurring')}</span>}
+      </div><button disabled={loading} className="pilot-button secondary" onClick={() => disable(item.id)}>{t('notifications.disable')}</button></article>)}
+  </section>
 }
-
-export default NotificationManager

@@ -3,15 +3,17 @@ Family Routes - API endpoints for family sharing
 """
 
 from fastapi import APIRouter, Depends, status, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from dependencies.database import get_db
 from middleware.auth import get_current_user
 from models.schemas import User
+from models.database import FamilyDB, FamilyMemberDB
 from dependencies.container import get_container
 from middleware.authorization import check_user_authorization
 from exceptions import DatabaseError, NotFoundError, ValidationError, ConflictError
+from services.family_service import FAMILY_SHARED_DAYS
 
 router = APIRouter()
 container = get_container()
@@ -22,12 +24,17 @@ class FamilyCreate(BaseModel):
 
 
 class FamilyInvite(BaseModel):
-    invitee_user_id: str
+    invitee_user_id: str = Field(min_length=1, max_length=100)
     role: str = Field(default="member", pattern="^(admin|member|viewer)$")
 
 
 class SharingPreferences(BaseModel):
-    share_tracking: bool
+    revision: int = Field(ge=1, strict=True)
+    share_tracking: Optional[StrictBool] = None
+    share_baby: Optional[StrictBool] = None
+    share_parent: StrictBool = False
+    share_notes: StrictBool = False
+    display_label: str = Field(default="", max_length=40)
 
 
 class FamilyResponse(BaseModel):
@@ -36,6 +43,49 @@ class FamilyResponse(BaseModel):
     created_by: str
     created_at: str
     updated_at: str
+
+
+@router.get("/invitations")
+def get_invitations(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    rows = db.query(FamilyMemberDB, FamilyDB).join(FamilyDB,
+        FamilyMemberDB.family_id == FamilyDB.family_id).filter(
+        FamilyMemberDB.user_id == current_user.user_id, FamilyMemberDB.status == "pending").all()
+    return [{"family_id": family.family_id, "name": family.name} for member, family in rows]
+
+
+@router.post("/{family_id}/decline")
+def decline_invitation(family_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = db.query(FamilyMemberDB).filter(FamilyMemberDB.family_id == family_id,
+        FamilyMemberDB.user_id == current_user.user_id, FamilyMemberDB.status == "pending").first()
+    if row is None:
+        raise NotFoundError("Invitation not found")
+    changed = db.query(FamilyMemberDB).filter(FamilyMemberDB.id == row.id,
+        FamilyMemberDB.status == "pending", FamilyMemberDB.revision == row.revision,
+    ).update({"status": "inactive", "permissions": {},
+        "revision": row.revision + 1}, synchronize_session=False)
+    if changed != 1:
+        db.rollback()
+        raise NotFoundError("Invitation is no longer available")
+    db.commit()
+    return {"declined": True}
+
+
+@router.post("/{family_id}/leave")
+def leave_family(family_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    family = db.query(FamilyDB).filter(FamilyDB.family_id == family_id).first()
+    if family is None:
+        raise NotFoundError("Family not found")
+    if family.created_by == current_user.user_id:
+        raise ValidationError("The creator must revoke other memberships instead of leaving")
+    changed = db.query(FamilyMemberDB).filter(FamilyMemberDB.family_id == family_id,
+        FamilyMemberDB.user_id == current_user.user_id, FamilyMemberDB.status == "active",
+    ).update({"status": "inactive", "permissions": {},
+        "revision": FamilyMemberDB.revision + 1}, synchronize_session=False)
+    if changed != 1:
+        db.rollback()
+        raise NotFoundError("Membership not found")
+    db.commit()
+    return {"left": True}
 
 
 @router.post("/", response_model=FamilyResponse)
@@ -160,7 +210,7 @@ async def get_family_members(
 @router.get("/{family_id}/shared-data")
 async def get_shared_tracking_data(
     family_id: str,
-    days: int = Query(7, ge=1, le=365),
+    days: int = Query(FAMILY_SHARED_DAYS, ge=1, le=FAMILY_SHARED_DAYS),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -192,7 +242,10 @@ async def set_sharing_preferences(
 ):
     """Set only the authenticated member's own sharing preference."""
     return container.get("family_service").share_tracking_data(
-        family_id, current_user.user_id, preferences.share_tracking, db
+        family_id, current_user.user_id, preferences.share_tracking, db,
+        share_baby=preferences.share_baby, share_parent=preferences.share_parent,
+        share_notes=preferences.share_notes, display_label=preferences.display_label,
+        expected_revision=preferences.revision,
     )
 
 
@@ -213,7 +266,7 @@ async def remove_member(
             db=db
         )
         return {"status": "removed", "member_user_id": member_user_id}
-    except (ValidationError, NotFoundError):
+    except (ValidationError, NotFoundError, ConflictError):
         raise
     except Exception as e:
         raise DatabaseError(
@@ -231,19 +284,12 @@ async def get_family_summary(
 ):
     """Get family summary for partner viewing"""
     try:
-        from services.tracking_service import TrackingService
-        from services.ai_service import AIService
-        
         family_service = container.get("family_service")
-        tracking_service = container.get("tracking_service")
-        ai_service = container.get("ai_service")
         
         summary = await family_service.generate_family_summary(
             family_id=family_id,
             user_id=current_user.user_id,
             period=period,
-            tracking_service=tracking_service,
-            ai_service=ai_service,
             db=db
         )
         return summary

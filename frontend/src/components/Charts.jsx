@@ -8,7 +8,7 @@ import { Calendar } from 'lucide-react'
 import EmptyState from './EmptyState'
 import './Charts.css'
 
-function Charts({ userId, onRecord, refreshKey = 0 }) {
+function Charts({ userId, onRecord, refreshKey = 0, visible = true }) {
   const { t, i18n } = useTranslation()
   const toast = useToast()
   const [chartData, setChartData] = useState([])
@@ -16,6 +16,7 @@ function Charts({ userId, onRecord, refreshKey = 0 }) {
   const [timeRange, setTimeRange] = useState(7) // days
 
   useEffect(() => {
+    if (!visible) return
     let active = true
     const loadChartData = async () => {
       setLoading(true)
@@ -33,7 +34,7 @@ function Charts({ userId, onRecord, refreshKey = 0 }) {
     }
     loadChartData()
     return () => { active = false }
-  }, [userId, timeRange, refreshKey])
+  }, [userId, timeRange, refreshKey, visible])
 
   const processDataForCharts = (entries) => {
     // Enhanced data processing for better visualization

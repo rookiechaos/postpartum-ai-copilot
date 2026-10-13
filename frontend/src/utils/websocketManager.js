@@ -110,6 +110,7 @@ class WebSocketManager {
 
   _handleMessage(message) {
     if (message.type === 'task_update') this._emit('task_update', message.data)
+    else if (message.type === 'notification') this._emit('notification', message)
     else if (message.type === 'subscription') this._emit('subscription', message)
     else if (message.type === 'error') this._emit('error', new Error(message.message))
   }
