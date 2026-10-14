@@ -21,6 +21,7 @@ from services.rag_service import RAGService  # noqa: E402
 from services.personalization_service import PersonalizationService  # noqa: E402
 from services.logging_service import logger  # noqa: E402
 from services.ai_errors import PUBLIC_AI_ERROR  # noqa: E402
+from services.chat_presentation import retrieve_for_chat, chat_presentation  # noqa: E402
 from models.database import SessionLocal  # noqa: E402
 
 
@@ -145,11 +146,14 @@ class AIWorker:
 
         from services.ai_data_scope import profile_for_ai, previous_exchange_for_ai
         context = profile_for_ai(await self.tracking_service.get_user_context(user_id, db), task_data.get("include_profile"))
+        previous_exchange = previous_exchange_for_ai(task_data.get("previous_exchange"), task_data.get("include_previous"))
 
         rag_context = ""
+        retrieved = {"context": "", "sources": []}
         if self.rag_service and query:
             try:
-                rag_context = await self.rag_service.search(query)
+                retrieved = await retrieve_for_chat(self.rag_service, query)
+                rag_context = retrieved["context"]
             except Exception as e:
                 logger.log_warning(
                     f"RAG search failed: {e}",
@@ -162,7 +166,7 @@ class AIWorker:
             rag_context=rag_context,
             user_id=user_id,
             language=language,
-            previous_exchange=previous_exchange_for_ai(task_data.get("previous_exchange"), task_data.get("include_previous")),
+            previous_exchange=previous_exchange,
         )
         if response.get("error"):
             from exceptions import AIServiceError
@@ -173,6 +177,7 @@ class AIWorker:
             "suggestions": response.get("suggestions", []),
             "red_flags": response.get("red_flags", []),
             "validation": response.get("validation"),
+            "presentation": chat_presentation(query, response["text"], context, retrieved["sources"], previous_exchange),
             "timestamp": datetime.now().isoformat(),
         }
 

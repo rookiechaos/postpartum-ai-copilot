@@ -160,6 +160,60 @@ class AccountRequestDB(Base):
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class AccountWorkflowDB(Base):
+    """Operator attestations and public next steps; never stores identity documents."""
+    __tablename__ = "account_workflows"
+    reference = Column(String, primary_key=True)
+    revision = Column(Integer, nullable=False, default=1)
+    details = Column(JSON, nullable=False, default=dict)
+
+
+class AccountWorkflowEventDB(Base):
+    __tablename__ = "account_workflow_events"
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    reference = Column(String, nullable=False, index=True)
+    operator_id = Column(String, nullable=False)
+    status = Column(String, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class SupportJourneyDB(Base):
+    __tablename__ = "support_journeys"
+    user_id = Column(String, primary_key=True)
+    contact_key = Column(String, primary_key=True)
+    contact_name = Column(String, nullable=False)
+    state = Column(String, nullable=False, default="preparing")
+    next_contact_at = Column(DateTime, nullable=True)
+    revision = Column(Integer, nullable=False, default=1)
+    cleared = Column(Boolean, nullable=False, default=False)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class FamilyHandoverDB(Base):
+    __tablename__ = "family_handovers"
+    family_id = Column(String, primary_key=True)
+    user_id = Column(String, primary_key=True)
+    membership_revision = Column(Integer, nullable=False)
+    revision = Column(Integer, nullable=False, default=1)
+    text = Column(Text, nullable=False, default="")
+    shared = Column(Boolean, nullable=False, default=False)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class FamilyInviteLinkDB(Base):
+    __tablename__ = "family_invite_links"
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    token_hash = Column(String(64), nullable=False, unique=True)
+    family_id = Column(String, nullable=False, index=True)
+    created_by = Column(String, nullable=False)
+    membership_revision = Column(Integer, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    used_by = Column(String, nullable=True)
+    used_at = Column(DateTime, nullable=True)
+    revoked = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
 class UserContextDB(Base):
     __tablename__ = "user_context"
     

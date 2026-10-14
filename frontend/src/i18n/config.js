@@ -8,6 +8,8 @@ import polishEnglish from './locales/polish.en.json'
 import polishJapanese from './locales/polish.ja.json'
 import uiEnglish from './locales/ui.en.json'
 import uiJapanese from './locales/ui.ja.json'
+import flowsEnglish from './locales/flows.en.json'
+import flowsJapanese from './locales/flows.ja.json'
 
 i18n
   .use(LanguageDetector)
@@ -15,10 +17,10 @@ i18n
   .init({
     resources: {
       en: {
-        translation: { ...enTranslations, polish: polishEnglish, ui: uiEnglish }
+        translation: { ...enTranslations, polish: polishEnglish, ui: uiEnglish, flows: flowsEnglish }
       },
       ja: {
-        translation: { ...jaTranslations, polish: polishJapanese, ui: uiJapanese }
+        translation: { ...jaTranslations, polish: polishJapanese, ui: uiJapanese, flows: flowsJapanese }
       }
     },
     fallbackLng: 'ja',

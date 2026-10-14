@@ -2,14 +2,15 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 import { japanDateTime } from '../utils/japanTime'
+import FamilyInviteLinks from './FamilyInviteLinks'
 
 const emptyScope = { share_baby: false, share_parent: false, share_notes: false, display_label: '' }
 
-export default function FamilySharing({ userId, visible = true, refreshKey = 0 }) {
+export default function FamilySharing({ userId, visible = true, refreshKey = 0, initialFamilyId = '', familyRequestKey = 0 }) {
   const { t, i18n } = useTranslation()
   const [families, setFamilies] = useState([])
   const [invitations, setInvitations] = useState([])
-  const [selected, setSelected] = useState('')
+  const [selected, setSelected] = useState(initialFamilyId)
   const [members, setMembers] = useState([])
   const [records, setRecords] = useState([])
   const [scope, setScope] = useState(emptyScope)
@@ -27,6 +28,13 @@ export default function FamilySharing({ userId, visible = true, refreshKey = 0 }
   const family = families.find(item => item.family_id === selected)
   const me = members.find(item => item.user_id === userId)
   const canManage = family?.created_by === userId || me?.role === 'admin'
+
+  useEffect(() => {
+    if (!initialFamilyId || initialFamilyId === selected) return
+    if (scopeEdited.current && !window.confirm(t('polish.discardSharingChanges'))) return
+    scopeEdited.current = false; scopeRevision.current = null; setScopeConflict(false); setScope(emptyScope)
+    setMembers([]); setRecords([]); setSelected(initialFamilyId)
+  }, [initialFamilyId, familyRequestKey])
 
   useEffect(() => {
     if (!visible) return
@@ -93,11 +101,12 @@ export default function FamilySharing({ userId, visible = true, refreshKey = 0 }
     ? t('polish.memberNumber', { number: members.indexOf(member) + 1 }) : t('polish.formerRecorder'))
 
   return <div className="family-sharing pilot-panel"><h2>{t('polish.familyHandoff')}</h2><p>{t('polish.familySharingNotice')}</p>
+    <details><summary>{t('flows.invitation.manual')}</summary>
     <label>{t('polish.yourInviteId')}<input readOnly value={userId} /></label><p>{t('polish.inviteIdNotice')}</p>
     <button type="button" className="pilot-button secondary" onClick={async () => {
       try { await navigator.clipboard.writeText(userId); setCopied(true) }
       catch { setError(t('pilot.copyFailed')) }
-    }}>{t(copied ? 'pilot.copied' : 'polish.copyAccountId')}</button>
+    }}>{t(copied ? 'pilot.copied' : 'polish.copyAccountId')}</button></details>
     {error && <p role="alert">{error}<button type="button" onClick={() => setAttempt(value => value + 1)}>{t('pilot.retry')}</button></p>}
     {loading && <p role="status">{t('common.loading')}</p>}
     {invitations.map(invitation => <section key={invitation.family_id} className="pilot-panel"><h3>{t('polish.invitationFrom', { name: invitation.name })}</h3>
@@ -135,10 +144,11 @@ export default function FamilySharing({ userId, visible = true, refreshKey = 0 }
           if (window.confirm(t('polish.revokeConfirm'))) run(() => api.delete(`/api/families/${selected}/members/${encodeURIComponent(member.user_id)}`))
         }}>{t('polish.revokeMember')}</button>}
       </li>)}</ul></section>
-      {canManage && <form onSubmit={event => { event.preventDefault(); run(async () => {
+      {canManage && <FamilyInviteLinks key={selected} familyId={selected} visible={visible} membershipRevision={me.revision} />}
+      {canManage && <details><summary>{t('flows.invitation.manual')}</summary><form onSubmit={event => { event.preventDefault(); run(async () => {
         await api.post(`/api/families/${selected}/invite`, { invitee_user_id: inviteId.trim(), role: 'member' }); setInviteId('')
       }) }}><label>{t('polish.inviteeId')}<input required maxLength={100} disabled={busy} value={inviteId} onChange={event => setInviteId(event.target.value)} /></label>
-        <button className="pilot-button secondary" disabled={busy}>{t('polish.inviteMember')}</button></form>}
+        <button className="pilot-button secondary" disabled={busy}>{t('polish.inviteMember')}</button></form></details>}
       {family.created_by !== userId && <button className="pilot-button secondary" disabled={busy} onClick={() => {
         if (window.confirm(t('polish.leaveFamilyConfirm'))) run(() => api.post(`/api/families/${selected}/leave`, {}))
       }}>{t('polish.leaveFamily')}</button>}

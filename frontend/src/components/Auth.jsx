@@ -6,6 +6,7 @@ import SupportDirectory from './SupportDirectory'
 import AccountRequests from './AccountRequests'
 import ServicePrivacyInfo from './ServicePrivacyInfo'
 import RecordingExample from './RecordingExample'
+import ConnectionNotice from './ConnectionNotice'
 import './Auth.css'
 
 function Auth({ onSuccess, entry = 'family', onBack }) {
@@ -83,6 +84,7 @@ function Auth({ onSuccess, entry = 'family', onBack }) {
           <p className="auth-subtitle">{t(entry === 'organization' ? 'pilot.organizationTitle' : entry === 'operator' ? 'work.operatorTitle' : 'pilot.familyTitle')}</p>
           <p>{t(entry === 'organization' ? 'pilot.organizationAuthNote' : entry === 'operator' ? 'work.operatorScope' : 'pilot.familyAuthNote')}</p>
         </div>
+        <ConnectionNotice />
 
         <details className="pilot-panel"><summary>{t('work.beforeRegistration')}</summary><ServicePrivacyInfo /></details>
         {entry === 'family' && <RecordingExample />}

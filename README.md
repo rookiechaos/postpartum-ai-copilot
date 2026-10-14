@@ -8,6 +8,7 @@ AIに詳しくなくても、授乳を記録する、困りごとを整理する
 
 今回の改善はソース変更の段階です。依頼に従い、アプリの起動、依存関係のインストール、ビルド、テスト、実データでの操作は行っていません。
 実際の利用開始前に、[基本機能の変更と未実施の受入確認](docs/product/PRODUCT_IMPROVEMENTS.md)、[7項目の製品改善・移行事項](docs/product/PRODUCT_POLISH.md)、[UI構成の整理と未実施の表示確認](docs/product/UI_REFINEMENT.md)を確認してください。過去の検証結果は今回の動作確認を意味しません。
+今回追加した[家族の引き継ぎ・相談の進捗・アカウント対応の仕様と未実施の確認](docs/product/CARE_FLOWS.md)も参照してください。
 
 ## 家庭・機関の入口と運営者の管理
 
@@ -37,12 +38,14 @@ AIに詳しくなくても、授乳を記録する、困りごとを整理する
 削除後は8秒間、元の内容と日時で戻せます。元に戻す処理は別の識別子を持つ記録を作ります。削除の取り消しができるのは、この画面に残っている直近1件だけです。
 ホーム、記録、グラフ、相談用の記録は、同じ画面内の記録変更に合わせて更新します。
 ホームでは「ぬれたおむつ・今」などを1回押して保存し、最近の記録と記録者を確認できます。量や時間は推測しません。補記・詳しい入力は別のボタンから開きます。
+「家族の育児の引き継ぎ」は、表示する家族を自分で選びます。共有された直近7日間の赤ちゃんの記録を種類ごとに表示し、未記録・未共有は「不明」と示します。自分の引き継ぎメモは、保存時に家族へ見せるか選べます。取得日時と実際の記録時刻を分けて表示します。
 通信に失敗した保存は、最初と同じ内容・日時・保存リクエストで再試行します。別の記録を作る前に一覧を確認できます。操作例は実際の記録に保存しません。
 
 ログイン中のページ切り替えでは、チャット・記録フォーム・相談用紙の下書きとAIの処理状況を保ちます。
 画面の再読み込み、画面を閉じる操作、入口の切り替え、ログアウトで画面内の情報は消えます。別のタブでのログアウト・アカウント変更でも画面を消去します。
 「設定 → データとプライバシー」で下書き復元を選ぶと、本人のアカウントに保存した入力を再度開いた際に確認・復元・削除できます。初期状態はオフ、復元対象は最後の保存から7日間です。期限を過ぎた内容はアクセス時に消去します。通信前の入力や実行中のAI処理、会話全体の復元は保証しません。
 チャットは「この質問の続きを聞く」で、前の質問と回答を確認・選択して今回の送信に付けられます。選ばない場合は過去の会話を付けません。復元時も送信の選択・確認をやり直します。
+回答の冒頭の抜粋、今回伝えた情報、回答中の追加質問を分けて表示します。資料のリンクは実際に検索された資料のURL情報だけを使い、AIが書いたURLから作りません。回答の全文も残します。本人が質問を編集・確認してから相談用紙へ移せます。
 
 相談用の記録は、**3・7・14・30日間**から期間を選び、今回聞きたいことを3つまで添えられます。記録がなくても質問だけで準備できます。
 **自分の気分・回復の記録、自由記述のメモ、最新5件の明細は初期状態で除外**します。
@@ -58,6 +61,9 @@ AIに詳しくなくても、授乳を記録する、困りごとを整理する
 運営統計は家庭の設定に表示しません。
 ホームの「家族との育児の引き継ぎ」から、各自のアカウントIDで招待・参加できます。参加だけでは共有せず、本人がこの家族に見せる赤ちゃんの記録・自分の気分や回復・自由記入メモを別々に選びます。共有一覧は直近7日間で、記録者を表示します。APIからの取得にも同じ期間制限を適用します。参加状況や共有設定が変わると古い画面からの保存を止め、最新の設定の確認を求めます。招待の取り消し・参加者の権限取り消し・退出に対応し、機関の編集権限には家庭へのアクセスを付けません。
 相談先は用途ごとに絞り、電話で話す内容を編集・コピーできます。相談用紙へ入れる質問は本人が欄を選んで確認します。窓口への自動送信はありません。
+本人だけが見る「連絡の準備中／返信待ち／予約済み」と次の連絡日時を保存できます。電話や予約リンクを押しても自動で状態を変えません。日時の通知は行いません。窓口の掲載が終わっても、以前の進み具合は別の履歴として確認・消去できます。
+家族の招待リンク・QRコードは24時間、1回限りです。ログインして参加を確認するまで加入しません。リンクの発行・取り消しは家族の管理者が行います。共有は参加後も本人が選びます。
+ネット接続が戻っても自動では再送信しません。送信前の未送信と、送信後の保存結果が未確認の状態を区別し、一覧を確認して同じ保存を再試行できます。オフライン保存は未対応です。
 
 ### 小さな機関で使う
 
@@ -69,6 +75,7 @@ AIに詳しくなくても、授乳を記録する、困りごとを整理する
 - 地域の資料やサービスは最大10件。HTTPSの情報元・予約リンク、対象地域・対象者、費用・利用条件、電話、受付時間、実際に確認した日を登録できます。
 - 産後ケア・地域相談・授乳相談のひな形を使い、公開前に家庭からの見え方を確認できます。ひな形は実在する窓口や確認日を自動で埋めません。
 - 窓口を一覧から1件ずつ編集し、公開用の担当名と次の確認日を管理できます。未完成の下書きだけを保存し、後から続けられます。公開履歴の変更点を確認し、以前の版を下書きへ戻してプレビュー後に再公開できます。
+- 申し込み手順・準備するもの・代わりの相談先・一時休止と再開の案内を登録できます。担当で一覧を絞り、公開前に現在の公開内容との差分を確認できます。休止中の窓口には予約ボタンを表示しません。
 - 編集項目は基本情報・サービスの詳細・維持管理に分けています。下書き保存・公開前確認・公開は別の操作です。入力エラーから対象の窓口と項目へ移動できます。電話番号の全角数字などは保存・確認時に整えます。
 - 未保存の変更がある場合、入口の切り替え・ログアウト・ブラウザーの戻る／進むで確認します。キャンセルすれば編集を続けられます。保存済みの機関の下書きは入口を離れても残ります。保存・公開処理中の画面移動は止めます。
 - 未確認・確認から30日以上の窓口を一覧にします。担当と公開連絡先を確認し、実際に調べてから確認日を更新してください。
@@ -95,6 +102,8 @@ AIに詳しくなくても、授乳を記録する、困りごとを整理する
 | データ | 取り扱い |
 | --- | --- |
 | 個人のプロフィール・ケアの記録 | 認証された本人のアカウントに保存。機関用の編集権限でも他人の記録にはアクセスできません |
+| 自分の相談の進み具合 | 本人だけが閲覧・更新。電話や予約リンクから状態を推測しません |
+| 家族への引き継ぎメモ・招待 | メモは本人が共有を選択。招待は1回限りで、サーバーにはリンクのハッシュだけを保存 |
 | AIへの入力と選択した資料 | 設定した回答サービスに送信。質問文は、設定に応じてOpenAIの内容確認・資料検索でも処理されます |
 | 機関の連絡先・地域の資料 | 公開情報。ログインなしで取得できます |
 | 相談用にダウンロードしたファイル | 利用者が共有先と保管方法を判断します |
@@ -109,6 +118,7 @@ AIに詳しくなくても、授乳を記録する、困りごとを整理する
 ログイン前の「ログインできない」窓口、ログイン後の削除・プライバシー申請で、運営者への依頼と受付番号による進捗確認ができます。
 **受付は本人確認・削除・再設定の実行ではありません。** メールの自動通知や再設定リンクの発行はありません。
 運営者は別の安全な手順で本人確認し、実際の処理後に `/operator` で結果を登録します。受付番号と公開返信に、パスワードや健康情報を書かないでください。
+運営者は本人確認・実際に完了した手順・作業の管理番号を記録し、次の操作と回答予定を案内します。完了時は処理結果の控えを発行し、削除の場合は残るコピーと保管期間も説明します。この画面自体は復旧や削除を実行しません。作業番号は運営者だけが閲覧し、本人向けの控えには公開する結果だけを載せます。
 保存期間の案内を入力するだけでは自動削除は実行されません。セルフサービスの完全削除・パスワード再設定、機関内の細かな担当者管理は未実装です。
 生成AIと個人情報については、[個人情報保護委員会の注意喚起](https://www.ppc.go.jp/news/careful_information/230602_AI_utilize_alert/)も参照してください。
 
@@ -116,9 +126,9 @@ AIに詳しくなくても、授乳を記録する、困りごとを整理する
 
 Postpartum AI Copilot supports small Japanese pilots through two public entrances and a separate operator area:
 
-- **Families:** one-tap care records and undo, safe retries, explicit AI follow-up context, optional account-bound draft recovery, human-help phone preparation, reviewed consultation sheets and separate-account family handoff.
-- **Small organizations:** individual contact editing, saved drafts, publication history/restoration, maintainer/review dates and family-entry QR codes. Directory-editing rights do not grant access to families’ private records.
-- **Operators:** a separate `/operator` area for manual account/privacy requests and operational statistics. Request receipt does not execute password resets or data deletion.
+- **Families:** one-tap care records and undo, explicit household care overviews/handover notes, one-use invitations, safe explicit retries, AI follow-up/context review, editable consultation questions and private human-help progress.
+- **Small organizations:** individual contact editing, drafts, publication history/restoration and before/after review, maintainer filters, pause/resume and application/fallback instructions, plus family-entry QR codes. Directory-editing rights do not grant access to families’ private records.
+- **Operators:** a separate `/operator` area for manual account/privacy requests, verification/processing attestations, next steps, reply times and completion receipts. These attestations do not execute password resets or data deletion.
 
 The interface supports Japanese and English. Support contacts target **Japan in either language**.
 AI responses are labeled as generated content; rule checks and heuristic scores are not presented as medical certification or clinical confidence.
@@ -196,7 +206,7 @@ Remove an ID and restart the API to revoke directory editing access. All configu
 3. Open `/operator`, handle requests oldest first, verify identity outside the public reply, and perform any approved reset or erasure through your controlled operational process.
 4. Record only the non-sensitive outcome and next steps. Changing request status does not change credentials or erase stored records.
 
-Use the [manual support procedure and data inventory](docs/product/PRODUCT_IMPROVEMENTS.md) when preparing operations. There is no automated deletion runner in this change.
+Use the [manual support procedure and data inventory](docs/product/PRODUCT_IMPROVEMENTS.md) and [current workflow/store additions](docs/product/CARE_FLOWS.md) when preparing operations. There is no automated deletion runner in this change.
 
 ### Docker / hosted deployment
 
@@ -234,6 +244,7 @@ Background workers process AI tasks through OpenAI, Claude or Gemini.
 The `pilot_profiles` and new `account_requests` tables use the existing startup table-initialization mechanism. Tracking records now have an immutable `record_key` and an incrementing `revision`. API initialization includes an idempotent SQLite/PostgreSQL migration that backfills identities on existing records without changing their care content. Updates/deletes require both values from a fresh read; outdated clients receive validation/conflict errors rather than overwriting records. Start workers only after API initialization has finished. No application startup or migration was executed during this edit; migration validation remains pending.
 
 The latest polish phase additionally registers record-save receipts, account draft preferences/content and institution workspaces/publication history. The migration adds `family_members.revision` and unique family membership enforcement, and fails rather than silently merging any legacy duplicates. Family sharing writes require the member revision from a fresh read; shared-data requests accept only 1–7 days. Institution mutation bodies require a workspace revision. See [rollout and pending acceptance](docs/product/PRODUCT_POLISH.md#database-and-rollout); deploy frontend/backend together after later authorized validation.
+The care-flow revision adds five tables for handovers, invitation hashes, private help progress, operator workflow attestations and status events through existing startup initialization. It adds no columns to existing tables. Deploy the matching API, worker and frontend together; table creation and acceptance have not been executed. See [CARE_FLOWS](docs/product/CARE_FLOWS.md) for API contracts, manual execution boundaries and the expanded erasure inventory.
 The scope flags and legacy API limitations are documented in [the change guide](docs/product/PRODUCT_IMPROVEMENTS.md).
 
 ## Verification

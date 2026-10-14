@@ -38,6 +38,12 @@ Production hosting must serve `index.html` for `/family`, `/organization` and `/
 - Human-help contacts can be filtered by purpose. Editable phone scripts can be copied or placed in a selected consultation-question slot after review.
 - Contacts and consultation sheets have separate views which preserve their mounted state. Home/Settings actions labeled as finding human help explicitly open contacts; a plain menu return preserves the last view. View requests are consumed once, and opening contacts does not reapply or erase an earlier incoming question. Preparing a script or handing it to the sheet reveals the appropriate review heading without choosing or replacing a question slot automatically. Applying the incoming question focuses the selected question textarea; dismissing it or deleting the working sheet returns focus to the sheet heading.
 - Family handoff uses separate existing accounts, invitations and independently selected baby/parent/notes sharing. Membership alone shares nothing. Members record/correct their own data; revocation/leave restrict later shared reads. The backend enforces the seven-day shared-record limit. Sharing writes carry the reviewed member revision; conflicts pause saving until an explicit reload of the latest settings.
+- Home's family overview requires an explicit household selection. It shows the latest shared baby-care event by category with recorder and retrieval time; missing records mean unknown. Each member saves their own optionally shared handover note with note/membership revision checks.
+- Family managers can issue/revoke a one-use, 24-hour invitation link/QR. The link fragment is captured into memory and removed from the URL, then an authenticated review requires explicit joining. Initial sign-in and reauthentication after session expiry preserve the pending invite in this tab. Signing in as a different known account, explicit logout or another tab changing the session clears it. Account-ID invitations remain available.
+- The example now demonstrates save → find → correct without any real record/AI write. Connection notices distinguish an unsent recording from an unconfirmed dispatched result; reconnection refreshes reads and never resends. An offline or rejected retry never downgrades a previously unconfirmed save to unsent. Existing optional server draft recovery remains the only persistent draft option.
+- The v5 service worker ignores legacy sync tags and no longer reads or replays the old offline queue. Privacy settings offer explicit device-wide clearing of that old data; authentication-boundary cleanup also attempts it. This does not erase server records/drafts or current credentials, and blocked cleanup is reported by the explicit action.
+- Human-help cards save private preparing/waiting/booked progress and a next-contact time in JST. Calls/booking clicks do not update it. No reminders or institution intake are implied. Historical progress and unsaved contact drafts remain available when a contact is removed. Contact drafts stay in the current account session's memory; they do not survive reload or logout. A removed contact with no saved progress cannot receive a new server entry, but its input can still be reviewed or explicitly discarded.
+- Chat shows a labeled opening excerpt, actual submitted question/selected profile, extracted follow-up questions and actual retrieved-document URL metadata. Its full answer remains visible. A separately edited consultation question enters the existing sheet review only after confirmation.
 
 ## Organization experience
 
@@ -47,6 +53,8 @@ The family link is navigation only; it does not enroll a household or share heal
 Contacts are edited individually. A shared staff draft is saved separately from publication and may be incomplete. History shows publication changes; restoring stages an earlier version as draft. Publication still needs a preview. Revisions prevent concurrent overwrites, and maintainer/next-review fields support the review queue. Reloading the server draft disables editing, save, preview and restoration until the request completes or fails.
 Contact fields are grouped into basic, service-detail and review sections. A sticky action bar keeps draft save, preview and publication available. Validation includes contacts that are not currently selected; linked, localized errors select the contact, expand its section and focus the field. Saving/previewing normalizes phone digits/dashes and URL whitespace. API validation metadata retained by the client contains paths/codes only, not submitted values.
 Successful publication replaces the preview with a result section and an explicit control to open the published information. Focus moves to the result after rendering if it was still on the submitting control or returned to the document body; a deliberate move to another control is preserved.
+Service fields include application steps, preparation, fallback contact and pause/resume information. Paused services suppress booking links. Maintainer filtering and a field-level before/after publication diff support smaller maintenance tasks. Operators separately attest controlled manual account processing with required steps, next actions, reply times and immutable completion receipts; the UI does not execute password reset or erasure.
+Operator request drafts use the same entrance and SPA Back/Forward leave guard as the institution editor. Canceling navigation retains input, and pending saves block navigation. Logout and reload/close are also guarded.
 Unsaved local edits require confirmation for entrance navigation and SPA Back/Forward; cancel preserves the edits and restores tracked history. Reload/close has an unload warning. Saved staff drafts survive leaving the editor. Navigation is blocked while a save, restore or publication is pending.
 
 ## Development
@@ -85,6 +93,8 @@ npm run preview
 | `src/components/TrackingPanel.jsx` | Care recording and optional analysis |
 | `src/components/ChatInterface.jsx` | Questions, explicitly selected follow-up context and session answers |
 | `src/components/FamilySharing.jsx` | Separate-account invitations and category-specific sharing |
+| `src/components/FamilyCareOverview.jsx`, `src/components/FamilyInviteLinks.jsx` | Explicit home handover and authenticated one-use invitations |
+| `src/components/SupportProgress.jsx`, `src/components/ConnectionNotice.jsx` | Private contact progress and connection/save recovery guidance |
 | `src/components/AIUseNotice.jsx` | External AI processing acknowledgement |
 | `src/components/SupportDirectory.jsx` | Static national contacts plus public local directory |
 | `src/components/SupportHub.jsx` | Separate contacts/sheet views with explicit user-initiated navigation |
@@ -96,8 +106,11 @@ npm run preview
 | `src/utils/useAccountDraft.js` | Optional account draft recovery, revision checks and save status |
 | `src/utils/recordOperations.js` | Stable record request keys for retryable creation |
 | `src/utils/japanTime.js` | UTC timestamp normalization and JST display |
+| `src/utils/useConnection.js` | Device connection events without automatic writes or persistent input storage |
 | `src/i18n/locales/` | Japanese and English UI text |
 | `public/offline.html` | National contact information when the app cannot load online |
+
+The care-flow revision is source only; no application, build, parser/lint, tests, QR/browser acceptance or real-data workflow ran. See [care-flow contracts and pending acceptance](../docs/product/CARE_FLOWS.md).
 
 ## Verification
 

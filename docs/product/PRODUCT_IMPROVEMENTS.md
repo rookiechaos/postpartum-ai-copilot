@@ -3,6 +3,7 @@
 This change implements the seven-item product review for a small Japanese pilot. It is **source-only work**: the user requested no application execution or testing. Dependencies were not installed; no server, worker, build, tests, scanner, browser, QR generation or print dialog was run. The behavior below describes the implementation and intended acceptance criteria, not observed runtime results.
 
 The next product-polish phase is documented in [PRODUCT_POLISH.md](PRODUCT_POLISH.md). It adds quick saves, explicit follow-up context, optional account draft recovery, phone scripts, staff draft/history management and granular family handoff. Its contracts supersede the session-only recovery and screen-only institution draft limits in the original table below. Both phases remain unverified at runtime.
+The subsequent [care-flow revision](CARE_FLOWS.md) adds home handover, single-use invitations, private contact progress, structured manual-processing attestations/receipts and additional erasure-inventory stores. Its account workflow requirements supersede status-only updates described below; it still does not execute recovery or erasure.
 
 | Review item | Source changes | Practical limits |
 | --- | --- | --- |

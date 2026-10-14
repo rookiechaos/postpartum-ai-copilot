@@ -4,17 +4,19 @@ import api from '../utils/api'
 import LanguageSelector from './LanguageSelector'
 import SupportDirectory from './SupportDirectory'
 import FamilyHandout from './FamilyHandout'
+import ConnectionNotice from './ConnectionNotice'
 import { needsReview, phoneHref, publicHttps } from '../utils/publicDirectory'
 import { japanDay, japanDateTime } from '../utils/japanTime'
 import { requestKey } from '../utils/recordOperations'
 import { revealElement } from '../utils/focusView'
-import { businessLimits, resourceLimits, directoryFieldId, normalizeDirectory, validateDirectory, directoryServerIssues } from '../utils/directoryValidation'
+import { businessLimits, resourceLimits, directoryFieldId, normalizeDirectory, validateDirectory, directoryServerIssues, publicationChanges } from '../utils/directoryValidation'
 
 const emptyResource = category => ({ resource_key: requestKey(), category, name: '', url: '', description: '', hours: '', area: '',
-  audience: '', phone: '', booking_url: null, cost_note: '', checked_on: null, maintainer: '', review_due_on: null })
+  audience: '', phone: '', booking_url: null, cost_note: '', checked_on: null, maintainer: '', review_due_on: null,
+  service_status: 'active', pause_notice: '', application_steps: '', preparation: '', fallback_contact: '' })
 const resourceGroups = {
   basic: ['name', 'url', 'area', 'phone', 'hours'],
-  details: ['description', 'audience', 'booking_url', 'cost_note'],
+  details: ['description', 'audience', 'booking_url', 'cost_note', 'application_steps', 'preparation', 'fallback_contact', 'pause_notice'],
   review: ['maintainer', 'checked_on', 'review_due_on'],
 }
 
@@ -26,6 +28,7 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
   const [revision, setRevision] = useState(0)
   const [history, setHistory] = useState([])
   const [selected, setSelected] = useState('')
+  const [maintainerFilter, setMaintainerFilter] = useState('')
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState('')
   const [issues, setIssues] = useState([])
@@ -49,7 +52,12 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
   }, [dirty, t])
   useLayoutEffect(() => registerLeaveGuard?.(canLeave), [registerLeaveGuard, canLeave])
   const focusField = (id, resourceKey = '', origin = null) => {
-    if (resourceKey) setSelected(resourceKey)
+    if (resourceKey) {
+      setSelected(resourceKey)
+      const target = profile?.resources.find(item => item.resource_key === resourceKey)
+      if (maintainerFilter && (maintainerFilter === 'unassigned' ? Boolean(target?.maintainer?.trim())
+        : `name:${target?.maintainer?.trim()}` !== maintainerFilter)) setMaintainerFilter('')
+    }
     pendingFocus.current = { id, origin }; setFocusRequest(value => value + 1)
   }
   const focusIssue = issue => focusField(issue.field === 'resources' ? 'directory-contacts'
@@ -106,7 +114,8 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
     }
     catch (err) {
       setPreviewed(false)
-      setError(t(err.status === 409 ? 'polish.institutionConflict' : err.status === 422 ? 'polish.completePublication' : 'pilot.saveFailed'))
+      setError(t(err.status === 409 ? 'polish.institutionConflict' : err.status === 422 ? 'polish.completePublication'
+        : err.resultUnconfirmed ? 'flows.connection.unconfirmedAction' : 'pilot.saveFailed'))
       const fieldIssues = err.status === 422 && body.profile ? directoryServerIssues(err.validation, body.profile) : []
       setIssues(fieldIssues)
       if (fieldIssues.length) focusIssue(fieldIssues[0])
@@ -142,6 +151,10 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
     clearFieldIssue('resource', key, selected)
   }
   const resource = profile?.resources.find(item => item.resource_key === selected)
+  const visibleResources = (profile?.resources || []).filter(item => !maintainerFilter ||
+    (maintainerFilter === 'unassigned' ? !item.maintainer?.trim() : `name:${item.maintainer?.trim()}` === maintainerFilter))
+  const maintainers = [...new Set((profile?.resources || []).map(item => item.maintainer?.trim()).filter(Boolean))]
+  const changes = profile ? publicationChanges(published, profile) : []
   const due = (profile?.resources || []).map(item => {
     const issues = ['name', 'url', 'area', 'audience', 'hours', 'maintainer'].filter(key => !item[key]?.trim())
     if (needsReview(item.checked_on)) issues.push('checked_on')
@@ -155,7 +168,8 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
     pendingFocus.current = null
     reloadBusy.current = true; setReloading(true); setAttempt(value => value + 1)
   }
-  const labelFor = key => key === 'category' ? t('polish.supportPurpose')
+  const labelFor = key => ['service_status', 'pause_notice', 'application_steps', 'preparation', 'fallback_contact'].includes(key) ? t(`flows.directory.${key}`)
+    : key === 'category' ? t('polish.supportPurpose')
     : ['maintainer', 'review_due_on'].includes(key) ? t(`polish.${key}`)
     : ['name', 'url', 'description', 'hours', 'checked_on'].includes(key) ? t(`pilot.resource.${key}`) : t(`work.resourceFields.${key}`)
   const businessLabel = key => key === 'resources' ? t('pilot.localResources')
@@ -174,7 +188,7 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
   }
   const renderResourceField = key => <label key={key} htmlFor={directoryFieldId('resource', key, resource.resource_key)}>
     {labelFor(key)}<span className="field-badge">{t(['name', 'url'].includes(key) ? 'ui.organization.requiredForPublish' : 'ui.organization.optional')}</span>
-    {['description', 'cost_note'].includes(key) ? <textarea {...inputAttributes('resource', key, resource.resource_key)} rows={3}
+    {['description', 'cost_note', 'pause_notice', 'application_steps', 'preparation', 'fallback_contact'].includes(key) ? <textarea {...inputAttributes('resource', key, resource.resource_key)} rows={3}
       maxLength={resourceLimits[key]} value={resource[key] || ''} onChange={event => updateResource(key, event.target.value)} />
       : <input {...inputAttributes('resource', key, resource.resource_key)}
         type={['checked_on', 'review_due_on'].includes(key) ? 'date' : ['url', 'booking_url'].includes(key) ? 'url' : key === 'phone' ? 'tel' : 'text'}
@@ -186,6 +200,7 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
   return <main className="pilot-shell organization-portal">
     <div className="pilot-topbar"><strong>{t('pilot.organizationTitle')}</strong><LanguageSelector /></div>
     <h1>{t('pilot.organizationHeading')}</h1><p>{t('pilot.organizationScope')}</p>
+    <ConnectionNotice />
     <div className="pilot-actions">
       <button className="pilot-button secondary" disabled={busy} onClick={() => { if (registerLeaveGuard || canLeave()) onFamily() }}>{t('pilot.openFamily')}</button>
       <button className="pilot-button secondary" disabled={busy} onClick={() => { if (registerLeaveGuard || canLeave()) onExit() }}>{t('pilot.switchEntrance')}</button>
@@ -262,9 +277,15 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
         <p className="field-hint">{t('ui.organization.normalizationNotice')}</p>
         <div className="pilot-actions">{['postpartum', 'parenting', 'feeding'].map(category => <button key={category} type="button"
           className="pilot-button secondary" disabled={editingBlocked || profile.resources.length >= 10} onClick={() => addResource(category)}>{t(`polish.purposes.${category}`)}</button>)}</div>
-        <ul className="contact-editor-list">{profile.resources.map(item => <li key={item.resource_key}>
+        <label>{t('flows.directory.filterMaintainer')}<select value={maintainerFilter} disabled={editingBlocked} onChange={event => setMaintainerFilter(event.target.value)}>
+          <option value="">{t('flows.directory.allMaintainers')}</option><option value="unassigned">{t('polish.noMaintainer')}</option>
+          {maintainers.map(name => <option key={name} value={`name:${name}`}>{name}</option>)}
+        </select></label>
+        {visibleResources.length === 0 && <p>{t('flows.directory.noMatches')}</p>}
+        <ul className="contact-editor-list">{visibleResources.map(item => <li key={item.resource_key}>
           <button type="button" disabled={editingBlocked} aria-pressed={selected === item.resource_key} onClick={() => focusField('directory-contact-heading', item.resource_key)}>{item.name || t('work.unnamedResource')}</button>
           <span>{item.maintainer || t('polish.noMaintainer')} · {item.review_due_on || t('polish.noReviewDate')}</span>
+          <span>{t(`flows.directory.statuses.${item.service_status || 'active'}`)}</span>
           {issues.some(issue => issue.resourceKey === item.resource_key) && <span className="field-error">{t('ui.organization.needsCorrection')}</span>}
         </li>)}</ul>
         {resource && <section key={resource.resource_key} className="contact-editor" aria-labelledby="directory-contact-heading">
@@ -276,6 +297,10 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
               </select>{inlineError('resource', 'category', resource.resource_key)}
             </label>
             {resourceGroups.basic.map(renderResourceField)}
+            <label>{t('flows.directory.service_status')}<select {...inputAttributes('resource', 'service_status', resource.resource_key)}
+              value={resource.service_status || 'active'} onChange={event => updateResource('service_status', event.target.value)}>
+              {['active', 'paused'].map(value => <option key={value} value={value}>{t(`flows.directory.statuses.${value}`)}</option>)}
+            </select>{inlineError('resource', 'service_status', resource.resource_key)}</label>
           </fieldset>
           {['details', 'review'].map(group => <details className="editor-group" key={group}><summary>{t(`ui.organization.groups.${group}`)}</summary>
             <fieldset disabled={editingBlocked}><legend>{t(`ui.organization.groups.${group}`)}</legend>{resourceGroups[group].map(renderResourceField)}</fieldset>
@@ -287,7 +312,13 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
           }}>{t('common.delete')}</button>
         </section>}
         {previewed && <section className="publication-preview"><h3 id="directory-preview-heading" tabIndex={-1}>{t('work.previewOnly')}</h3>
-          <p>{t('ui.organization.previewNotice')}</p><SupportDirectory previewProfile={profile} />
+          <p>{t('ui.organization.previewNotice')}</p>
+          <section className="publication-changes"><h4>{t('flows.directory.changes')}</h4>
+            {changes.length === 0 ? <p>{t('flows.directory.noChanges')}</p> : <ul>{changes.map((item, index) => <li key={index}>
+              <strong>{item.name || t('work.businessInfo')} · {t(`polish.publicationChanges.${item.kind}`)}{item.field ? ` · ${item.scope === 'business' ? businessLabel(item.field) : labelFor(item.field)}` : ''}</strong>
+              {item.field && <div><del>{item.before || t('pilot.notProvided')}</del><span aria-hidden="true"> → </span><ins>{item.after || t('pilot.notProvided')}</ins></div>}
+            </li>)}</ul>}
+          </section><SupportDirectory previewProfile={profile} />
           <button type="submit" className="pilot-button" disabled={editingBlocked}>{t('ui.organization.publish')}</button>
         </section>}
       </form>

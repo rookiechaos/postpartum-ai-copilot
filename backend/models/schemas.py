@@ -88,6 +88,7 @@ class ChatResponse(BaseModel):
     timestamp: str
     validation: Optional[Dict[str, Any]] = None  # Validation metadata
     personalization_applied: Optional[bool] = Field(default=False, description="Whether personalization was applied")
+    presentation: Optional[Dict[str, Any]] = None
 
 
 # Tracking Models

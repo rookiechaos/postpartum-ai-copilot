@@ -43,9 +43,9 @@ const readAuthState = () => ({
 })
 let observedAuthState = readAuthState()
 
-function notifyAuthChange(preserveTasks = false) {
+function notifyAuthChange(preserveTasks = false, reason = 'session-change') {
   observedAuthState = readAuthState()
-  const change = { token: getToken(), preserveTasks }
+  const change = { token: getToken(), preserveTasks, reason }
   authListeners.forEach(callback => {
     try { callback(change) } catch (error) { console.error('Auth listener failed:', error) }
   })
@@ -60,7 +60,7 @@ function synchronizeAuthStorage() {
   observedAuthState = current
   if (changed) {
     authSession++
-    notifyAuthChange()
+    notifyAuthChange(false, 'storage')
     clearPrivateCaches().catch(() => {})
   } else if (tokenChanged) {
     // A refresh within the same login keeps private state and active tasks.
@@ -107,10 +107,24 @@ async function responseError(response, session) {
   return error
 }
 
+function clearLegacyOfflineStorage() {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(true)
+  return new Promise(resolve => {
+    try {
+      const request = indexedDB.deleteDatabase('postpartum-offline')
+      request.onsuccess = () => resolve(true)
+      request.onerror = () => resolve(false)
+      request.onblocked = () => resolve(false)
+    } catch { resolve(false) }
+  })
+}
+
 async function clearPrivateCaches() {
-  if (typeof caches === 'undefined') return
-  const names = await caches.keys()
-  await Promise.all(names.filter(name => name.startsWith('postpartum-runtime')).map(name => caches.delete(name)))
+  const cleanup = [clearLegacyOfflineStorage()]
+  if (typeof caches !== 'undefined') cleanup.push(caches.keys().then(names => Promise.all(
+    names.filter(name => name.startsWith('postpartum-runtime')).map(name => caches.delete(name)),
+  )))
+  await Promise.all(cleanup)
 }
 
 let onUnauthorizedCallback = null
@@ -130,6 +144,17 @@ function withTimeout(options, defaultTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
   return { signal: controller.signal, timeoutId }
+}
+
+function communicationError(error, write = false) {
+  if (write && error.status >= 500) error.resultUnconfirmed = true
+  if (['AbortError', 'TypeError', 'SyntaxError'].includes(error.name) && !error.status) {
+    const failure = new Error(error.name === 'AbortError' ? 'Request timed out' : 'Connection unavailable')
+    failure.communication = navigator.onLine === false ? 'offline' : error.name === 'AbortError' ? 'timeout' : 'connection'
+    failure.resultUnconfirmed = write
+    return failure
+  }
+  return error
 }
 
 /** Call /api/auth/refresh with refresh_token; does NOT retry on 401 (avoids loop). */
@@ -163,6 +188,7 @@ async function refreshAccessToken() {
 }
 
 export const api = {
+  clearLegacyOfflineStorage,
   async get(endpoint, options = {}, isRetry = false) {
     const session = getAuthSession()
     const { signal, timeoutId } = withTimeout(options)
@@ -183,7 +209,7 @@ export const api = {
         if (newToken) {
           return await this.get(endpoint, options, true)
         }
-        this.logout()
+        this.logout({ reason: 'expired' })
         triggerUnauthorized()
         const error = new Error('Authentication required')
         error.status = 401
@@ -191,7 +217,7 @@ export const api = {
       }
       if (response.status === 401 && isRetry) {
         const error = await responseError(response, session)
-        this.logout()
+        this.logout({ reason: 'expired' })
         triggerUnauthorized()
         throw error
       }
@@ -202,11 +228,8 @@ export const api = {
       assertSession(session)
       return data
     } catch (error) {
-      if (error.name === 'AbortError') {
-        throw new Error('Request timeout, please check your network')
-      }
       console.error('API GET error:', error)
-      throw error
+      throw communicationError(error)
     } finally {
       if (timeoutId) clearTimeout(timeoutId)
     }
@@ -234,7 +257,7 @@ export const api = {
         if (newToken) {
           return await this.post(endpoint, data, options, true)
         }
-        this.logout()
+        this.logout({ reason: 'expired' })
         triggerUnauthorized()
         const error = new Error('Authentication required')
         error.status = 401
@@ -242,7 +265,7 @@ export const api = {
       }
       if (response.status === 401 && isRetry) {
         const error = await responseError(response, session)
-        this.logout()
+        this.logout({ reason: 'expired' })
         triggerUnauthorized()
         throw error
       }
@@ -254,7 +277,7 @@ export const api = {
       return result
     } catch (error) {
       console.error('API POST error:', error)
-      throw error
+      throw communicationError(error, true)
     } finally {
       if (timeoutId) clearTimeout(timeoutId)
     }
@@ -281,7 +304,7 @@ export const api = {
         if (newToken) {
           return await this.delete(endpoint, options, true)
         }
-        this.logout()
+        this.logout({ reason: 'expired' })
         triggerUnauthorized()
         const error = new Error('Authentication required')
         error.status = 401
@@ -289,7 +312,7 @@ export const api = {
       }
       if (response.status === 401 && isRetry) {
         const error = await responseError(response, session)
-        this.logout()
+        this.logout({ reason: 'expired' })
         triggerUnauthorized()
         throw error
       }
@@ -303,11 +326,8 @@ export const api = {
       assertSession(session)
       return data
     } catch (error) {
-      if (error.name === 'AbortError') {
-        throw new Error('Request timeout, please check your network')
-      }
       console.error('API DELETE error:', error)
-      throw error
+      throw communicationError(error, true)
     } finally {
       if (timeoutId) clearTimeout(timeoutId)
     }
@@ -324,7 +344,7 @@ export const api = {
 
   // Authentication methods
   async login(email, password, verificationToken = null) {
-    const clearing = this.logout()
+    const clearing = this.logout({ reason: 'sign-in' })
     const session = getAuthSession()
     await clearing
     assertSession(session)
@@ -339,7 +359,7 @@ export const api = {
       if (response.refresh_token) {
         localStorage.setItem('refresh_token', response.refresh_token)
       }
-      notifyAuthChange()
+      notifyAuthChange(false, 'sign-in')
     }
     return response
   },
@@ -353,13 +373,13 @@ export const api = {
     return await this.get('/api/auth/me')
   },
 
-  logout() {
+  logout({ reason = 'logout' } = {}) {
     authSession++
     setToken(null)
     setStoredUserId(null)
     localStorage.removeItem('refresh_token')
     localStorage.removeItem(AUTH_SESSION_KEY)
-    notifyAuthChange()
+    notifyAuthChange(false, reason)
     return clearPrivateCaches().catch(() => {})
   },
 

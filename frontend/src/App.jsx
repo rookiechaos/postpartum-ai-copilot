@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import api from './utils/api'
@@ -15,6 +15,8 @@ import WelcomeScreen from './components/WelcomeScreen'
 import EntryScreen from './components/EntryScreen'
 import OrganizationPortal from './components/OrganizationPortal'
 import FamilySharing from './components/FamilySharing'
+import { FamilyInviteReview } from './components/FamilyInviteLinks'
+import ConnectionNotice from './components/ConnectionNotice'
 import SupportHub from './components/SupportHub'
 import InstallPrompt from './components/InstallPrompt'
 import LanguageSelector from './components/LanguageSelector'
@@ -31,6 +33,32 @@ function App() {
   const [authChecked, setAuthChecked] = useState(false)
   const [userId, setUserId] = useState(null)
   const [sessionKey, setSessionKey] = useState(0)
+  const hadAuthenticatedAccount = useRef(api.isAuthenticated())
+  const inviteAccount = useRef(api.isAuthenticated() ? api.getUserId() : null)
+  const [pendingInvite, setPendingInvite] = useState(() => {
+    const token = new URLSearchParams(window.location.hash.slice(1)).get('invite')
+    return /^[A-Za-z0-9_-]{43}$/.test(token || '') ? token : null
+  })
+  const clearInvite = useCallback(() => { inviteAccount.current = null; setPendingInvite(null) }, [])
+  const completeSignIn = useCallback(id => {
+    // An expired session may resume the invite; another account starts fresh.
+    if (inviteAccount.current && inviteAccount.current !== id) clearInvite()
+    else inviteAccount.current = id
+    setUserId(id)
+  }, [clearInvite])
+  useEffect(() => {
+    const capture = () => {
+      const fragment = new URLSearchParams(window.location.hash.slice(1))
+      const token = fragment.get('invite')
+      if (!/^[A-Za-z0-9_-]{43}$/.test(token || '')) return
+      inviteAccount.current = api.isAuthenticated() ? api.getUserId() : null
+      setPendingInvite(token); fragment.delete('invite')
+      const rest = fragment.toString()
+      window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search + (rest ? `#${rest}` : ''))
+    }
+    capture(); window.addEventListener('hashchange', capture)
+    return () => window.removeEventListener('hashchange', capture)
+  }, [])
   const { entry, navigate: chooseEntry, registerLeaveGuard, clearLeaveGuard } = useEntranceNavigation()
   useEffect(() => { applyDisplaySettings(readDisplaySettings()) }, [])
   useEffect(() => {
@@ -44,8 +72,13 @@ function App() {
       setSessionKey(key => key + 1)
       setAuthChecked(true)
     }
-    const unsubscribe = api.onAuthChange(({ preserveTasks }) => {
-      if (!preserveTasks) clearAccount()
+    const unsubscribe = api.onAuthChange(({ preserveTasks, token, reason }) => {
+      if (!preserveTasks) {
+        // Expiry preserves only the invite intent; private screens/tasks still reset.
+        if (reason !== 'expired' && (hadAuthenticatedAccount.current || reason === 'logout' || reason === 'storage')) clearInvite()
+        clearAccount()
+      }
+      hadAuthenticatedAccount.current = Boolean(token)
     })
     api.setOnUnauthorized(clearAccount)
 
@@ -63,7 +96,7 @@ function App() {
       }
       const storedUserId = api.getUserId()
       if (storedUserId) {
-        setUserId(storedUserId)
+        completeSignIn(storedUserId)
         setAuthChecked(true)
         return
       }
@@ -71,7 +104,7 @@ function App() {
         const user = await api.getCurrentUser()
         if (!active || generation !== initialGeneration) return
         api.setUserId(user?.user_id || null)
-        setUserId(user?.user_id || null)
+        completeSignIn(user?.user_id || null)
         setAuthChecked(true)
       } catch {
         if (active && generation === initialGeneration) api.logout()
@@ -83,7 +116,7 @@ function App() {
       unsubscribe()
       api.setOnUnauthorized(null)
     }
-  }, [])
+  }, [clearInvite, completeSignIn, clearLeaveGuard])
 
   if (!authChecked) {
     return (
@@ -93,15 +126,17 @@ function App() {
     )
   }
   if (!entry) return <EntryScreen onChoose={chooseEntry} />
-  if (!userId) return <Auth entry={entry} onBack={() => chooseEntry(null)} onSuccess={setUserId} />
-  if (entry === 'operator') return <OperatorPortal key={`${sessionKey}:${userId}:operator`} onExit={() => chooseEntry(null)} />
+  if (!userId) return <Auth entry={entry} onBack={() => chooseEntry(null)} onSuccess={completeSignIn} />
+  if (entry === 'operator') return <OperatorPortal key={`${sessionKey}:${userId}:operator`}
+    registerLeaveGuard={registerLeaveGuard} onExit={() => chooseEntry(null)} />
   if (entry === 'organization') return <OrganizationPortal key={`${sessionKey}:${userId}:organization`}
     userId={userId} registerLeaveGuard={registerLeaveGuard} onFamily={() => chooseEntry('family')} onExit={() => chooseEntry(null)} />
-  return <AuthenticatedApp key={`${sessionKey}:${userId}:family`} userId={userId} onChooseEntry={chooseEntry} />
+  return <AuthenticatedApp key={`${sessionKey}:${userId}:family`} userId={userId} onChooseEntry={chooseEntry}
+    pendingInvite={pendingInvite} onInvitationHandled={clearInvite} />
 }
 
 // A new login mounts fresh private state, including all child components.
-function AuthenticatedApp({ userId, onChooseEntry }) {
+function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHandled }) {
   const { t, i18n } = useTranslation()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [nightMode, setNightMode] = useState(false)
@@ -115,15 +150,17 @@ function AuthenticatedApp({ userId, onChooseEntry }) {
   const [recordVersion, setRecordVersion] = useState(0)
   const [supportRequest, setSupportRequest] = useState({ key: 0, view: 'contacts', question: '' })
   const [navigationKey, setNavigationKey] = useState(0)
+  const [familyRequest, setFamilyRequest] = useState({ id: '', key: 0 })
+  const familyVisible = !nightMode && !pendingInvite
   const panelRefs = useRef({})
   const pendingPanelFocus = useRef(false)
 
   useEffect(() => {
-    if (!showWelcome && !nightMode && pendingPanelFocus.current) {
+    if (!showWelcome && familyVisible && pendingPanelFocus.current) {
       pendingPanelFocus.current = false
       revealElement(panelRefs.current[activeTab])
     }
-  }, [navigationKey, activeTab, showWelcome, nightMode])
+  }, [navigationKey, activeTab, showWelcome, familyVisible])
 
   useEffect(() => {
     let active = true
@@ -184,7 +221,7 @@ function AuthenticatedApp({ userId, onChooseEntry }) {
     localStorage.setItem(`hasCompletedWelcome:${userId}`, 'true')
     setUserContext(saved.context)
     setShowWelcome(false)
-    navigate('dashboard')
+    navigate(familyRequest.id ? 'family' : 'dashboard')
   }
 
   const handleContextUpdate = (newContext) => {
@@ -204,6 +241,14 @@ function AuthenticatedApp({ userId, onChooseEntry }) {
     setActiveTab(tab)
   }
 
+  const handleInvitation = familyId => {
+    onInvitationHandled()
+    if (familyId) {
+      setFamilyRequest(previous => ({ id: familyId, key: previous.key + 1 }))
+      setRecordVersion(value => value + 1); setNightMode(false); navigate('family')
+    }
+  }
+  if (pendingInvite && showWelcome) return <FamilyInviteReview token={pendingInvite} onHandled={handleInvitation} />
   if (showWelcome) {
     return <WelcomeScreen onComplete={handleWelcomeComplete} onExit={() => onChooseEntry(null)} />
   }
@@ -217,7 +262,8 @@ function AuthenticatedApp({ userId, onChooseEntry }) {
   ]
 
   return (
-    <><div className="app family-app" hidden={nightMode}>
+    <>{pendingInvite && <FamilyInviteReview token={pendingInvite} onHandled={handleInvitation} />}
+    <div className="app family-app" hidden={!familyVisible}>
       <header className="app-header">
         <div className="header-content">
           <h1>🤱 {t('app.title')}</h1>
@@ -256,24 +302,26 @@ function AuthenticatedApp({ userId, onChooseEntry }) {
       </nav>
 
       <main className="app-main">
+        <ConnectionNotice onCheck={() => navigate('tracking')} />
         {visitedTabs.map(tab => <section key={tab} className="family-tab-panel" hidden={activeTab !== tab} tabIndex={-1}
           ref={element => { panelRefs.current[tab] = element }}
           aria-labelledby={tabs.some(item => item.id === tab) ? `family-tab-${tab}` : undefined}
           aria-label={tab === 'checkin' ? t('checkin.title') : tab === 'family' ? t('polish.familyHandoff') : undefined}>
             {tab === 'dashboard' && (
-              <Dashboard userId={userId} userContext={userContext} refreshKey={recordVersion} visible={activeTab === 'dashboard' && !nightMode}
+              <Dashboard userId={userId} userContext={userContext} refreshKey={recordVersion} visible={activeTab === 'dashboard' && familyVisible}
                 onNavigate={navigate} onRecordsChanged={() => setRecordVersion(value => value + 1)} />
             )}
-            {tab === 'chat' && <ChatInterface userId={userId} initialDraft={chatDraft} draftVersion={chatRequestKey} visible={activeTab === 'chat' && !nightMode}
+            {tab === 'chat' && <ChatInterface userId={userId} initialDraft={chatDraft} draftVersion={chatRequestKey} visible={activeTab === 'chat' && familyVisible}
               onPrepareSheet={script => navigate('support', { view: 'sheet', question: script })} />}
             {tab === 'tracking' && <TrackingPanel userId={userId} initialEntryType={trackingRequest} requestKey={trackingRequestKey}
-              visible={activeTab === 'tracking' && !nightMode}
+              visible={activeTab === 'tracking' && familyVisible}
               onRecordsChanged={() => setRecordVersion(value => value + 1)} />}
             {tab === 'checkin' && <EmotionalCheckIn userId={userId} />}
-            {tab === 'support' && <SupportHub userId={userId} visible={activeTab === 'support' && !nightMode}
+            {tab === 'support' && <SupportHub userId={userId} visible={activeTab === 'support' && familyVisible}
               refreshKey={recordVersion} navigationRequest={supportRequest}
               onPrepareSheet={script => navigate('support', { view: 'sheet', question: script })} />}
-            {tab === 'family' && <FamilySharing userId={userId} refreshKey={recordVersion} visible={activeTab === 'family' && !nightMode} />}
+            {tab === 'family' && <FamilySharing userId={userId} refreshKey={recordVersion} visible={activeTab === 'family' && familyVisible}
+              initialFamilyId={familyRequest.id} familyRequestKey={familyRequest.key} />}
             {tab === 'settings' && (
               <Settings
                 userId={userId}
@@ -286,7 +334,7 @@ function AuthenticatedApp({ userId, onChooseEntry }) {
           </section>)}
         <div className="family-tab-panel" hidden={activeTab !== 'dashboard'}><InstallPrompt ready={recordVersion > 0} /></div>
       </main>
-    </div>{nightMode && <NightMode userId={userId} onExit={() => setNightMode(false)} />}</>
+    </div>{nightMode && <div hidden={Boolean(pendingInvite)}><NightMode userId={userId} onExit={() => setNightMode(false)} /></div>}</>
   )
 }
 

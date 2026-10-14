@@ -36,6 +36,11 @@ class LocalResource(BaseModel):
     category: Literal["parenting", "postpartum", "feeding"] = "parenting"
     maintainer: str = Field(default="", max_length=100)
     review_due_on: Optional[date] = None
+    service_status: Literal["active", "paused"] = "active"
+    pause_notice: str = Field(default="", max_length=500)
+    application_steps: str = Field(default="", max_length=800)
+    preparation: str = Field(default="", max_length=500)
+    fallback_contact: str = Field(default="", max_length=500)
 
     @field_validator("url", "booking_url")
     @classmethod

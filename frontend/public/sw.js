@@ -1,6 +1,6 @@
 // Service Worker for Postpartum AI Copilot
-const CACHE_NAME = 'postpartum-copilot-v4'
-const RUNTIME_CACHE = 'postpartum-runtime-v4'
+const CACHE_NAME = 'postpartum-copilot-v5'
+const RUNTIME_CACHE = 'postpartum-runtime-v5'
 const urlsToCache = [
   '/',
   '/index.html',
@@ -143,113 +143,10 @@ async function staleWhileRevalidateStrategy(request) {
   return cachedResponse || fetchPromise
 }
 
-// Background sync for offline actions
-self.addEventListener('sync', (event) => {
-  console.log('[SW] Background sync:', event.tag)
-  
-  if (event.tag === 'sync-tracking') {
-    event.waitUntil(syncTrackingData())
-  } else if (event.tag === 'sync-chat') {
-    event.waitUntil(syncChatMessages())
-  } else if (event.tag === 'sync-all') {
-    event.waitUntil(syncAllPendingData())
-  }
-})
-
-async function syncTrackingData() {
-  try {
-    const pendingData = await getPendingData('tracking')
-    for (const data of pendingData) {
-      try {
-        const response = await fetch('/api/tracking', {
-          method: 'POST',
-          body: JSON.stringify(data.data),
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${data.token || ''}`
-          }
-        })
-        if (response.ok) {
-          await removePendingData('tracking', data.id)
-        }
-      } catch (error) {
-        console.error('[SW] Sync tracking failed:', error)
-      }
-    }
-  } catch (error) {
-    console.error('[SW] Background sync error:', error)
-  }
-}
-
-async function syncChatMessages() {
-  try {
-    const pendingData = await getPendingData('chat')
-    for (const data of pendingData) {
-      try {
-        const response = await fetch('/api/chat', {
-          method: 'POST',
-          body: JSON.stringify(data.data),
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${data.token || ''}`
-          }
-        })
-        if (response.ok) {
-          await removePendingData('chat', data.id)
-        }
-      } catch (error) {
-        console.error('[SW] Sync chat failed:', error)
-      }
-    }
-  } catch (error) {
-    console.error('[SW] Background sync error:', error)
-  }
-}
-
-async function syncAllPendingData() {
-  await Promise.all([
-    syncTrackingData(),
-    syncChatMessages()
-  ])
-}
-
-// IndexedDB helpers for offline storage
-async function getPendingData(type) {
-  return new Promise((resolve) => {
-    const request = indexedDB.open('postpartum-offline', 1)
-    request.onerror = () => resolve([])
-    request.onsuccess = (event) => {
-      const db = event.target.result
-      const transaction = db.transaction(['pending'], 'readonly')
-      const store = transaction.objectStore('pending')
-      const index = store.index('type')
-      const query = index.getAll(type)
-      query.onsuccess = () => resolve(query.result || [])
-      query.onerror = () => resolve([])
-    }
-    request.onupgradeneeded = (event) => {
-      const db = event.target.result
-      if (!db.objectStoreNames.contains('pending')) {
-        const store = db.createObjectStore('pending', { keyPath: 'id', autoIncrement: true })
-        store.createIndex('type', 'type', { unique: false })
-      }
-    }
-  })
-}
-
-async function removePendingData(type, id) {
-  return new Promise((resolve) => {
-    const request = indexedDB.open('postpartum-offline', 1)
-    request.onsuccess = (event) => {
-      const db = event.target.result
-      const transaction = db.transaction(['pending'], 'readwrite')
-      const store = transaction.objectStore('pending')
-      store.delete(id)
-      transaction.oncomplete = () => resolve()
-      transaction.onerror = () => resolve()
-    }
-  })
-}
+// Ignore legacy sync registrations. They had no reliable account/consent boundary.
+// Reconnection may refresh reads, but care records and AI questions require an
+// explicit retry in the authenticated app. Never open or replay a legacy queue.
+self.addEventListener('sync', () => {})
 
 // Push notifications
 self.addEventListener('push', (event) => {

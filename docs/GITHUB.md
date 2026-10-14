@@ -67,12 +67,32 @@ git push -u origin main
 ./check-privacy.sh
 ```
 
-This scans **git-tracked files** for:
+This read-only scan checks publishable working files, staged Git blobs, reachable
+local/remote branches and tags, and commit author/committer/message metadata for:
 
 - Home directory paths (`/Users/...`, `/home/...`)
 - Real API key patterns (`sk-...`)
 - Personal email domains
+- Real IP addresses and credential-bearing connection URLs (development bind/loopback and reserved example addresses are allowed)
 - Accidental staging of `do-not-upload/local/backend.env`, logs, databases, or private docs
+
+Matched values are withheld from the report. Ignored runtime files, unreachable
+Git objects and copies retained elsewhere are outside this check's scope. A clean
+file tree alone does not mean historical commit metadata is clean.
+
+Before committing, set this repository's identity to the GitHub-provided noreply
+email from your GitHub email settings, then inspect the staged files:
+
+```bash
+git config --local user.email YOUR_GITHUB_NOREPLY_EMAIL
+git diff --cached --check
+git diff --cached --stat
+```
+
+Use ordinary pushes for new commits. Cleaning private metadata already published
+in history changes commit IDs and requires a separately approved history rewrite
+and an explicit remote-head lease. Preserve every commit's file tree, and review
+and scan the prepared candidate before publishing it.
 
 ## Updating copyright
 

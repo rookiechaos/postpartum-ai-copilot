@@ -19,6 +19,7 @@ from services.personalization_service import PersonalizationService
 from services.task_queue import TaskQueue, TaskPriority
 from services.nsfw_detector import get_nsfw_detector
 from services.ai_data_scope import profile_for_ai, records_for_ai, previous_exchange_for_ai
+from services.chat_presentation import retrieve_for_chat, chat_presentation
 from exceptions import (
     PostpartumException,
     AIServiceError,
@@ -76,9 +77,8 @@ async def chat(
     if not async_mode:
         try:
             context = profile_for_ai(await tracking_service.get_user_context(user_id, db), message.include_profile)
-            rag_context = ""
-            if rag_service and message.query:
-                rag_context = await rag_service.search(message.query)
+            retrieved = await retrieve_for_chat(rag_service, message.query)
+            rag_context = retrieved["context"]
 
             language = message.language or "en"
 
@@ -99,6 +99,7 @@ async def chat(
                 red_flags=response.get("red_flags", []),
                 timestamp=datetime.now().isoformat(),
                 validation=response.get("validation"),
+                presentation=chat_presentation(message.query, response["text"], context, retrieved["sources"], previous_exchange),
             )
         except PostpartumException:
             raise
@@ -252,9 +253,8 @@ async def personalized_chat(
     try:
         context = profile_for_ai(await tracking_service.get_user_context(user_id, db), message.include_profile)
 
-        rag_context = ""
-        if rag_service and message.query:
-            rag_context = await rag_service.search(message.query)
+        retrieved = await retrieve_for_chat(rag_service, message.query)
+        rag_context = retrieved["context"]
 
         language = message.language or "ja"
         base_prompt = ai_service._get_system_prompt(language)
@@ -281,6 +281,8 @@ async def personalized_chat(
             timestamp=datetime.now().isoformat(),
             validation=response.get("validation"),
             personalization_applied=message.include_profile,
+            presentation=chat_presentation(message.query, response["text"], context, retrieved["sources"],
+                previous_exchange_for_ai(message.previous_exchange.model_dump() if message.previous_exchange else None, message.include_previous)),
         )
     except PostpartumException:
         raise

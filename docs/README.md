@@ -27,11 +27,13 @@ docs/
 - [Current product improvements and pending acceptance](product/PRODUCT_IMPROVEMENTS.md)
 - [Product polish, family handoff and rollout contracts](product/PRODUCT_POLISH.md)
 - [UI architecture, responsive layout and pending acceptance](product/UI_REFINEMENT.md)
+- [Care handovers, human-support progress, account workflow and pending acceptance](product/CARE_FLOWS.md)
 - [Backend docs](backend/README.md)
 - [Testing guide](testing/TESTING.md)
 - [Deployment](deployment/DEPLOYMENT.md)
 - [Setup](deployment/SETUP.md)
 - [Publishing to GitHub](GITHUB.md)
+- [Care-flow publication and privacy review](security/PUBLISH_REVIEW_2026-10-14.md)
 
 ## Subfolders
 

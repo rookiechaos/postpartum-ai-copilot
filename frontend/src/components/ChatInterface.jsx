@@ -7,6 +7,7 @@ import SupportDirectory from './SupportDirectory'
 import useAccountDraft from '../utils/useAccountDraft'
 import { DraftRecoveryNotice } from './DraftRecovery'
 import { revealElement } from '../utils/focusView'
+import { publicHttps } from '../utils/publicDirectory'
 import './ChatInterface.css'
 
 function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = true, onPrepareSheet }) {
@@ -28,6 +29,7 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
   const [includePrevious, setIncludePrevious] = useState(false)
   const [submission, setSubmission] = useState(null)
   const [hasNewMessages, setHasNewMessages] = useState(false)
+  const [preparedQuestion, setPreparedQuestion] = useState(null)
   const [composerRequest, setComposerRequest] = useState(0)
   const draft = useAccountDraft('chat', userId, input.trim() ? { input, followUp } : null, content => {
     if (typeof content.input !== 'string') return false
@@ -42,6 +44,20 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
   const composerRef = useRef(null)
   const stickToLatest = useRef(true)
   const pendingComposerFocus = useRef(false)
+  const questionDraftRef = useRef(null)
+  const pendingQuestionFocus = useRef(false)
+  useEffect(() => {
+    if (visible && pendingQuestionFocus.current && preparedQuestion && revealElement(questionDraftRef.current)) pendingQuestionFocus.current = false
+  }, [preparedQuestion?.index, visible])
+  const profileValue = (field, value) => {
+    if (typeof value !== 'string' && typeof value !== 'number') return t('pilot.notProvided')
+    if (field === 'babyAge') return t(`pilot.ages.${value}`, { defaultValue: String(value) })
+    if (['feedingType', 'feeding_type'].includes(field)) return t(`tracking.${value}`, { defaultValue: String(value) })
+    if (['birthType', 'birth_type'].includes(field)) return value === 'vaginal' ? t('pilot.vaginal') : value === 'c-section' ? t('pilot.csection') : String(value)
+    if (field === 'baby_age_days' && typeof value === 'number') return t('flows.ai.days', { count: value })
+    if (field === 'sleep_hours_avg' && typeof value === 'number') return t('flows.ai.hours', { count: value })
+    return String(value)
+  }
   const revealComposer = () => {
     pendingComposerFocus.current = true; setComposerRequest(value => value + 1)
   }
@@ -126,6 +142,7 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
             suggestions: result.suggestions || [],
             red_flags: result.red_flags || [],
             validation: result.validation || null,
+            presentation: result.presentation || null,
             timestamp: new Date()
           }
           
@@ -155,6 +172,7 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
           suggestions: response.suggestions || [],
           red_flags: response.red_flags || [],
           validation: response.validation || null,
+          presentation: response.presentation || null,
           timestamp: new Date()
         }
 
@@ -191,7 +209,7 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
         </div></details>
         <p>{t('pilot.chatBoundary')}</p>
       </header>
-      <details className="chat-support"><summary>{t('work.humanHelp')}</summary><SupportDirectory visible={visible} onPrepareSheet={onPrepareSheet} /></details>
+      <details className="chat-support"><summary>{t('work.humanHelp')}</summary><SupportDirectory userId={userId} visible={visible} onPrepareSheet={onPrepareSheet} /></details>
       <div className="chat-thread-heading"><h3 id="chat-thread-heading">{t('ui.chat.conversation')}</h3>
         {hasNewMessages && <button type="button" className="pilot-button secondary" onClick={() => {
           scrollToLatest(); threadRef.current?.focus({ preventScroll: true })
@@ -207,6 +225,9 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
         }}>
         {messages.map((msg, idx) => (
           <article key={idx} className={`message ${msg.role}`} aria-label={t(msg.role === 'user' ? 'ui.chat.you' : 'ui.chat.assistant')}>
+            {msg.generated && msg.presentation?.summary_excerpt && <section className="answer-excerpt">
+              <h4>{t('flows.ai.summary')}</h4><p>{msg.presentation.summary_excerpt}</p><small>{t('flows.ai.excerptNotice')}</small>
+            </section>}
             <div className="message-content">
               {msg.content}
             </div>
@@ -233,11 +254,47 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
               </div>
             )}
             {msg.generated && <><small className="ai-label">{t('pilot.aiLabel')}</small>
+              {msg.presentation && <details className="answer-context"><summary>{t('flows.ai.provided')}</summary>
+                <p>{t('flows.ai.providedNotice')}</p><p className="preserve-lines">{msg.presentation.provided_question}</p>
+                {Object.entries(msg.presentation.provided_profile || {}).map(([field, value]) => <p key={field}>
+                  {t(`flows.ai.profileFields.${field}`)}: {profileValue(field, value)}
+                </p>)}
+                {msg.presentation.provided_previous_exchange && <details><summary>{t('polish.previousExchange')}</summary>
+                  <p>{t('polish.previousQuestion')}</p><p className="preserve-lines">{msg.presentation.provided_previous_exchange.previous_question}</p>
+                  <p>{t('polish.previousAnswer')}</p><p className="preserve-lines">{msg.presentation.provided_previous_exchange.previous_answer}</p>
+                </details>}
+              </details>}
+              {msg.presentation && <section><h4>{t('flows.ai.questions')}</h4>
+                {msg.presentation.clarifying_questions?.length > 0 ? <ul>{msg.presentation.clarifying_questions.map((question, index) => <li key={index}>{question}</li>)}</ul>
+                  : <p>{t('flows.ai.noQuestions')}</p>}<small>{t('flows.ai.questionsNotice')}</small>
+              </section>}
+              <section><h4>{t('flows.ai.sources')}</h4>
+                {msg.presentation?.sources?.some(source => source.kind === 'retrieved_document' && publicHttps(source.url))
+                  ? <ul>{msg.presentation.sources.filter(source => source.kind === 'retrieved_document' && publicHttps(source.url)).map((source, index) => <li key={index}>
+                    <a href={publicHttps(source.url)} target="_blank" rel="noreferrer">{source.title}</a>
+                  </li>)}</ul> : <p>{t('flows.ai.noSources')}</p>}
+                <small>{t('flows.ai.sourcesNotice')}</small>
+              </section>
               {msg.question && msg.content && <button type="button" className="pilot-button secondary" disabled={loading} onClick={() => {
                 setFollowUp({ previous_question: [...msg.question].slice(0, 2000).join(''), previous_answer: [...msg.content].slice(0, 4000).join('') })
                 setIncludePrevious(false); setAcceptedAI(false)
                 revealComposer()
               }}>{t('polish.continueQuestion')}</button>}
+              {onPrepareSheet && <button type="button" className="pilot-button secondary" onClick={() => {
+                if (preparedQuestion && preparedQuestion.index !== idx && preparedQuestion.text.trim() && !window.confirm(t('flows.ai.replaceQuestion'))) return
+                if (preparedQuestion?.index !== idx) {
+                  pendingQuestionFocus.current = true; setPreparedQuestion({ index: idx, text: (msg.question || '').slice(0, 250) })
+                }
+              }}>
+                {t('flows.ai.prepareQuestion')}</button>}
+              {preparedQuestion?.index === idx && <section className="pilot-panel"><label>{t('flows.ai.questionDraft')}
+                <textarea ref={questionDraftRef} rows={4} maxLength={250} value={preparedQuestion.text} onChange={event => setPreparedQuestion(previous => ({ ...previous, text: event.target.value }))} />
+              </label><p>{t('flows.ai.questionNotice')}</p>
+                <button type="button" className="pilot-button secondary" disabled={!preparedQuestion.text.trim()} onClick={() => {
+                  onPrepareSheet(preparedQuestion.text); setPreparedQuestion(null)
+                }}>{t('flows.ai.useQuestion')}</button>
+                <button type="button" className="pilot-button secondary" onClick={() => setPreparedQuestion(null)}>{t('tracking.cancel')}</button>
+              </section>}
             </>}
           </article>
         ))}

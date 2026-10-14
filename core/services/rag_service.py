@@ -194,23 +194,27 @@ class RAGService:
         )
     
     async def search(self, query: str, k: int = 3) -> str:
+        return (await self.search_with_sources(query, k))["context"]
+
+    async def search_with_sources(self, query: str, k: int = 3) -> dict:
         """
         Search for relevant medical information with safety enhancements
         
         Prioritizes authoritative sources and adds safety disclaimers
         """
         if not self.initialized or not self.vectorstore:
-            return ""
+            return {"context": "", "sources": []}
         
         try:
             # Search for similar documents
             results = self.vectorstore.similarity_search(query, k=k)
             
             if not results:
-                return ""
+                return {"context": "", "sources": []}
             
             # Combine results with citations and prioritize authoritative sources
             context_parts = []
+            sources = []
             authoritative_keywords = ["ACOG", "WHO", "AAP", "pediatric", "medical", "healthcare provider"]
             
             # Sort results to prioritize authoritative sources
@@ -222,22 +226,24 @@ class RAGService:
             
             for i, doc in enumerate(sorted_results, 1):
                 source_text = doc.page_content
-                # Add source indicator if it mentions authoritative sources
-                if any(keyword.lower() in source_text.lower() for keyword in authoritative_keywords):
-                    source_text = f"[Authoritative Source {i}] {source_text}"
-                else:
-                    source_text = f"[Source {i}] {source_text}"
+                source_text = f"[Retrieved item {i}] {source_text}"
                 context_parts.append(source_text)
+                metadata = doc.metadata or {}
+                # Only document metadata can supply a link. Textual source names
+                # in sample material do not establish a URL or source verification.
+                url = metadata.get("source_url") or metadata.get("url") or metadata.get("source")
+                if isinstance(url, str) and url.startswith("https://"):
+                    sources.append({"url": url, "title": metadata.get("title") or ""})
             
             combined_context = "\n\n".join(context_parts)
             
             # Add safety disclaimer
             safety_note = "\n\n[Safety Note] This information is for general guidance only and does not replace professional medical advice. Always consult your healthcare provider for medical concerns. If this is an emergency, call emergency services immediately."
             
-            return combined_context + safety_note
+            return {"context": combined_context + safety_note, "sources": sources}
         except Exception as e:
-            logger.log_error(e, context={"action": "rag_search", "query_preview": query[:50]})
-            return ""
+            logger.log_error(e, context={"action": "rag_search"})
+            return {"context": "", "sources": []}
     
     async def add_documents(self, documents: List[str], metadata: Optional[List[dict]] = None):
         """Add new documents to the vector store"""

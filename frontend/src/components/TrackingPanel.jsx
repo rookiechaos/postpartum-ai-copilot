@@ -9,6 +9,7 @@ import useAccountDraft from '../utils/useAccountDraft'
 import { DraftRecoveryNotice } from './DraftRecovery'
 import AIUseNotice from './AIUseNotice'
 import Charts from './Charts'
+import useConnection from '../utils/useConnection'
 import { useToast } from './Toast'
 import './TrackingPanel.css'
 
@@ -19,6 +20,7 @@ const payload = entry => Object.fromEntries(recordFields.filter(key => entry[key
 
 export default function TrackingPanel({ userId, initialEntryType, requestKey = 0, onRecordsChanged, visible = true }) {
   const { t, i18n } = useTranslation()
+  const { online, reconnections } = useConnection()
   const toast = useToast()
   const [entries, setEntries] = useState([])
   const [entriesLoading, setEntriesLoading] = useState(true)
@@ -44,6 +46,8 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   const [pendingSave, setPendingSave] = useState(null)
   const [saveStatus, setSaveStatus] = useState('')
   const writing = useRef(false)
+  // Keep uncertainty attached to the original operation until success or explicit abandonment.
+  const unconfirmedRequest = useRef(null)
   const recordDraft = showAddForm && (formDraft || pendingSave) ? {
     ...(formDraft || { formData: payload(pendingSave.data), when: 'specific',
       recordedAt: japanDateTimeInput(pendingSave.data.timestamp) }), entryType, editing, pendingSave,
@@ -54,6 +58,8 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     if (content.editing && (!Number.isInteger(content.editing.id) || !content.editing.record_key || !Number.isInteger(content.editing.revision))) return false
     setEditing(content.editing || null); setEntryType(content.entryType); setRestoredForm(content)
     setPendingSave(content.pendingSave || null); setFormRevision(value => value + 1); setShowAddForm(true)
+    unconfirmedRequest.current = content.pendingSave?.data.request_key || null
+    setSaveStatus(content.pendingSave ? 'unconfirmed' : '')
   })
   const summaryVersion = useRef(0)
 
@@ -65,7 +71,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
       .catch(() => { if (active) setError(t('pilot.loadFailed')) })
       .finally(() => { if (active) setEntriesLoading(false) })
     return () => { active = false }
-  }, [userId, attempt, recordRange, visible])
+  }, [userId, attempt, recordRange, visible, reconnections])
 
   useEffect(() => {
     if (pendingSave || writing.current) return
@@ -90,6 +96,11 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     if (writing.current) return
     const operation = pendingSave || { data: recordOperation(payload(formData)),
       editing: editing ? { id: editing.id, record_key: editing.record_key, revision: editing.revision } : null }
+    if (!online || navigator.onLine === false) {
+      setPendingSave(operation)
+      setSaveStatus(unconfirmedRequest.current === operation.data.request_key ? 'unconfirmed' : 'offline')
+      return false
+    }
     writing.current = true
     setPendingSave(operation); setLoading(true); setSaveStatus('saving')
     try {
@@ -100,20 +111,26 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
       const age = Math.floor((Date.now() - utcDate(operation.data.timestamp).getTime()) / 86400000)
       if (age >= recordRange) setRecordRange(age < 30 ? 30 : age < 90 ? 90 : 365)
       setPendingSave(null); setFormDraft(null); await draft.clear()
+      unconfirmedRequest.current = null
       setRestoredForm(null); setShowAddForm(false); setEditing(null); setSaveStatus('saved'); refresh()
       toast.success(t('pilot.recordSaved'))
       return true
     } catch (err) {
-      setSaveStatus('unsaved')
-      if ([400, 404, 409, 422].includes(err.status)) setPendingSave(null)
-      if (err.status === 409 || err.status === 404) { toast.error(t('work.recordConflict')); refresh() }
-      else toast.error(t('pilot.recordFailed'))
+      if (!(err.status >= 400 && err.status < 500)) unconfirmedRequest.current = operation.data.request_key
+      const unconfirmed = unconfirmedRequest.current === operation.data.request_key
+      setSaveStatus(unconfirmed ? 'unconfirmed' : 'unsaved')
+      if (!unconfirmed && [400, 404, 409, 422].includes(err.status)) setPendingSave(null)
+      if (err.status === 409 || err.status === 404) refresh()
+      toast.error(t(unconfirmed ? 'flows.connection.unconfirmedSave'
+        : err.status === 409 || err.status === 404 ? 'work.recordConflict' : 'pilot.recordFailed'))
       return false
     }
     finally { writing.current = false; setLoading(false) }
   }
   const cancelForm = () => {
     if (pendingSave && !window.confirm(t('polish.abandonWrite'))) return
+    unconfirmedRequest.current = null
+    setSaveStatus('')
     setPendingSave(null); setFormDraft(null); setRestoredForm(null); setShowAddForm(false); setEditing(null)
     draft.clear(); setAttempt(value => value + 1)
   }
@@ -165,7 +182,8 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
       }}>{showAddForm ? t('tracking.cancel') : `+ ${t('tracking.addEntry')}`}</button></div>
     <p>{t('pilot.noPressure')}</p>
     <DraftRecoveryNotice draft={draft} disabled={loading} />
-    {saveStatus && <p role="status">{t(`polish.saveStatus.${saveStatus}`)}</p>}
+    {saveStatus && <p role="status">{t(['offline', 'unconfirmed'].includes(saveStatus) ? `flows.connection.${saveStatus}Save` : `polish.saveStatus.${saveStatus}`)}</p>}
+    {pendingSave && <button type="button" className="pilot-button secondary" disabled={loading} onClick={() => setAttempt(value => value + 1)}>{t('flows.connection.checkRecords')}</button>}
     {pendingSave && <p role="status">{t('polish.pendingWriteNotice')} {japanDateTime(pendingSave.data.timestamp, i18n.resolvedLanguage || 'ja')}</p>}
     {showAddForm && <EntryForm key={`${editing ? `edit:${editing.record_key}:${editing.revision}` : 'new'}:${formRevision}`}
       entryType={entryType} initialEntry={editing} restored={restoredForm} onDraftChange={setFormDraft} locked={Boolean(pendingSave)}

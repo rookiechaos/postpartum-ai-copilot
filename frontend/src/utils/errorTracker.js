@@ -4,6 +4,13 @@
 
 import api from './api.js'
 
+// Diagnostics may start before React removes an invitation fragment. Never
+// collect the address, query, fragment, browser fingerprint or raw error text.
+const diagnosticPage = () => ({ '/': 'entry', '/family': 'family', '/organization': 'organization', '/operator': 'operator' })[window.location.pathname] || 'other'
+const errorTypes = ['error', 'unhandledrejection', 'react_error']
+const actionTypes = ['page_view', 'open_help', 'save_record', 'login', 'logout']
+const metricUnits = { LCP: 'ms', FID: 'ms', CLS: 'score' }
+
 class ErrorTracker {
   constructor() {
     this.errors = []
@@ -20,45 +27,28 @@ class ErrorTracker {
     window.addEventListener('error', (event) => {
       this.trackError({
         type: 'error',
-        message: event.message,
-        filename: event.filename,
         lineno: event.lineno,
         colno: event.colno,
-        stack: event.error?.stack,
-        timestamp: new Date().toISOString()
       })
     })
 
     // Track unhandled promise rejections
-    window.addEventListener('unhandledrejection', (event) => {
-      this.trackError({
-        type: 'unhandledrejection',
-        message: event.reason?.message || String(event.reason),
-        stack: event.reason?.stack,
-        timestamp: new Date().toISOString()
-      })
-    })
+    window.addEventListener('unhandledrejection', () => this.trackError({ type: 'unhandledrejection' }))
 
     // Track React errors (if ErrorBoundary is used)
-    this.trackReactError = (error, errorInfo) => {
-      this.trackError({
-        type: 'react_error',
-        message: error.message,
-        stack: error.stack,
-        componentStack: errorInfo?.componentStack,
-        timestamp: new Date().toISOString()
-      })
-    }
+    this.trackReactError = () => this.trackError({ type: 'react_error' })
 
     this.initialized = true
   }
 
   trackError(errorData) {
     const error = {
-      ...errorData,
-      url: window.location.href,
-      userAgent: navigator.userAgent,
-      timestamp: errorData.timestamp || new Date().toISOString()
+      type: errorTypes.includes(errorData?.type) ? errorData.type : 'handled_error',
+      page: diagnosticPage(),
+      timestamp: new Date().toISOString()
+    }
+    for (const field of ['lineno', 'colno']) {
+      if (Number.isSafeInteger(errorData?.[field]) && errorData[field] >= 0) error[field] = errorData[field]
     }
 
     this.errors.push(error)
@@ -94,14 +84,13 @@ class ErrorTracker {
     }
   }
 
-  trackUserAction(action, details = {}) {
+  trackUserAction(action) {
     // Track user actions for analytics
     try {
       api.post('/api/monitoring/actions', {
-        action,
-        details,
+        action: actionTypes.includes(action) ? action : 'ui_action',
         timestamp: new Date().toISOString(),
-        url: window.location.href
+        page: diagnosticPage()
       }).catch(() => {
         // Silently fail - don't interrupt user flow
       })
@@ -110,15 +99,16 @@ class ErrorTracker {
     }
   }
 
-  trackPerformance(metricName, value, unit = 'ms') {
+  trackPerformance(metricName, value) {
+    if (!Object.hasOwn(metricUnits, metricName) || typeof value !== 'number' || !Number.isFinite(value) || value < 0) return
     // Track performance metrics (Web Vitals)
     try {
       api.post('/api/monitoring/performance', {
         metric: metricName,
         value,
-        unit,
+        unit: metricUnits[metricName],
         timestamp: new Date().toISOString(),
-        url: window.location.href
+        page: diagnosticPage()
       }).catch(() => {
         // Silently fail
       })
