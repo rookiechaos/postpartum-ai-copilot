@@ -62,16 +62,17 @@ function EmotionalCheckIn({ userId }) {
 
         <form onSubmit={handleSubmit} className="checkin-form">
           <div className="slider-group">
-            <label>
+            <label htmlFor="checkin-overwhelmed">
               {t('checkin.overwhelmed')} ({overwhelmed}/10)
             </label>
             <input
+              id="checkin-overwhelmed"
               type="range"
               min="1"
               max="10"
               value={overwhelmed}
               onChange={(e) => setOverwhelmed(parseInt(e.target.value))}
-              className="slider"
+              className="checkin-range"
             />
             <div className="slider-labels">
               <span>{t('checkin.notAtAll')}</span>
@@ -80,16 +81,17 @@ function EmotionalCheckIn({ userId }) {
           </div>
 
           <div className="slider-group">
-            <label>
+            <label htmlFor="checkin-anxiety">
               {t('checkin.anxiety')} ({anxiety}/10)
             </label>
             <input
+              id="checkin-anxiety"
               type="range"
               min="1"
               max="10"
               value={anxiety}
               onChange={(e) => setAnxiety(parseInt(e.target.value))}
-              className="slider"
+              className="checkin-range"
             />
             <div className="slider-labels">
               <span>{t('checkin.notAtAll')}</span>
@@ -98,16 +100,17 @@ function EmotionalCheckIn({ userId }) {
           </div>
 
           <div className="slider-group">
-            <label>
+            <label htmlFor="checkin-support">
               {t('checkin.support')} ({support}/10)
             </label>
             <input
+              id="checkin-support"
               type="range"
               min="1"
               max="10"
               value={support}
               onChange={(e) => setSupport(parseInt(e.target.value))}
-              className="slider"
+              className="checkin-range"
             />
             <div className="slider-labels">
               <span>{t('checkin.notAtAll')}</span>
@@ -116,8 +119,9 @@ function EmotionalCheckIn({ userId }) {
           </div>
 
           <div className="form-group">
-            <label>{t('checkin.share')}</label>
+            <label htmlFor="checkin-notes">{t('checkin.share')}</label>
             <textarea
+              id="checkin-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows="4"

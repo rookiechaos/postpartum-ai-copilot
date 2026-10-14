@@ -83,7 +83,7 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
         className="pilot-button" disabled={Boolean(pending) || Boolean(draft.candidate) || draft.status === 'loading' || saveStatus === 'saving'}
         onClick={() => saveQuick(recordOperation(data))}>{t(`polish.quick.${key}`)}</button>)}</div>
       {saveStatus && <p role="status">{t(`polish.saveStatus.${saveStatus}`)}</p>}
-      <DraftRecoveryNotice draft={draft} disabled={saveStatus === 'saving'} />
+      <DraftRecoveryNotice draft={draft} disabled={saveStatus === 'saving'} compact />
       {pending && saveStatus !== 'saving' && <div className="pilot-actions"><p>{t('polish.pendingWriteNotice')}</p>
         <button className="pilot-button secondary" onClick={() => saveQuick(pending)}>{t('polish.retrySameSave')}</button>
         <button className="pilot-button secondary" onClick={() => {
@@ -110,7 +110,7 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
     </section>
     <div className="pilot-actions family-secondary-actions">
       <button className="pilot-button secondary" onClick={() => onNavigate('chat')}>{t('pilot.askTitle')}</button>
-      <button className="pilot-button secondary" onClick={() => onNavigate('support')}>{t('pilot.supportTitle')}</button>
+      <button className="pilot-button secondary" onClick={() => onNavigate('support', { view: 'contacts' })}>{t('pilot.supportTitle')}</button>
       <button className="pilot-button secondary" onClick={() => onNavigate('family')}>{t('polish.familyHandoff')}</button>
     </div>
     <details className="pilot-panel"><summary>{t('polish.selfCare')}</summary>

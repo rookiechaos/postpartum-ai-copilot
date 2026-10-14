@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 import { needsReview, phoneHref, publicHttps } from '../utils/publicDirectory'
+import { revealElement } from '../utils/focusView'
 
 // National sources remain available when the API or model is unavailable.
 export default function SupportDirectory({ compact = false, previewProfile, visible = true, onPrepareSheet }) {
@@ -12,6 +13,14 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
   const [script, setScript] = useState('')
   const [scriptError, setScriptError] = useState('')
   const [scriptTarget, setScriptTarget] = useState('')
+  const [scriptRequest, setScriptRequest] = useState(0)
+  const scriptHeading = useRef(null)
+  const pendingScriptFocus = useRef(false)
+  useEffect(() => {
+    if (visible && pendingScriptFocus.current && scriptTarget) {
+      pendingScriptFocus.current = false; revealElement(scriptHeading.current)
+    }
+  }, [scriptRequest, scriptTarget, visible])
   useEffect(() => {
     if (previewProfile || !visible) return
     let active = true
@@ -25,7 +34,7 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
   const prepareCall = name => {
     if (script && name !== scriptTarget && !window.confirm(t('polish.replaceCallScript'))) return
     if (!script || name !== scriptTarget) setScript(t('polish.callScriptTemplate', { name }))
-    setScriptTarget(name); setScriptError('')
+    setScriptTarget(name); setScriptError(''); pendingScriptFocus.current = true; setScriptRequest(value => value + 1)
   }
 
   return (
@@ -89,14 +98,14 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
         </article>)}
         {shownProfile && purpose !== 'all' && !shownProfile.resources?.some(resource => (resource.category || 'parenting') === purpose)
           && <p>{t('polish.noPurposeContacts')}</p>}
-        {script && <section className="pilot-panel call-script"><h3>{t('polish.callScriptTitle', { name: scriptTarget })}</h3>
+        {scriptTarget && <section className="pilot-panel call-script"><h3 ref={scriptHeading} tabIndex={-1}>{t('polish.callScriptTitle', { name: scriptTarget })}</h3>
           <p>{t('polish.callScriptNotice')}</p><textarea aria-label={t('polish.callScript')} rows={7} maxLength={1000}
             value={script} onChange={event => setScript(event.target.value)} />
           <button type="button" className="pilot-button secondary" onClick={async () => {
             try { await navigator.clipboard.writeText(script); setScriptError(t('pilot.copied')) }
             catch { setScriptError(t('pilot.copyFailed')) }
           }}>{t('polish.copyScript')}</button>
-          {onPrepareSheet && <button type="button" className="pilot-button secondary" onClick={() => onPrepareSheet(script)}>{t('polish.prepareSheetFromCall')}</button>}
+          {onPrepareSheet && <button type="button" className="pilot-button secondary" disabled={!script.trim()} onClick={() => onPrepareSheet(script)}>{t('polish.prepareSheetFromCall')}</button>}
           {scriptError && <p role="status">{scriptError}</p>}
         </section>}
         <p className="pilot-note">{t('pilot.directoryNote')}</p>

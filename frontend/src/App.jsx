@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import api from './utils/api'
 import useEntranceNavigation from './utils/useEntranceNavigation'
 import { applyDisplaySettings, readDisplaySettings } from './utils/displaySettings'
+import { revealElement } from './utils/focusView'
 import ChatInterface from './components/ChatInterface'
 import TrackingPanel from './components/TrackingPanel'
 import NightMode from './components/NightMode'
@@ -14,8 +15,7 @@ import WelcomeScreen from './components/WelcomeScreen'
 import EntryScreen from './components/EntryScreen'
 import OrganizationPortal from './components/OrganizationPortal'
 import FamilySharing from './components/FamilySharing'
-import SupportDirectory from './components/SupportDirectory'
-import ShareSummary from './components/ShareSummary'
+import SupportHub from './components/SupportHub'
 import InstallPrompt from './components/InstallPrompt'
 import LanguageSelector from './components/LanguageSelector'
 import OperatorPortal from './components/OperatorPortal'
@@ -24,6 +24,7 @@ import { Home, MessageCircle, BarChart3, Phone, Settings as SettingsIcon, Moon }
 import './App.css'
 import './components/Pilot.css'
 import './components/ProductFlows.css'
+import './styles/ui.css'
 
 function App() {
   const { t } = useTranslation()
@@ -112,8 +113,17 @@ function AuthenticatedApp({ userId, onChooseEntry }) {
   const [trackingRequestKey, setTrackingRequestKey] = useState(0)
   const [visitedTabs, setVisitedTabs] = useState(['dashboard'])
   const [recordVersion, setRecordVersion] = useState(0)
-  const [sheetRequest, setSheetRequest] = useState('')
-  const [sheetRequestKey, setSheetRequestKey] = useState(0)
+  const [supportRequest, setSupportRequest] = useState({ key: 0, view: 'contacts', question: '' })
+  const [navigationKey, setNavigationKey] = useState(0)
+  const panelRefs = useRef({})
+  const pendingPanelFocus = useRef(false)
+
+  useEffect(() => {
+    if (!showWelcome && !nightMode && pendingPanelFocus.current) {
+      pendingPanelFocus.current = false
+      revealElement(panelRefs.current[activeTab])
+    }
+  }, [navigationKey, activeTab, showWelcome, nightMode])
 
   useEffect(() => {
     let active = true
@@ -184,7 +194,12 @@ function AuthenticatedApp({ userId, onChooseEntry }) {
   const navigate = (tab, detail) => {
     if (tab === 'tracking' && detail) { setTrackingRequest(detail); setTrackingRequestKey(value => value + 1) }
     if (tab === 'chat' && detail) { setChatDraft(detail); setChatRequestKey(value => value + 1) }
-    if (tab === 'support' && detail) { setSheetRequest(detail); setSheetRequestKey(value => value + 1) }
+    const supportDestination = tab === 'support' && ['contacts', 'sheet'].includes(detail?.view) ? detail : null
+    if (supportDestination) setSupportRequest(previous => ({ key: previous.key + 1, view: supportDestination.view,
+      question: supportDestination.view === 'sheet' && typeof supportDestination.question === 'string' ? supportDestination.question : '' }))
+    // A requested support view or incoming question owns its more specific focus target.
+    pendingPanelFocus.current = !supportDestination && !(detail && tab === 'chat')
+    setNavigationKey(value => value + 1)
     setVisitedTabs(previous => previous.includes(tab) ? previous : [...previous, tab])
     setActiveTab(tab)
   }
@@ -210,7 +225,6 @@ function AuthenticatedApp({ userId, onChooseEntry }) {
         </div>
         <div className="header-actions">
           <LanguageSelector />
-          <button className="entrance-switch" onClick={() => onChooseEntry(null)}>{t('pilot.switchEntrance')}</button>
           <motion.button
             className="night-mode-btn"
             onClick={() => setNightMode(true)}
@@ -224,23 +238,26 @@ function AuthenticatedApp({ userId, onChooseEntry }) {
         </div>
       </header>
 
-      <nav className="tab-nav">
+      <nav className="tab-nav" aria-label={t('ui.nav.label')}>
         {tabs.map((tab) => (
           <button
             key={tab.id}
             id={`family-tab-${tab.id}`}
             className={activeTab === tab.id ? 'active' : ''}
             onClick={() => navigate(tab.id)}
+            aria-label={tab.label}
             aria-current={activeTab === tab.id ? 'page' : undefined}
           >
             {tab.icon}
-            <span>{tab.label}</span>
+            <span className="nav-label-full" aria-hidden="true">{tab.label}</span>
+            <span className="nav-label-short" aria-hidden="true">{t(`ui.nav.${tab.id}`)}</span>
           </button>
         ))}
       </nav>
 
       <main className="app-main">
-        {visitedTabs.map(tab => <section key={tab} className="family-tab-panel" hidden={activeTab !== tab}
+        {visitedTabs.map(tab => <section key={tab} className="family-tab-panel" hidden={activeTab !== tab} tabIndex={-1}
+          ref={element => { panelRefs.current[tab] = element }}
           aria-labelledby={tabs.some(item => item.id === tab) ? `family-tab-${tab}` : undefined}
           aria-label={tab === 'checkin' ? t('checkin.title') : tab === 'family' ? t('polish.familyHandoff') : undefined}>
             {tab === 'dashboard' && (
@@ -248,25 +265,27 @@ function AuthenticatedApp({ userId, onChooseEntry }) {
                 onNavigate={navigate} onRecordsChanged={() => setRecordVersion(value => value + 1)} />
             )}
             {tab === 'chat' && <ChatInterface userId={userId} initialDraft={chatDraft} draftVersion={chatRequestKey} visible={activeTab === 'chat' && !nightMode}
-              onPrepareSheet={script => navigate('support', script)} />}
+              onPrepareSheet={script => navigate('support', { view: 'sheet', question: script })} />}
             {tab === 'tracking' && <TrackingPanel userId={userId} initialEntryType={trackingRequest} requestKey={trackingRequestKey}
               visible={activeTab === 'tracking' && !nightMode}
               onRecordsChanged={() => setRecordVersion(value => value + 1)} />}
             {tab === 'checkin' && <EmotionalCheckIn userId={userId} />}
-            {tab === 'support' && <><SupportDirectory visible={activeTab === 'support' && !nightMode} onPrepareSheet={script => navigate('support', script)} />
-              <ShareSummary userId={userId} refreshKey={recordVersion} initialQuestion={sheetRequest} requestKey={sheetRequestKey} /></>}
+            {tab === 'support' && <SupportHub userId={userId} visible={activeTab === 'support' && !nightMode}
+              refreshKey={recordVersion} navigationRequest={supportRequest}
+              onPrepareSheet={script => navigate('support', { view: 'sheet', question: script })} />}
             {tab === 'family' && <FamilySharing userId={userId} refreshKey={recordVersion} visible={activeTab === 'family' && !nightMode} />}
             {tab === 'settings' && (
               <Settings
                 userId={userId}
                 onContextUpdate={handleContextUpdate}
                 onLogout={() => api.logout()}
-                onFindHelp={() => navigate('support')}
+                onSwitchEntrance={() => onChooseEntry(null)}
+                onFindHelp={() => navigate('support', { view: 'contacts' })}
               />
             )}
           </section>)}
+        <div className="family-tab-panel" hidden={activeTab !== 'dashboard'}><InstallPrompt ready={recordVersion > 0} /></div>
       </main>
-      <InstallPrompt ready={recordVersion > 0} />
     </div>{nightMode && <NightMode userId={userId} onExit={() => setNightMode(false)} />}</>
   )
 }

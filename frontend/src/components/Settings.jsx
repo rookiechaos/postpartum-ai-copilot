@@ -9,17 +9,18 @@ import FamilyHelp from './FamilyHelp'
 import NotificationManager from './NotificationManager'
 import AccessibilitySettings from './AccessibilitySettings'
 import SecuritySettings from './SecuritySettings'
+import LanguageSelector from './LanguageSelector'
 import { InstallInstructions } from './InstallPrompt'
 import './Settings.css'
 
-function Settings({ userId, onContextUpdate, onLogout, onFindHelp }) {
+function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntrance }) {
   const { t, i18n } = useTranslation()
+  const displayLanguage = (i18n.resolvedLanguage || i18n.language || 'ja').split('-')[0]
   const [settings, setSettings] = useState({
     babyName: '',
     babyAge: '',
     birthType: '',
-    feedingType: '',
-    language: i18n.language
+    feedingType: ''
   })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -40,12 +41,8 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp }) {
           babyName: context.babyName || '',
           babyAge: context.babyAge || '',
           birthType: context.birthType || '',
-          feedingType: context.feedingType || '',
-          language: context.language || i18n.language
+          feedingType: context.feedingType || ''
         })
-        if (context.language && context.language !== i18n.language) {
-          i18n.changeLanguage(context.language)
-        }
         setLoadState('ready')
       } catch (error) {
         if (active) {
@@ -58,32 +55,30 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp }) {
     return () => { active = false }
   }, [userId, loadAttempt])
 
+  useEffect(() => { setSaved(false) }, [displayLanguage])
+
   const handleSave = async () => {
     if (loadState !== 'ready' || saving) return
     setSaving(true)
     try {
-      // Update language if changed.
-      if (settings.language !== i18n.language) {
-        i18n.changeLanguage(settings.language)
-        localStorage.setItem('preferred-language', settings.language)
-      }
-      
       const savedContext = await api.updateUserContext(userId, {
         babyName: settings.babyName,
         babyAge: settings.babyAge,
         birthType: settings.birthType,
         feedingType: settings.feedingType,
-        language: settings.language
+        // The display choice is shared with the header. Only this explicit save
+        // writes it to the account; loading a profile never changes the UI language.
+        language: displayLanguage
       })
-      setSaved(true)
+      setSaved((i18n.resolvedLanguage || i18n.language || 'ja').split('-')[0] === displayLanguage)
       if (onContextUpdate) {
         onContextUpdate(savedContext.context)
       }
-      toast.success(t('settings.saved'))
+      toast.success(i18n.t('settings.saved'))
       setTimeout(() => setSaved(false), 3000)
     } catch (error) {
       console.error('Error saving settings:', error)
-      toast.error(t('common.error'))
+      toast.error(i18n.t('common.error'))
     } finally {
       setSaving(false)
     }
@@ -145,22 +140,18 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp }) {
           </div>
           <div className="section-content">
             <div className="form-group">
-              <label>{t('settings.babyName')}</label>
+              <label htmlFor="settings-baby-name">{t('settings.babyName')}</label>
               <input
+                id="settings-baby-name"
                 type="text"
                 value={settings.babyName}
                 onChange={(e) => setSettings({ ...settings, babyName: e.target.value })}
                 placeholder={t('settings.babyNamePlaceholder')} />
             </div>
             <div className="form-group">
-              <label>{t('settings.language')}</label>
-              <select
-                value={settings.language}
-                onChange={(e) => setSettings({ ...settings, language: e.target.value })}
-              >
-                <option value="en">🇺🇸 English</option>
-                <option value="ja">🇯🇵 日本語</option>
-              </select>
+              <label htmlFor="settings-language">{t('settings.language')}</label>
+              <LanguageSelector id="settings-language" />
+              <p className="field-hint">{t('ui.account.languageNotice')}</p>
             </div>
           </div>
         </motion.div>
@@ -177,8 +168,9 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp }) {
           </div>
           <div className="section-content">
             <div className="form-group">
-              <label>{t('settings.babyAge')}</label>
+              <label htmlFor="settings-baby-age">{t('settings.babyAge')}</label>
               <select
+                id="settings-baby-age"
                 value={settings.babyAge}
                 onChange={(e) => setSettings({ ...settings, babyAge: e.target.value })}
               >
@@ -187,8 +179,9 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp }) {
               </select>
             </div>
             <div className="form-group">
-              <label>{t('settings.birthType')}</label>
+              <label htmlFor="settings-birth-type">{t('settings.birthType')}</label>
               <select
+                id="settings-birth-type"
                 value={settings.birthType}
                 onChange={(e) => setSettings({ ...settings, birthType: e.target.value })}
               >
@@ -198,8 +191,9 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp }) {
               </select>
             </div>
             <div className="form-group">
-              <label>{t('settings.feedingType')}</label>
+              <label htmlFor="settings-feeding-type">{t('settings.feedingType')}</label>
               <select
+                id="settings-feeding-type"
                 value={settings.feedingType}
                 onChange={(e) => setSettings({ ...settings, feedingType: e.target.value })}
               >
@@ -239,11 +233,6 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp }) {
           <Save size={20} />
           {saving ? t('settings.saving') : saved ? t('settings.saved') : t('settings.save')}
         </motion.button>
-        {onLogout && (
-          <button type="button" className="settings-logout" onClick={onLogout}>
-            {t('settings.logout')}
-          </button>
-        )}
       </div>
       </>
       )}
@@ -253,6 +242,13 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp }) {
       {activeSubTab === 'accessibility' && <><AccessibilitySettings />
         <details className="pilot-panel"><summary>{t('settings.notifications')}</summary><NotificationManager userId={userId} /></details></>}
       {activeSubTab === 'profile' && <details className="pilot-panel"><summary>{t('settings.security')}</summary><SecuritySettings userId={userId} /></details>}
+      <div className="pilot-panel settings-account-actions">
+        <h3>{t('ui.account.actions')}</h3>
+        <div className="pilot-actions">
+          {onSwitchEntrance && <button type="button" className="pilot-button secondary" onClick={onSwitchEntrance}>{t('pilot.switchEntrance')}</button>}
+          {onLogout && <button type="button" className="pilot-button secondary" onClick={onLogout}>{t('settings.logout')}</button>}
+        </div>
+      </div>
     </div>
   )
 }

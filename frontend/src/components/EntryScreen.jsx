@@ -16,7 +16,7 @@ export default function EntryScreen({ onChoose }) {
         <p>{t('pilot.entryDescription')}</p>
       </header>
       <div className="entry-grid">
-        <article className="entry-card">
+        <article className="entrance-card">
           <Baby size={32} aria-hidden="true" />
           <h2>{t('pilot.familyTitle')}</h2>
           <p>{t('pilot.familyDescription')}</p>
@@ -25,7 +25,7 @@ export default function EntryScreen({ onChoose }) {
             {t('pilot.enterFamily')} <ArrowRight size={18} aria-hidden="true" />
           </a>
         </article>
-        <article className="entry-card">
+        <article className="entrance-card">
           <Building2 size={32} aria-hidden="true" />
           <h2>{t('pilot.organizationTitle')}</h2>
           <p>{t('pilot.organizationDescription')}</p>

@@ -3,11 +3,11 @@ import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 import { draftPreferenceEvent } from '../utils/useAccountDraft'
 
-export function DraftRecoveryNotice({ draft, disabled = false }) {
+export function DraftRecoveryNotice({ draft, disabled = false, compact = false }) {
   const { t } = useTranslation()
   const blocked = disabled || draft.status === 'deleting'
   return <div className="draft-recovery">
-    {draft.status === 'off' && <p className="session-note">{t('polish.recoveryOff')}</p>}
+    {draft.status === 'off' && <p className="field-hint">{t(compact ? 'ui.draft.offHint' : 'polish.recoveryOff')}</p>}
     {draft.candidate && <section className="pilot-panel" role="status"><h3>{t('polish.draftFound')}</h3>
       <p>{t('polish.draftRestoreNotice')}</p>
       <button type="button" className="pilot-button secondary" disabled={blocked} onClick={draft.recover}>{t('polish.restoreDraft')}</button>

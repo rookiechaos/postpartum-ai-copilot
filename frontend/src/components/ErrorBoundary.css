@@ -78,12 +78,12 @@
 }
 
 .btn-primary {
-  background: #667eea;
+  background: var(--color-brand);
   color: white;
 }
 
 .btn-primary:hover {
-  background: #5568d3;
+  background: var(--color-brand-hover);
   transform: scale(1.05);
 }
 

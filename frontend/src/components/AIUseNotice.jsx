@@ -16,8 +16,12 @@ export default function AIUseNotice({ accepted, onChange, scope = 'message', dis
   return (
     <div className="ai-use-notice">
       <p>{t(`work.aiScope.${scope}`)}</p>
-      <AIProviders directory={provider} />
-      {provider?.profile?.ai_data_notice && <p>{provider.profile.ai_data_notice}</p>}
+      <AIProviders directory={provider} summaryOnly />
+      <details className="ai-processing-details"><summary>{t('ui.chat.processingDetails')}</summary>
+        <AIProviders directory={provider} />
+        <p>{t('work.operator')}: {provider?.profile?.name || t('pilot.notProvided')}</p>
+        <p>{provider?.profile?.ai_data_notice || t('work.askOperator')}</p>
+      </details>
       <fieldset disabled={disabled}>
         <legend>{t('work.aiAttachments')}</legend>
         {onProfileChange && <label><input type="checkbox" checked={includeProfile} onChange={event => { onProfileChange(event.target.checked); onChange(false) }} />{t('work.attachProfile')}</label>}

@@ -1,0 +1,57 @@
+{
+  "nav": { "label": "家庭向けメニュー", "dashboard": "ホーム", "chat": "相談", "tracking": "記録", "support": "相談先", "settings": "設定" },
+  "account": { "actions": "アカウントと利用入口", "languageNotice": "言語の変更は、この端末の表示にすぐ反映します。「設定を保存」で、アカウントの言語にも保存します。" },
+  "support": {
+    "chooseView": "相談先・相談用紙の切り替え",
+    "contacts": "相談先を探す",
+    "sheet": "相談用紙を準備する",
+    "sheetIntro": "相談したいことと記録をまとめます。内容を確認してから、ご自身で共有してください。",
+    "backContacts": "電話番号・相談先を見る",
+    "dismissIncoming": "今回は追加しない"
+  },
+  "chat": {
+    "exampleQuestions": "質問の例から始める",
+    "conversation": "このログイン中のやりとり",
+    "latest": "最新のメッセージへ",
+    "you": "あなたの質問",
+    "assistant": "AIからの回答・案内",
+    "writeQuestion": "相談したいことを書く",
+    "inputHint": "改行できます。内容と送る資料を確認し、「送信」を押してください。",
+    "sentContent": "今回送信した内容を確認する",
+    "profileIncluded": "選択したプロフィール情報を今回の相談に添付します。",
+    "profileExcluded": "プロフィール情報は添付しません。",
+    "sending": "回答を待っています…",
+    "answerReady": "回答が届きました。この会話欄で確認できます。",
+    "processingDetails": "運営者・AIサービス・資料の扱いを確認する"
+  },
+  "draft": { "offHint": "再開用の保存はオフです。「設定」の「データとプライバシー」から変更できます。" },
+  "organization": {
+    "actions": "相談先情報の保存と公開",
+    "saveDraft": "下書き保存",
+    "preview": "公開前確認",
+    "publish": "公開する",
+    "upToDate": "公開中の情報と下書きは同じです。",
+    "previewFirst": "公開するには、先に「公開前確認」で家庭向けの表示を確認してください。",
+    "checkFields": "入力内容を確認してください",
+    "requiredForPublish": "公開時に必須",
+    "optional": "任意",
+    "needsCorrection": "入力の修正が必要です",
+    "previewNotice": "まだ公開していません。表示内容を確認し、よければ「公開する」を押してください。",
+    "currentPublished": "現在公開中の相談先を見る",
+    "publicationComplete": "相談先情報を公開しました",
+    "publicationCompleteNotice": "家庭向けの公開情報を更新しました。以後の編集は、もう一度公開するまで下書きのままです。",
+    "normalizationNotice": "電話番号の全角数字・ハイフンと、URL前後の空白は保存・確認時に整えます。",
+    "groups": { "basic": "名前・連絡方法・利用時間", "details": "対象者・予約・費用など", "review": "担当者と情報の確認日" },
+    "errors": {
+      "required": "公開するには入力が必要です。",
+      "tooLong": "{{max}}文字以内で入力してください。",
+      "phone": "電話番号は数字、+、#、空白、ハイフン、括弧、ピリオドで入力してください。",
+      "email": "メールアドレスを確認してください。",
+      "https": "https:// で始まるURLを入力してください。ユーザー名やパスワードを含むURLは使えません。",
+      "date": "正しい日付を入力してください。",
+      "futureDate": "確認日は日本時間の今日以前の日付にしてください。",
+      "invalid": "この項目の入力内容を確認してください。",
+      "contactLimit": "相談先は10件以内にしてください。"
+    }
+  }
+}

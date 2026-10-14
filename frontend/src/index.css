@@ -1,3 +1,5 @@
+@import './styles/tokens.css';
+
 * {
   margin: 0;
   padding: 0;
@@ -10,10 +12,18 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #eaf1ec;
+  background: var(--color-bg);
+  color: var(--color-text);
   min-height: 100vh;
 }
 
 #root {
   min-height: 100vh;
 }
+
+button, a, input, select, textarea { touch-action: manipulation; }
+button, input, select, textarea { font: inherit; }
+button:disabled { cursor: not-allowed; }
+button, a { overflow-wrap: anywhere; }
+[tabindex="-1"] { scroll-margin-block: 6rem; }
+[tabindex="-1"]:focus-visible { outline: 3px solid var(--color-brand); outline-offset: 4px; }

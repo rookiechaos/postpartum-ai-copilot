@@ -92,9 +92,18 @@ function getAuthSession() {
 }
 
 async function responseError(response, session) {
-  const error = new Error(await parseErrorResponse(response))
+  const data = await response.json().catch(() => ({}))
   assertSession(session)
+  const message = data?.error?.message ?? data?.detail
+  const error = new Error(typeof message === 'string' ? message : `API error: ${response.status}`)
   error.status = response.status
+  const validation = data?.error?.details?.errors
+  if (response.status === 422 && Array.isArray(validation)) {
+    error.validation = validation.filter(item => Array.isArray(item?.loc)).map(item => ({
+      loc: item.loc.filter(part => typeof part === 'string' || Number.isInteger(part)),
+      type: typeof item.type === 'string' ? item.type : '',
+    }))
+  }
   return error
 }
 
@@ -102,12 +111,6 @@ async function clearPrivateCaches() {
   if (typeof caches === 'undefined') return
   const names = await caches.keys()
   await Promise.all(names.filter(name => name.startsWith('postpartum-runtime')).map(name => caches.delete(name)))
-}
-
-/** Parse backend error body: { error: { message } } or { detail } */
-async function parseErrorResponse(response) {
-  const data = await response.json().catch(() => ({}))
-  return data?.error?.message ?? data?.detail ?? `API error: ${response.status}`
 }
 
 let onUnauthorizedCallback = null

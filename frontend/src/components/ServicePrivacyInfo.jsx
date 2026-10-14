@@ -2,12 +2,12 @@ import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 
-export function AIProviders({ directory }) {
+export function AIProviders({ directory, summaryOnly = false }) {
   const { t } = useTranslation()
   const names = { openai: 'OpenAI', claude: 'Claude', gemini: 'Gemini' }
   return <>
     <p>{t('work.answerProvider')}: {names[directory?.ai_provider] || directory?.ai_provider || t('pilot.notProvided')}</p>
-    {directory?.ai_services?.length > 0 && <div><p>{t('work.processingProviders')}</p><ul>
+    {!summaryOnly && directory?.ai_services?.length > 0 && <div><p>{t('work.processingProviders')}</p><ul>
       {directory.ai_services.map(service => <li key={service.purpose}>{t(`work.servicePurposes.${service.purpose}`)}: {service.provider}</li>)}
     </ul></div>}
   </>

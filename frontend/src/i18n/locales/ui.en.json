@@ -1,0 +1,57 @@
+{
+  "nav": { "label": "Family menu", "dashboard": "Home", "chat": "Ask", "tracking": "Records", "support": "Help", "settings": "Settings" },
+  "account": { "actions": "Account and entrances", "languageNotice": "Changing language updates this device's display immediately. Choose Save settings to also save the language to your account." },
+  "support": {
+    "chooseView": "Choose contacts or consultation sheet",
+    "contacts": "Find someone to contact",
+    "sheet": "Prepare a consultation sheet",
+    "sheetIntro": "Bring together your questions and records. Review the contents before sharing them yourself.",
+    "backContacts": "View phone numbers and contacts",
+    "dismissIncoming": "Discard this incoming question"
+  },
+  "chat": {
+    "exampleQuestions": "Start with an example question",
+    "conversation": "Conversation during this sign-in",
+    "latest": "Go to latest messages",
+    "you": "Your question",
+    "assistant": "AI answer or guidance",
+    "writeQuestion": "Write your question",
+    "inputHint": "You can use multiple lines. Review your question and attachments, then choose Send.",
+    "sentContent": "Review what was sent this time",
+    "profileIncluded": "The selected profile information is attached to this question.",
+    "profileExcluded": "Profile information is not attached.",
+    "sending": "Waiting for an answer…",
+    "answerReady": "An answer is ready in the conversation above.",
+    "processingDetails": "Review the operator, AI services and data handling"
+  },
+  "draft": { "offHint": "Draft recovery is off. You can change it in Settings → Data and privacy." },
+  "organization": {
+    "actions": "Save and publish contact information",
+    "saveDraft": "Save draft",
+    "preview": "Preview",
+    "publish": "Publish",
+    "upToDate": "The draft matches the published information.",
+    "previewFirst": "Choose Preview to check the family view before publishing.",
+    "checkFields": "Check these fields",
+    "requiredForPublish": "Required to publish",
+    "optional": "Optional",
+    "needsCorrection": "Input needs correction",
+    "previewNotice": "This is not published yet. Review it, then choose Publish when ready.",
+    "currentPublished": "View currently published contacts",
+    "publicationComplete": "Contact information is published",
+    "publicationCompleteNotice": "The public information has been updated. Later edits stay in the draft until you publish again.",
+    "normalizationNotice": "Full-width phone digits and dashes, and spaces around URLs, are normalized when saving or previewing.",
+    "groups": { "basic": "Name, contact details and hours", "details": "Audience, booking and costs", "review": "Maintainer and review dates" },
+    "errors": {
+      "required": "This field is required to publish.",
+      "tooLong": "Use no more than {{max}} characters.",
+      "phone": "Use digits, +, #, spaces, dashes, parentheses or periods for phone numbers.",
+      "email": "Check this email address.",
+      "https": "Use a URL beginning with https://, without an embedded username or password.",
+      "date": "Enter a valid date.",
+      "futureDate": "The checked date must be today or earlier in Japan time.",
+      "invalid": "Check the value in this field.",
+      "contactLimit": "Use no more than 10 contacts."
+    }
+  }
+}

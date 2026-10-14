@@ -179,7 +179,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
       {error && <p role="alert">{error}<button className="pilot-button secondary" onClick={() => setAttempt(value => value + 1)}>{t('pilot.retry')}</button></p>}
       {entriesLoading && <p role="status">{t('common.loading')}</p>}
       {!error && !entriesLoading && entries.length === 0 && <p>{t('tracking.noEntries')}</p>}
-      {entries.map(entry => <article key={entry.record_key} className="entry-card">
+      {entries.map(entry => <article key={entry.record_key} className="tracking-entry-card">
         <div className="entry-header"><strong>{t(`tracking.${entry.entry_type}`)}</strong><time>{japanDateTime(entry.timestamp, i18n.language)}</time></div>
         <div className="entry-details">
           {entry.feeding_type && <span>{t(`tracking.${entry.feeding_type}`)}</span>}

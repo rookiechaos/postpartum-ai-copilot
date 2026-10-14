@@ -1,5 +1,5 @@
 .security-settings {
-  padding: 2rem;
+  padding: 0;
   max-width: 900px;
   margin: 0 auto;
 }
@@ -24,19 +24,19 @@
   margin-bottom: 1.5rem;
 }
 
-.section-header {
+.security-settings .section-header {
   display: flex;
   align-items: center;
   gap: 1rem;
   margin-bottom: 1rem;
 }
 
-.section-header h3 {
+.security-settings .section-header h3 {
   font-size: 1.1rem;
   margin-bottom: 0.25rem;
 }
 
-.section-header p {
+.security-settings .section-header p {
   font-size: 0.9rem;
   color: var(--text-secondary, #666);
 }
@@ -209,23 +209,4 @@
   text-align: center;
   padding: 3rem;
   color: var(--text-secondary, #666);
-}
-
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-  .security-section {
-    background: var(--bg-secondary-dark, #2a2a2a);
-  }
-
-  .two-fa-setup {
-    background: var(--bg-primary-dark, #1a1a1a);
-  }
-
-  .device-item {
-    background: var(--bg-primary-dark, #1a1a1a);
-  }
-
-  .login-entry {
-    background: var(--bg-primary-dark, #1a1a1a);
-  }
 }

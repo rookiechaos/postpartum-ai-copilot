@@ -6,8 +6,9 @@ import { japanDay } from '../utils/japanTime'
 import { printView } from '../utils/printView'
 import useAccountDraft from '../utils/useAccountDraft'
 import { DraftRecoveryNotice } from './DraftRecovery'
+import { revealElement } from '../utils/focusView'
 
-export default function ShareSummary({ userId, refreshKey = 0, initialQuestion = '', requestKey = 0 }) {
+export default function ShareSummary({ userId, visible = true, refreshKey = 0, initialQuestion = '', requestKey = 0 }) {
   const { t, i18n } = useTranslation()
   const [days, setDays] = useState(7)
   const [questions, setQuestions] = useState(['', '', ''])
@@ -20,9 +21,14 @@ export default function ShareSummary({ userId, refreshKey = 0, initialQuestion =
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [incomingQuestion, setIncomingQuestion] = useState('')
+  const [incomingActive, setIncomingActive] = useState(false)
   const [questionSlot, setQuestionSlot] = useState(0)
+  const [focusTarget, setFocusTarget] = useState(null)
   const [today, setToday] = useState(() => japanDay())
   const generation = useRef(0)
+  const incomingHeading = useRef(null)
+  const sheetHeading = useRef(null)
+  const questionInputs = useRef([])
   const sourceKey = JSON.stringify([days, includeParent, includeNotes, includeDetails, questions, refreshKey, i18n.resolvedLanguage, today])
   const preview = draft?.text || ''
   const stale = Boolean(draft && draft.sourceKey !== sourceKey)
@@ -38,7 +44,17 @@ export default function ShareSummary({ userId, refreshKey = 0, initialQuestion =
     setIncludeParent(content.includeParent === true); setIncludeDetails(content.includeDetails === true)
     setIncludeNotes(content.includeDetails === true && content.includeNotes === true); setCandidate(null)
   })
-  useEffect(() => { if (initialQuestion) setIncomingQuestion(initialQuestion.slice(0, 250)) }, [requestKey])
+  useEffect(() => {
+    if (initialQuestion) {
+      setIncomingQuestion(initialQuestion.slice(0, 250)); setIncomingActive(true); setFocusTarget({ kind: 'incoming' })
+    }
+  }, [requestKey, initialQuestion])
+  useEffect(() => {
+    if (!visible || !focusTarget || (focusTarget.kind === 'incoming' && !incomingActive)) return
+    const element = focusTarget.kind === 'incoming' ? incomingHeading.current
+      : focusTarget.kind === 'question' ? questionInputs.current[focusTarget.index] : sheetHeading.current
+    if (revealElement(element)) setFocusTarget(null)
+  }, [visible, focusTarget, incomingActive, loading])
   useEffect(() => {
     const updateDay = () => setToday(japanDay())
     const midnight = new Date(`${japanDay()}T00:00:00+09:00`).getTime() + 86400000
@@ -77,25 +93,33 @@ export default function ShareSummary({ userId, refreshKey = 0, initialQuestion =
     link.href = url; link.download = `care-summary-${japanDay()}.txt`; link.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
-  return <section className="pilot-panel share-summary">
-    <h2>{t('pilot.summaryTitle')}</h2><p>{t('work.sheetDescription')}</p>
+  return <section className="pilot-panel share-summary" aria-labelledby="consultation-sheet-heading">
+    <h2 id="consultation-sheet-heading" tabIndex={-1} ref={sheetHeading}>{t('pilot.summaryTitle')}</h2><p>{t('work.sheetDescription')}</p>
     <DraftRecoveryNotice draft={recovery} disabled={loading} />
-    {incomingQuestion && <section className="pilot-panel"><h3>{t('polish.addCallQuestion')}</h3>
+    {incomingActive && <section className="pilot-panel"><h3 tabIndex={-1} ref={incomingHeading}>{t('polish.addCallQuestion')}</h3>
       <textarea aria-label={t('polish.currentQuestion')} rows={4} maxLength={250} value={incomingQuestion} onChange={event => setIncomingQuestion(event.target.value)} />
       <label>{t('polish.questionSlot')}<select value={questionSlot} onChange={event => setQuestionSlot(Number(event.target.value))}>
         {[0, 1, 2].map(index => <option key={index} value={index}>{t('work.questionNumber', { number: index + 1 })}</option>)}
       </select></label><p>{t('polish.replaceQuestionNotice')}</p>
-      <button className="pilot-button secondary" disabled={loading} onClick={() => {
-        setQuestions(previous => previous.map((question, index) => index === questionSlot ? incomingQuestion : question)); setIncomingQuestion('')
+      <button type="button" className="pilot-button secondary" disabled={loading || !incomingQuestion.trim()} onClick={() => {
+        if (loading || !incomingQuestion.trim()) return
+        setQuestions(previous => previous.map((question, index) => index === questionSlot ? incomingQuestion : question)); setIncomingQuestion(''); setIncomingActive(false)
+        setFocusTarget({ kind: 'question', index: questionSlot })
       }}>{t('polish.useCallQuestion')}</button>
+      <button type="button" className="pilot-button secondary" onClick={() => {
+        setIncomingQuestion(''); setIncomingActive(false); setFocusTarget({ kind: 'sheet' })
+      }}>
+        {t('ui.support.dismissIncoming')}
+      </button>
     </section>}
     <fieldset disabled={loading}>
       <legend>{t('work.sheetOptions')}</legend>
       <label>{t('work.sheetPeriod')}<select value={days} onChange={event => setDays(Number(event.target.value))}>
         {[3, 7, 14, 30].map(value => <option key={value} value={value}>{t('work.rangeDays', { days: value })}</option>)}
       </select></label>
-      {questions.map((question, index) => <label key={index}>{t('work.questionNumber', { number: index + 1 })}
-        <textarea rows={2} maxLength={250} value={question} placeholder={t('work.questionPlaceholder')}
+      {questions.map((question, index) => <label key={index} htmlFor={`consultation-question-${index + 1}`}>{t('work.questionNumber', { number: index + 1 })}
+        <textarea id={`consultation-question-${index + 1}`} ref={element => { questionInputs.current[index] = element }}
+          rows={2} maxLength={250} value={question} placeholder={t('work.questionPlaceholder')}
           onChange={event => setQuestions(previous => previous.map((value, i) => i === index ? event.target.value : value))} />
       </label>)}
       <label className="checkbox-label"><input type="checkbox" checked={includeParent} onChange={event => setIncludeParent(event.target.checked)} />{t('pilot.includeParent')}</label>
@@ -107,7 +131,8 @@ export default function ShareSummary({ userId, refreshKey = 0, initialQuestion =
     </fieldset>
     {(draft || questions.some(question => question.trim()) || recovery.hasSavedDraft) && <button type="button" className="pilot-button secondary" disabled={loading} onClick={() => {
       if (window.confirm(t('polish.deleteSheetConfirm'))) {
-        setDraft(null); setQuestions(['', '', '']); setIncomingQuestion(''); setCandidate(null); setSavedDrafts([]); recovery.clear()
+        setDraft(null); setQuestions(['', '', '']); setIncomingQuestion(''); setIncomingActive(false); setCandidate(null); setSavedDrafts([]); recovery.clear()
+        setFocusTarget({ kind: 'sheet' })
       }
     }}>{t('polish.deleteDraft')}</button>}
     <button className="pilot-button secondary" disabled={loading} onClick={prepare}>{t(loading ? 'common.loading' : 'pilot.prepareSummary')}</button>

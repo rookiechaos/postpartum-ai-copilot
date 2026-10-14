@@ -1,0 +1,40 @@
+:root {
+  --color-bg: #eef4f0;
+  --color-surface: #ffffff;
+  --color-text: #213b35;
+  --color-muted: #526b64;
+  --color-brand: #256354;
+  --color-brand-hover: #1c4e42;
+  --color-link: var(--color-brand);
+  --color-tint: #edf5f0;
+  --color-border: #c4d5ca;
+  --color-danger: #a12e2e;
+  --color-danger-tint: #fff2f0;
+  --radius-panel: 1rem;
+  --shadow-panel: 0 4px 20px #213b350a;
+  --content-width: 68rem;
+  --pilot-ink: var(--color-text);
+  --pilot-muted: var(--color-muted);
+  --pilot-brand: var(--color-brand);
+  --pilot-border: var(--color-border);
+  --primary-color: var(--color-brand);
+  --text-primary: var(--color-text);
+  --text-secondary: var(--color-muted);
+  --bg-primary: var(--color-surface);
+  --bg-secondary: var(--color-tint);
+  --border-color: var(--color-border);
+}
+html.high-contrast {
+  --color-bg: #fff;
+  --color-surface: #fff;
+  --color-text: #000;
+  --color-muted: #222;
+  --color-brand: #164b38;
+  --color-brand-hover: #0b3022;
+  --color-link: #003b80;
+  --color-tint: #fff;
+  --color-border: #333;
+  --color-danger: #8b0000;
+  --color-danger-tint: #fff;
+  --shadow-panel: none;
+}
