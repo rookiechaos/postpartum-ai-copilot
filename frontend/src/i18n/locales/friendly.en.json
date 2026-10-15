@@ -1,0 +1,69 @@
+{
+  "home": {
+    "title": "Today's records",
+    "intro": "Choose what to record. You can correct the time or amount afterwards.",
+    "saved": "Saved",
+    "savedRecord": "{{record}} · You",
+    "edit": "Edit",
+    "undo": "Undo",
+    "undoHint": "Undo the last record for 8 seconds. You can still edit or delete it in Records afterwards.",
+    "details": "Record a different time or add an amount",
+    "family": "Family handoff (optional)",
+    "familyOff": "Choose a family to see the recent records they have shared.",
+    "note": "Write or edit your handoff note",
+    "loadRecords": "Reload recent records"
+  },
+  "time": { "justNow": "Just now", "jst": "{{time}} (Japan time)" },
+  "record": {
+    "incoming": "You can open the record selected on Home. Your current input has not been changed.",
+    "open": "Open the selected record",
+    "discardOpen": "Dismiss this request",
+    "replace": "Discard your current unsaved input and open the selected record?",
+    "resolveDraft": "Review your recovery draft and any unconfirmed save before opening the selected record."
+  },
+  "welcome": {
+    "start": "Start recording now",
+    "profile": "Add a profile first (optional)",
+    "profileHint": "You can add a profile in Settings later. A practice recording is available on Home.",
+    "withoutProfile": "Start without saving a profile"
+  },
+  "chat": {
+    "title": "Ask AI",
+    "human": "Speak to a person or get urgent help",
+    "answer": "Answer from AI",
+    "more": "Suggestions, questions and sources",
+    "excerpt": "View the opening excerpt",
+    "sendReview": "What you will send to AI",
+    "consentHint": "Review your question and attachments, then consent to this send.",
+    "followUpChoice": "Review and attach the selected previous exchange"
+  },
+  "support": {
+    "urgent": "When you need urgent help",
+    "national": "#8000, #7119 and finding local contacts",
+    "purpose": "What would you like help with?",
+    "details": "Who can use it, costs and how to prepare",
+    "operatorDetails": "Contact person and data handling",
+    "ownProgress": "Your own note: {{state}}",
+    "ownProgressHint": "This does not confirm that the service received, replied to or booked your request.",
+    "reloadProgress": "Discard unsaved input and check saved progress",
+    "reloadAllProgress": "Check saved progress again",
+    "reloadDirectory": "Reload contact information"
+  },
+  "organization": {
+    "tasks": "What needs attention",
+    "reviewCount": "Need review: {{count}}",
+    "changedCount": "Unpublished contact changes: {{count}}",
+    "pausedCount": "Paused in draft: {{count}}",
+    "needsReview": "Needs review",
+    "unpublished": "Unpublished changes",
+    "draftPaused": "Draft: paused",
+    "publishedPaused": "Published: paused",
+    "phone": "Change phone",
+    "status": "Edit pause or reopening",
+    "all": "All fields",
+    "taskNotice": "Edits here stay in the draft. Save the draft, then preview and publish to update what families see.",
+    "contactTask": "Change the phone number",
+    "statusTask": "Pause or reopen this service",
+    "reviewTasks": "View fields needing review"
+  }
+}

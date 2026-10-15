@@ -3,11 +3,15 @@ import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 import { japanDateTime } from '../utils/japanTime'
 import useConnection from '../utils/useConnection'
+import RecordTime, { useRecordClock } from './RecordTime'
 
 const categories = ['feeding', 'diaper', 'sleep', 'pumping']
 export default function FamilyCareOverview({ visible, refreshKey, onManage }) {
   const { t, i18n } = useTranslation()
   const { reconnections } = useConnection()
+  const [expanded, setExpanded] = useState(false)
+  const activeView = visible && expanded
+  const now = useRecordClock(activeView)
   const [families, setFamilies] = useState([])
   const [selected, setSelected] = useState('')
   const [overview, setOverview] = useState(null)
@@ -24,7 +28,7 @@ export default function FamilyCareOverview({ visible, refreshKey, onManage }) {
   const label = item => item.recorder_label || t('polish.memberNumber', { number: item.recorder_number || '?' })
   const date = value => japanDateTime(value, i18n.resolvedLanguage || 'ja')
   useEffect(() => {
-    if (!visible) return
+    if (!activeView) return
     let active = true
     api.get('/api/families/').then(groups => {
       if (!active) return
@@ -34,9 +38,9 @@ export default function FamilyCareOverview({ visible, refreshKey, onManage }) {
       }
     }).catch(() => { if (active) { setError('load'); setOverview(null) } })
     return () => { active = false }
-  }, [visible, refreshKey, reconnections, attempt, selected])
+  }, [activeView, refreshKey, reconnections, attempt, selected])
   useEffect(() => {
-    if (!selected || !visible) return
+    if (!selected || !activeView) { setOverview(null); setLoading(false); return }
     let active = true
     setLoading(true)
     api.get(`/api/families/${selected}/overview`).then(result => {
@@ -53,14 +57,14 @@ export default function FamilyCareOverview({ visible, refreshKey, onManage }) {
     }).catch(() => { if (active) { setOverview(null); setError('load') } })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [selected, visible, refreshKey, reconnections, attempt])
+  }, [selected, activeView, refreshKey, reconnections, attempt])
   useEffect(() => {
-    if (!selected || !visible) return
+    if (!selected || !activeView) return
     const refresh = () => setAttempt(value => value + 1)
     const timer = setInterval(refresh, 30000)
     window.addEventListener('focus', refresh)
     return () => { clearInterval(timer); window.removeEventListener('focus', refresh) }
-  }, [selected, visible])
+  }, [selected, activeView])
   const reload = () => {
     if (edited.current && !window.confirm(t('flows.overview.reloadConfirm'))) return
     edited.current = false; base.current = null; setConflict(false); setAttempt(value => value + 1)
@@ -77,8 +81,11 @@ export default function FamilyCareOverview({ visible, refreshKey, onManage }) {
     } catch (failure) { setError(failure.status === 409 ? 'conflict' : 'save'); setConflict(failure.status === 409) }
     finally { saving.current = false; setBusy(false) }
   }
-  return <section className="pilot-panel family-overview">
-    <h3>{t('flows.overview.title')}</h3><p>{t('flows.overview.notice')}</p>
+  return <details className="pilot-panel family-overview" onToggle={event => {
+    if (event.target === event.currentTarget) setExpanded(event.currentTarget.open)
+  }}><summary>{t('friendly.home.family')}{edited.current ? ` · ${t('flows.overview.unsaved')}` : ''}</summary>
+    {!selected && <p>{t('friendly.home.familyOff')}</p>}
+    <p>{t('flows.overview.notice')}</p>
     <label>{t('flows.overview.choose')}<select value={selected} disabled={busy} onChange={event => {
       if (edited.current && !window.confirm(t('flows.overview.reloadConfirm'))) return
       edited.current = false; base.current = null; setSelected(event.target.value); setOverview(null)
@@ -86,23 +93,24 @@ export default function FamilyCareOverview({ visible, refreshKey, onManage }) {
     }}><option value="">{t('flows.overview.off')}</option>
       {families.map(family => <option key={family.family_id} value={family.family_id}>{family.name}</option>)}
     </select></label>
-    {error && <p role="alert">{t(`flows.overview.${error}Error`)} <button type="button" disabled={busy} onClick={reload}>{t('pilot.retry')}</button></p>}
+    {error && <p role="alert">{t(`flows.overview.${error}Error`)} <button className="pilot-button secondary" type="button" disabled={busy} onClick={reload}>{t('flows.overview.reload')}</button></p>}
     {loading && <p role="status">{t('common.loading')}</p>}
     {selected && <>
-      <dl className="care-overview-grid">{categories.map(kind => {
+      {overview && <dl className="care-overview-grid">{categories.map(kind => {
         const record = overview?.latest[kind]
         return <div key={kind}><dt>{t(`tracking.${kind}`)}</dt><dd>{record ? <>
-          <time>{date(record.timestamp)}</time><span>{t('polish.recordedBy', { name: label(record) })}</span>
+          <RecordTime value={record.timestamp} now={now} /><span>{t('polish.recordedBy', { name: label(record) })}</span>
           {record.feeding_type && <span>{t(`tracking.${record.feeding_type}`)}</span>}
           {record.diaper_type && <span>{t(`tracking.${record.diaper_type}`)}</span>}
           {['duration_minutes', 'sleep_duration_minutes'].map(key => record[key] != null && <span key={key}>{record[key]} {t('pilot.minutes')}</span>)}
           {['amount_ml', 'pumped_amount_ml'].map(key => record[key] != null && <span key={key}>{record[key]} mL</span>)}
         </> : t('flows.overview.unknown')}</dd></div>
-      })}</dl>
+      })}</dl>}
       {overview?.checked_at && <p>{t('flows.overview.checkedAt', { time: date(overview.checked_at) })}</p>}
       {overview?.handovers.map((note, index) => <article className="support-card" key={`${note.recorder_number}:${index}`}>
         <h4>{t('polish.recordedBy', { name: label(note) })}</h4><p className="preserve-lines">{note.text}</p><time>{date(note.updated_at)}</time>
       </article>)}
+      <details className="handover-editor"><summary>{t('friendly.home.note')}{edited.current ? ` · ${t('flows.overview.unsaved')}` : ''}</summary>
       <form onSubmit={save}><fieldset disabled={busy || !overview || conflict}>
         <legend>{t('flows.overview.noteTitle')}</legend>
         <label>{t('flows.overview.note')}<textarea rows={3} maxLength={1000} value={form.text} onChange={event => edit('text', event.target.value)} /></label>
@@ -116,7 +124,8 @@ export default function FamilyCareOverview({ visible, refreshKey, onManage }) {
       {edited.current && <p role="status">{t('flows.overview.unsaved')}</p>}
       {saved && <p role="status">{t('pilot.saved')}</p>}
       {conflict && <button type="button" className="pilot-button secondary" disabled={busy} onClick={reload}>{t('flows.overview.reload')}</button>}
+      </details>
     </>}
     <button type="button" className="pilot-button secondary" onClick={onManage}>{t('polish.familyHandoff')}</button>
-  </section>
+  </details>
 }

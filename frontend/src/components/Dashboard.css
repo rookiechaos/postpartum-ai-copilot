@@ -8,4 +8,12 @@
 .quick-record-panel .record-choices .pilot-button:hover:not(:disabled) { background: var(--color-brand-hover); }
 .quick-record-panel .record-choices .pilot-button:disabled { opacity: .55; }
 .family-secondary-actions { margin-block: 1rem; }
+.quick-save-receipt { padding: .75rem 1rem; margin-block: 1rem; border-inline-start: 3px solid var(--color-brand); background: var(--color-tint); line-height: 1.8; }
+.quick-save-receipt .pilot-actions { margin-block: .5rem; }
+.quick-save-receipt small { display: block; color: var(--color-muted); }
+.family-dashboard .recent-records li { align-items: center; justify-content: space-between; gap: .75rem; }
+.recent-record-content { display: flex; flex: 1 1 12rem; flex-direction: column; gap: .25rem; min-width: 0; }
+.family-overview > summary { font-weight: 600; }
+.family-overview .handover-editor { margin-block: 1rem; border-top: 1px solid var(--color-border); }
+.family-overview .handover-editor fieldset { padding-inline: 0; border: 0; }
 @media (max-width: 700px) { .dashboard-header h2 { font-size: 1.25rem; } .family-dashboard .pilot-panel { padding: 1rem; } }

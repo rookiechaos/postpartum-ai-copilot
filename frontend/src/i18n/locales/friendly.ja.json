@@ -1,0 +1,69 @@
+{
+  "home": {
+    "title": "きょうの記録",
+    "intro": "記録したいものを押してください。時間・量はあとから直せます。",
+    "saved": "保存しました",
+    "savedRecord": "{{record}} · あなた",
+    "edit": "修正",
+    "undo": "取り消す",
+    "undoHint": "直前の記録は8秒間取り消せます。その後も記録一覧で修正・削除できます。",
+    "details": "時間・量を指定して記録",
+    "family": "家族の引き継ぎ（任意）",
+    "familyOff": "表示する家族を選ぶと、共有された最近の記録を確認できます。",
+    "note": "引き継ぎメモを書く・直す",
+    "loadRecords": "最近の記録を読み直す"
+  },
+  "time": { "justNow": "たった今", "jst": "{{time}}（日本時間）" },
+  "record": {
+    "incoming": "ホームで選んだ記録を開けます。今の入力はまだ変更していません。",
+    "open": "選んだ記録を開く",
+    "discardOpen": "この案内を閉じる",
+    "replace": "今の未保存の入力を破棄して、選んだ記録を開きますか？",
+    "resolveDraft": "再開用の下書きと保存結果を確認してから、選んだ記録を開いてください。"
+  },
+  "welcome": {
+    "start": "今すぐ記録を始める",
+    "profile": "先にプロフィールを入力（任意）",
+    "profileHint": "プロフィールはあとから設定できます。記録の練習はホームにあります。",
+    "withoutProfile": "プロフィールを保存せずに始める"
+  },
+  "chat": {
+    "title": "AIに聞く",
+    "human": "人に相談したいとき・急いでいるとき",
+    "answer": "AIからの回答",
+    "more": "補足・確認したいこと・出典",
+    "excerpt": "回答の冒頭を見る",
+    "sendReview": "今回AIに送る内容",
+    "consentHint": "内容と添付資料を確認し、今回の送信に同意してください。",
+    "followUpChoice": "選んだ前のやりとりを確認・添付する"
+  },
+  "support": {
+    "urgent": "急いで助けが必要なとき",
+    "national": "#8000・#7119・地域の窓口の探し方",
+    "purpose": "どんなことで相談したいですか？",
+    "details": "対象・費用・申し込みの準備を見る",
+    "operatorDetails": "担当者・データの扱いを見る",
+    "ownProgress": "自分用メモ：{{state}}",
+    "ownProgressHint": "窓口の受付・返信・予約を確認した表示ではありません。",
+    "reloadProgress": "未保存の入力を破棄して、保存済みの進み具合を確認",
+    "reloadAllProgress": "保存済みの進み具合を再確認",
+    "reloadDirectory": "相談先情報を読み直す"
+  },
+  "organization": {
+    "tasks": "いま対応すること",
+    "reviewCount": "要確認 {{count}}件",
+    "changedCount": "未公開の相談先変更 {{count}}件",
+    "pausedCount": "下書きで休止 {{count}}件",
+    "needsReview": "要確認",
+    "unpublished": "未公開の変更",
+    "draftPaused": "下書き：休止",
+    "publishedPaused": "公開中：休止",
+    "phone": "電話を変更",
+    "status": "休止・再開を編集",
+    "all": "すべての項目",
+    "taskNotice": "ここでの変更は下書きです。「下書き保存」のあと、公開前確認・公開で家庭向けの情報を更新します。",
+    "contactTask": "電話番号の変更",
+    "statusTask": "受付の休止・再開",
+    "reviewTasks": "確認が必要な項目を見る"
+  }
+}

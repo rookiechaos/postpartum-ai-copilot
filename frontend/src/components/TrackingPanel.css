@@ -26,3 +26,5 @@
 .entry-details { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; color: var(--color-muted); line-height: 1.8; }
 .entry-details span { padding: .25rem .5rem; background: var(--color-tint); border-radius: .25rem; }
 .entry-notes { margin-top: .75rem; padding-top: .75rem; border-top: 1px solid var(--color-border); color: var(--color-muted); line-height: 1.8; }
+.record-form-region { scroll-margin-block: 6rem; }
+.record-open-request { margin-block: 1rem; padding: 1rem; border-inline-start: 3px solid var(--color-brand); background: var(--color-tint); line-height: 1.8; }

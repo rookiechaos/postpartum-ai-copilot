@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
-import { japanDay, japanDateTime } from '../utils/japanTime'
+import { japanDay } from '../utils/japanTime'
 import { recordOperation, isRecordOperation } from '../utils/recordOperations'
 import RecordingExample from './RecordingExample'
 import FamilyCareOverview from './FamilyCareOverview'
+import RecordTime, { useRecordClock } from './RecordTime'
 import useConnection from '../utils/useConnection'
 import useAccountDraft from '../utils/useAccountDraft'
 import { DraftRecoveryNotice } from './DraftRecovery'
@@ -18,8 +19,9 @@ const quickChoices = [
 ]
 
 export default function Dashboard({ userId, userContext, onNavigate, onRecordsChanged, refreshKey = 0, visible = true }) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const { online, reconnections } = useConnection()
+  const now = useRecordClock(visible)
   const [entries, setEntries] = useState(null)
   const [recent, setRecent] = useState([])
   const [error, setError] = useState(false)
@@ -36,6 +38,9 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
     setPending(content.pending); setSaveStatus('unconfirmed')
   })
   const refresh = () => { setAttempt(value => value + 1); onRecordsChanged?.() }
+  const recordName = entry => [t(`tracking.${entry.entry_type}`),
+    entry.diaper_type && t(`tracking.${entry.diaper_type}`), entry.feeding_type && t(`tracking.${entry.feeding_type}`)].filter(Boolean).join(' · ')
+  const editRecord = entry => onNavigate('tracking', { action: 'edit', record: entry })
 
   useEffect(() => {
     if (!visible) return
@@ -92,32 +97,39 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
   }
 
   return <div className="dashboard family-dashboard">
-    <header className="dashboard-header"><div><h2>{t('pilot.familyHeading')}</h2>
+    <header className="dashboard-header"><div><h2>{t('friendly.home.title')}</h2>
       <p>{userContext?.babyName ? t('dashboard.howIsBaby', { name: userContext.babyName }) : t('pilot.todayIntro')}</p></div></header>
-    <section className="pilot-panel quick-record-panel"><h3>{t('polish.recordNow')}</h3><p>{t('polish.quickNotice')}</p>
+    <section className="pilot-panel quick-record-panel"><h3>{t('polish.recordNow')}</h3><p>{t('friendly.home.intro')}</p>
       <div className="record-choices">{quickChoices.map(([key, data]) => <button type="button" key={key}
         className="pilot-button" disabled={Boolean(pending) || Boolean(draft.candidate) || draft.status === 'loading' || saveStatus === 'saving'}
         onClick={() => saveQuick(recordOperation(data))}>{t(`polish.quick.${key}`)}</button>)}</div>
-      {saveStatus && <p role="status">{t(['offline', 'unconfirmed'].includes(saveStatus) ? `flows.connection.${saveStatus}Save` : `polish.saveStatus.${saveStatus}`)}</p>}
+      {saveStatus && !(undo && saveStatus === 'saved') && <p role="status">{t(['offline', 'unconfirmed'].includes(saveStatus) ? `flows.connection.${saveStatus}Save` : `polish.saveStatus.${saveStatus}`)}</p>}
+      {undo && !pending && ['saved', 'undoFailed'].includes(saveStatus) && <section className="quick-save-receipt" aria-label={t('friendly.home.saved')}>
+        <p role="status"><strong>{t('friendly.home.saved')}</strong> · {t('friendly.home.savedRecord', { record: recordName(undo) })}</p>
+        <RecordTime value={undo.timestamp} now={now} />
+        <div className="pilot-actions">
+          <button type="button" className="pilot-button secondary" aria-label={`${t('friendly.home.edit')}: ${recordName(undo)}`} onClick={() => editRecord(undo)}>{t('friendly.home.edit')}</button>
+          <button type="button" className="pilot-button secondary" onClick={undoQuick}>{t('friendly.home.undo')}</button>
+        </div><small>{t('friendly.home.undoHint')}</small>
+      </section>}
       <DraftRecoveryNotice draft={draft} disabled={saveStatus === 'saving'} compact />
       {pending && saveStatus !== 'saving' && <div className="pilot-actions"><p>{t('polish.pendingWriteNotice')}</p>
+        <button className="pilot-button secondary" onClick={() => setAttempt(value => value + 1)}>{t('flows.connection.checkRecords')}</button>
         <button className="pilot-button secondary" onClick={() => saveQuick(pending)}>{t('polish.retrySameSave')}</button>
         <button className="pilot-button secondary" onClick={() => {
           if (window.confirm(t('polish.abandonWrite'))) { unconfirmedRequest.current = null; setPending(null); draft.clear(); setSaveStatus(''); refresh() }
         }}>{t('polish.checkBeforeNew')}</button></div>}
-      {undo && <button className="pilot-button secondary" disabled={Boolean(pending) || saveStatus === 'saving'} onClick={undoQuick}>{t('polish.undoQuick')}</button>}
-      <button className="pilot-button secondary" onClick={() => onNavigate('tracking', 'feeding')}>{t('polish.detailedRecord')}</button>
+      <button className="pilot-button secondary" onClick={() => onNavigate('tracking', 'feeding')}>{t('friendly.home.details')}</button>
       <p>{t('pilot.noPressure')}</p>
     </section>
-    <FamilyCareOverview visible={visible} refreshKey={refreshKey} onManage={() => onNavigate('family')} />
     <section className="pilot-panel"><h3>{t('polish.recentRecords')}</h3><p>{t('pilot.japanTime')}</p>
-      {error ? <p role="status">{t('pilot.loadFailed')} <button onClick={() => setAttempt(value => value + 1)}>{t('pilot.retry')}</button></p>
+      {error ? <p role="status">{t('pilot.loadFailed')} <button className="pilot-button secondary" onClick={() => setAttempt(value => value + 1)}>{t('friendly.home.loadRecords')}</button></p>
         : entries === null ? <p role="status">{t('common.loading')}</p>
         : recent.length === 0 ? <p>{t('tracking.noEntries')}</p>
         : <ol className="recent-records">{recent.map(entry => <li key={entry.record_key}>
-          <strong>{t(`tracking.${entry.entry_type}`)}{entry.diaper_type ? ` · ${t(`tracking.${entry.diaper_type}`)}` : ''}
-            {entry.feeding_type ? ` · ${t(`tracking.${entry.feeding_type}`)}` : ''}</strong>
-          <time>{japanDateTime(entry.timestamp, i18n.resolvedLanguage || 'ja')}</time><small>{t('polish.recordedByYou')}</small>
+          <div className="recent-record-content"><strong>{recordName(entry)}</strong>
+            <RecordTime value={entry.timestamp} now={now} /><small>{t('polish.recordedByYou')}</small></div>
+          <button type="button" className="pilot-button secondary" aria-label={`${t('friendly.home.edit')}: ${recordName(entry)}`} onClick={() => editRecord(entry)}>{t('friendly.home.edit')}</button>
         </li>)}</ol>}
       <button className="pilot-button secondary" onClick={() => onNavigate('tracking')}>{t('polish.allRecords')}</button>
       {entries && <details><summary>{t('pilot.todayRecords')}</summary><p>{t('polish.recordedCountsOnly')}</p>
@@ -125,10 +137,10 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
         <p>{t('pilot.totalSleep')}: {entries.reduce((total, entry) => total + (entry.entry_type === 'sleep' ? entry.sleep_duration_minutes || 0 : 0), 0)}</p>
       </details>}
     </section>
+    <FamilyCareOverview visible={visible} refreshKey={refreshKey} onManage={() => onNavigate('family')} />
     <div className="pilot-actions family-secondary-actions">
-      <button className="pilot-button secondary" onClick={() => onNavigate('chat')}>{t('pilot.askTitle')}</button>
+      <button className="pilot-button secondary" onClick={() => onNavigate('chat')}>{t('friendly.chat.title')}</button>
       <button className="pilot-button secondary" onClick={() => onNavigate('support', { view: 'contacts' })}>{t('pilot.supportTitle')}</button>
-      <button className="pilot-button secondary" onClick={() => onNavigate('family')}>{t('polish.familyHandoff')}</button>
     </div>
     <details className="pilot-panel"><summary>{t('polish.selfCare')}</summary>
       <button className="pilot-button secondary" onClick={() => onNavigate('checkin')}>{t('checkin.title')}</button>

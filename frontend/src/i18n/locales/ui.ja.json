@@ -1,5 +1,5 @@
 {
-  "nav": { "label": "家庭向けメニュー", "dashboard": "ホーム", "chat": "相談", "tracking": "記録", "support": "相談先", "settings": "設定" },
+  "nav": { "label": "家庭向けメニュー", "dashboard": "ホーム", "chat": "AIに聞く", "tracking": "記録", "support": "相談先", "settings": "設定" },
   "account": { "actions": "アカウントと利用入口", "languageNotice": "言語の変更は、この端末の表示にすぐ反映します。「設定を保存」で、アカウントの言語にも保存します。" },
   "support": {
     "chooseView": "相談先・相談用紙の切り替え",

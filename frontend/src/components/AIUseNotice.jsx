@@ -5,7 +5,7 @@ import { AIProviders } from './ServicePrivacyInfo'
 
 export default function AIUseNotice({ accepted, onChange, scope = 'message', disabled = false,
   includeProfile = false, onProfileChange, includeParent = false, onParentChange,
-  includeNotes = false, onNotesChange, includeHistory = false, onHistoryChange }) {
+  includeNotes = false, onNotesChange, includeHistory = false, onHistoryChange, children }) {
   const { t } = useTranslation()
   const [provider, setProvider] = useState(null)
   useEffect(() => {
@@ -28,6 +28,7 @@ export default function AIUseNotice({ accepted, onChange, scope = 'message', dis
         {onParentChange && <label><input type="checkbox" checked={includeParent} onChange={event => { onParentChange(event.target.checked); onChange(false) }} />{t('pilot.includeParent')}</label>}
         {onNotesChange && <label><input type="checkbox" checked={includeNotes} onChange={event => { onNotesChange(event.target.checked); onChange(false) }} />{t('pilot.includeNotes')}</label>}
         {onHistoryChange && <label><input type="checkbox" checked={includeHistory} onChange={event => { onHistoryChange(event.target.checked); onChange(false) }} />{t('work.attachHistory')}</label>}
+        {children}
       <label>
         <input type="checkbox" checked={accepted} onChange={event => onChange(event.target.checked)} />
         {t('pilot.aiConsent')}

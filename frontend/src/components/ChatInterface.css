@@ -30,6 +30,22 @@
 .send-button { min-height: 48px; padding: .75rem 1.5rem; border: 1px solid var(--color-brand); border-radius: .75rem; background: var(--color-brand); color: #fff; cursor: pointer; font-weight: 600; }
 .send-button:hover:not(:disabled) { background: var(--color-brand-hover); }
 .send-button:disabled { opacity: .55; }
+.chat-interface .message > .red-flags { margin-top: 0; padding: .75rem; border: 1px solid var(--color-danger); border-inline-start-width: 3px; border-radius: .5rem; background: var(--color-danger-tint); }
+.answer-heading { margin-bottom: .5rem; }
+.answer-more { margin-block: .75rem; border-block: 1px solid var(--color-border); }
+.chat-interface .answer-more summary, .follow-up-preview summary { min-height: 44px; padding-block: .625rem; cursor: pointer; line-height: 1.8; }
+.answer-more section { margin-block: 1rem; }
+.answer-more ul { padding-left: 1.25rem; line-height: 1.8; }
+.answer-actions { margin-bottom: 0; gap: .5rem; }
+.answer-actions .pilot-button { margin-top: 0; }
+.chat-send-review { padding-top: .75rem; border-top: 1px solid var(--color-border); }
+.chat-send-review > h4 { font-size: 1rem; }
+.chat-send-review .ai-use-notice { padding: 0; background: transparent; border: 0; font-size: 1rem; }
+.chat-send-review .ai-use-notice fieldset { padding: 0; border: 0; }
+.chat-send-review .ai-use-notice legend { padding: 0; }
+.chat-send-review .ai-use-notice label, .chat-send-review .follow-up-preview label { min-height: 44px; align-items: center; }
+.chat-send-review .submission-preview { margin-block: .75rem; border: 0; background: var(--color-tint); }
+.chat-send-review .follow-up-preview { padding-block: .75rem; border-block: 1px solid var(--color-border); }
 @media (max-width: 700px) {
   .chat-interface .guided-chat, .chat-composer { padding: 1rem; }
   .chat-thread-heading { padding-inline: 1rem; }

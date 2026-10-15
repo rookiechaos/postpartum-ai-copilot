@@ -255,8 +255,8 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
 
   const tabs = [
     { id: 'dashboard', label: t('nav.home'), icon: <Home size={20} /> },
-    { id: 'chat', label: t('nav.chat'), icon: <MessageCircle size={20} /> },
     { id: 'tracking', label: t('nav.tracking'), icon: <BarChart3 size={20} /> },
+    { id: 'chat', label: t('friendly.chat.title'), icon: <MessageCircle size={20} /> },
     { id: 'support', label: t('pilot.supportNav'), icon: <Phone size={20} /> },
     { id: 'settings', label: t('nav.settings'), icon: <SettingsIcon size={20} /> }
   ]

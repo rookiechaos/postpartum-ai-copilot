@@ -1,5 +1,7 @@
 # UI architecture for families and small institutions
 
+The subsequent [first-time-use UI refinement](UI_FRIENDLINESS.md) reorganizes Home, correction feedback, AI disclosure/sending, help cards and institution task editing. It has the same source-only execution restriction; the acceptance checks in both guides remain pending.
+
 This phase implements the seven findings from the UI source review. It is **source only**: no application, worker, dependency installation, build, lint, parser, tests, browser, print/QR acceptance, migration or real-data workflow was run. Source inspection and `git diff --check` do not establish that the interface renders or operates correctly.
 
 | Review area | Source changes |

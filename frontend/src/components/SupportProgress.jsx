@@ -95,7 +95,10 @@ export default function SupportProgress({ contactKey, contactName, row, progress
     if (time && !Number.isFinite(time.getTime())) { progress.setMessage(contactKey, 'invalidTime', contactName); return }
     progress.save(contactKey, { state: form.state, next_contact_at: time?.toISOString() || null, revision, cleared }, contactName)
   }
-  return <details className="support-progress"><summary>{t('flows.journey.title')}{row && !row.cleared ? ` · ${t(`flows.journey.states.${row.state}`)}` : ''}</summary>
+  return <details className="support-progress"><summary>{row && !row.cleared
+    ? t('friendly.support.ownProgress', { state: t(`flows.journey.states.${row.state}`) }) : t('flows.journey.title')}
+    {edited ? ` · ${t('flows.journey.unsaved')}` : ''}</summary>
+    {row && !row.cleared && <p>{t('friendly.support.ownProgressHint')}</p>}
     <p>{t('flows.journey.notice')}</p>
     {row?.updated_at && !row.cleared && <p>{t('flows.journey.updated', { time: japanDateTime(row.updated_at, i18n.resolvedLanguage || 'ja') })}</p>}
     <form onSubmit={save}><fieldset disabled={busy || !progress.ready || conflict}>
@@ -115,6 +118,6 @@ export default function SupportProgress({ contactKey, contactName, row, progress
     {(progress.error || conflict || message === 'failed') && <button type="button" className="pilot-button secondary" disabled={progress.saving} onClick={() => {
       if (edited && !window.confirm(t('flows.journey.reloadConfirm'))) return
       progress.reloadContact(contactKey)
-    }}>{t('pilot.retry')}</button>}
+    }}>{t('friendly.support.reloadProgress')}</button>}
   </details>
 }

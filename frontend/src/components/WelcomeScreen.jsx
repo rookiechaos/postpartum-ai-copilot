@@ -1,7 +1,6 @@
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import SupportDirectory from './SupportDirectory'
-import RecordingExample from './RecordingExample'
 import './WelcomeScreen.css'
 
 export default function WelcomeScreen({ onComplete, onExit }) {
@@ -9,24 +8,27 @@ export default function WelcomeScreen({ onComplete, onExit }) {
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const savingRef = useRef(false)
   const [formData, setFormData] = useState({ babyAge: '', birthType: '', feedingType: '', babyName: '' })
   const complete = async (profile = formData) => {
+    if (savingRef.current) return
+    savingRef.current = true
     setSaving(true)
     setError('')
     try { await onComplete(profile) }
     catch { setError(t('pilot.saveFailed', 'Unable to save your settings. Please try again.')) }
-    finally { setSaving(false) }
+    finally { savingRef.current = false; setSaving(false) }
   }
   return <div className="welcome-screen">
     <div className="welcome-container">
-      <header className="welcome-header"><h1>{t(step === 0 ? 'welcome.title' : 'welcome.step2Title')}</h1>
+      <header className="welcome-header"><h1 id="welcome-title">{t(step === 0 ? 'welcome.title' : 'welcome.step2Title')}</h1>
         <p>{t(step === 0 ? 'pilot.shortWelcome' : 'pilot.optionalProfile')}</p></header>
       <div className="welcome-body">
         {step === 0 ? <>
           <ul className="welcome-benefits"><li>{t('pilot.familyBenefit1')}</li><li>{t('pilot.familyBenefit2')}</li><li>{t('pilot.familyBenefit3')}</li></ul>
           <p>{t('pilot.entryPrivacy')}</p><p>{t('pilot.chatBoundary')}</p>
-          <RecordingExample />
-        </> : <div className="form-content">
+          <p>{t('friendly.welcome.profileHint')}</p>
+        </> : <fieldset className="form-content welcome-profile" disabled={saving} aria-labelledby="welcome-title">
           <label>{t('welcome.babyName')}<input maxLength={50} placeholder={t('pilot.nicknamePlaceholder')}
             value={formData.babyName} onChange={event => setFormData({ ...formData, babyName: event.target.value })} /></label>
           <label>{t('welcome.babyAge')}<select value={formData.babyAge} onChange={event => setFormData({ ...formData, babyAge: event.target.value })}>
@@ -41,18 +43,18 @@ export default function WelcomeScreen({ onComplete, onExit }) {
             <option value="">{t('pilot.skipProfileField')}</option>
             {['breast', 'formula', 'mixed'].map(value => <option key={value} value={value}>{t(`tracking.${value}`)}</option>)}
           </select></label>
-        </div>}
+        </fieldset>}
       </div>
       <footer className="welcome-footer">
         {onExit && <button className="btn-link" disabled={saving} onClick={onExit}>{t('pilot.switchEntrance')}</button>}
         {error && <p role="alert">{error}</p>}
-        <p>{step + 1} / 2</p>
         <div className="welcome-actions">
           {step > 0 && <button className="btn-secondary" disabled={saving} onClick={() => setStep(0)}>{t('welcome.back')}</button>}
-          <button className="btn-primary" disabled={saving} onClick={step === 0 ? () => setStep(1) : () => complete()}>
-            {saving ? t('settings.saving') : t(step === 0 ? 'welcome.next' : 'pilot.startRecording')}
+          <button className="btn-primary" disabled={saving} onClick={step === 0 ? () => complete({}) : () => complete()}>
+            {saving ? t('settings.saving') : t('friendly.welcome.start')}
           </button>
-          <button className="btn-link" disabled={saving} onClick={() => complete({})}>{t('welcome.skip')}</button>
+          {step === 0 ? <button className="btn-link" disabled={saving} onClick={() => setStep(1)}>{t('friendly.welcome.profile')}</button>
+            : <button className="btn-link" disabled={saving} onClick={() => complete({})}>{t('friendly.welcome.withoutProfile')}</button>}
         </div>
       </footer>
       <SupportDirectory compact />

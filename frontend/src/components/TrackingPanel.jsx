@@ -11,6 +11,8 @@ import AIUseNotice from './AIUseNotice'
 import Charts from './Charts'
 import useConnection from '../utils/useConnection'
 import { useToast } from './Toast'
+import RecordTime, { useRecordClock } from './RecordTime'
+import { revealElement } from '../utils/focusView'
 import './TrackingPanel.css'
 
 const types = ['feeding', 'diaper', 'sleep', 'mood', 'pumping', 'recovery']
@@ -21,6 +23,7 @@ const payload = entry => Object.fromEntries(recordFields.filter(key => entry[key
 export default function TrackingPanel({ userId, initialEntryType, requestKey = 0, onRecordsChanged, visible = true }) {
   const { t, i18n } = useTranslation()
   const { online, reconnections } = useConnection()
+  const now = useRecordClock(visible)
   const toast = useToast()
   const [entries, setEntries] = useState([])
   const [entriesLoading, setEntriesLoading] = useState(true)
@@ -45,6 +48,11 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   const [formRevision, setFormRevision] = useState(0)
   const [pendingSave, setPendingSave] = useState(null)
   const [saveStatus, setSaveStatus] = useState('')
+  const [openRequest, setOpenRequest] = useState(null)
+  const [formFocus, setFormFocus] = useState(0)
+  const consumedRequest = useRef(null)
+  const formHeading = useRef(null)
+  const pendingFormFocus = useRef(false)
   const writing = useRef(false)
   // Keep uncertainty attached to the original operation until success or explicit abandonment.
   const unconfirmedRequest = useRef(null)
@@ -73,12 +81,40 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     return () => { active = false }
   }, [userId, attempt, recordRange, visible, reconnections])
 
+  const openRecord = (request, confirm = true) => {
+    if (pendingSave || writing.current || loading || draft.candidate || draft.status === 'loading') return
+    if (confirm && formDraft && !window.confirm(t('friendly.record.replace'))) return
+    // Home passes an owner-read snapshot. The immutable key/revision still guards
+    // the update: an intervening edit or deletion is rejected by the API.
+    setRestoredForm(null); setFormDraft(null); setEditing(request.record || null)
+    setEntryType(request.record?.entry_type || request.entryType); setShowAddForm(true)
+    setSaveStatus(''); setOpenRequest(null); setFormRevision(value => value + 1)
+    pendingFormFocus.current = true; setFormFocus(value => value + 1)
+  }
   useEffect(() => {
-    if (pendingSave || writing.current) return
-    if (types.includes(initialEntryType)) {
-      setEditing(null); setEntryType(initialEntryType); setShowAddForm(true)
+    if (consumedRequest.current === requestKey) return
+    consumedRequest.current = requestKey
+    const record = initialEntryType?.action === 'edit' ? initialEntryType.record : null
+    const request = record && types.includes(record.entry_type) && Number.isInteger(record.id)
+      && typeof record.record_key === 'string' && Number.isInteger(record.revision) ? { record }
+      : types.includes(initialEntryType) ? { entryType: initialEntryType } : null
+    if (!request) return
+    // Pending writes and recovery drafts must be resolved explicitly, never
+    // replaced just because navigation supplied a new target.
+    if (pendingSave || writing.current || loading || formDraft || draft.candidate) setOpenRequest(request)
+    else if (draft.status === 'loading') setOpenRequest({ ...request, autoOpen: true })
+    else openRecord(request, false)
+  }, [initialEntryType, requestKey, pendingSave, loading, formDraft, draft.candidate, draft.status])
+  useEffect(() => {
+    if (!visible || !openRequest?.autoOpen || draft.status === 'loading') return
+    if (pendingSave || writing.current || loading || formDraft || draft.candidate) {
+      setOpenRequest(previous => ({ ...previous, autoOpen: false })); return
     }
-  }, [initialEntryType, requestKey])
+    openRecord(openRequest, false)
+  }, [visible, openRequest, pendingSave, loading, formDraft, draft.candidate, draft.status])
+  useEffect(() => {
+    if (visible && showAddForm && pendingFormFocus.current && revealElement(formHeading.current)) pendingFormFocus.current = false
+  }, [visible, showAddForm, formFocus])
 
   useEffect(() => {
     if (!undoEntry) return
@@ -176,18 +212,29 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
 
   return <div className="tracking-panel">
     <div className="tracking-header"><h2>{t('tracking.title')}</h2>
-      <button className="add-button" disabled={loading} onClick={() => {
+      <button className="add-button" disabled={loading || (!showAddForm && (Boolean(draft.candidate) || draft.status === 'loading'))} onClick={() => {
         if (showAddForm) cancelForm()
-        else { setEditing(null); setShowAddForm(true) }
+        else openRecord({ entryType })
       }}>{showAddForm ? t('tracking.cancel') : `+ ${t('tracking.addEntry')}`}</button></div>
     <p>{t('pilot.noPressure')}</p>
     <DraftRecoveryNotice draft={draft} disabled={loading} />
+    {openRequest && <section className="record-open-request" aria-label={t('friendly.record.incoming')}>
+      <p>{t('friendly.record.incoming')}</p>
+      {openRequest.record && <><strong>{t(`tracking.${openRequest.record.entry_type}`)}</strong><RecordTime value={openRequest.record.timestamp} now={now} /></>}
+      {(pendingSave || draft.candidate || draft.status === 'loading') && <p>{t('friendly.record.resolveDraft')}</p>}
+      <div className="pilot-actions">
+        <button type="button" className="pilot-button secondary" disabled={loading || Boolean(pendingSave) || Boolean(draft.candidate) || draft.status === 'loading'}
+          onClick={() => openRecord(openRequest)}>{t('friendly.record.open')}</button>
+        <button type="button" className="pilot-button secondary" onClick={() => setOpenRequest(null)}>{t('friendly.record.discardOpen')}</button>
+      </div>
+    </section>}
     {saveStatus && <p role="status">{t(['offline', 'unconfirmed'].includes(saveStatus) ? `flows.connection.${saveStatus}Save` : `polish.saveStatus.${saveStatus}`)}</p>}
     {pendingSave && <button type="button" className="pilot-button secondary" disabled={loading} onClick={() => setAttempt(value => value + 1)}>{t('flows.connection.checkRecords')}</button>}
     {pendingSave && <p role="status">{t('polish.pendingWriteNotice')} {japanDateTime(pendingSave.data.timestamp, i18n.resolvedLanguage || 'ja')}</p>}
-    {showAddForm && <EntryForm key={`${editing ? `edit:${editing.record_key}:${editing.revision}` : 'new'}:${formRevision}`}
+    {showAddForm && <div ref={formHeading} tabIndex={-1} className="record-form-region" role="region" aria-label={t(editing ? 'work.editRecord' : 'tracking.addEntry')}>
+      <EntryForm key={`${editing ? `edit:${editing.record_key}:${editing.revision}` : 'new'}:${formRevision}`}
       entryType={entryType} initialEntry={editing} restored={restoredForm} onDraftChange={setFormDraft} locked={Boolean(pendingSave)}
-      onEntryTypeChange={setEntryType} onSubmit={saveEntry} onCancel={cancelForm} loading={loading} />}
+      onEntryTypeChange={setEntryType} onSubmit={saveEntry} onCancel={cancelForm} loading={loading} /></div>}
     {undoEntry && <div className="pilot-panel undo-notice" role="status"><p>{t('work.lastDeleted')}</p>
       <button className="pilot-button secondary" disabled={loading} onClick={restoreEntry}>{t('work.undoDelete')}</button></div>}
     <section className="entries-list"><h3>{t('tracking.recentEntries')}</h3><p>{t('pilot.japanTime')}</p>
@@ -198,7 +245,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
       {entriesLoading && <p role="status">{t('common.loading')}</p>}
       {!error && !entriesLoading && entries.length === 0 && <p>{t('tracking.noEntries')}</p>}
       {entries.map(entry => <article key={entry.record_key} className="tracking-entry-card">
-        <div className="entry-header"><strong>{t(`tracking.${entry.entry_type}`)}</strong><time>{japanDateTime(entry.timestamp, i18n.language)}</time></div>
+        <div className="entry-header"><strong>{t(`tracking.${entry.entry_type}`)}</strong><RecordTime value={entry.timestamp} now={now} /></div>
         <div className="entry-details">
           {entry.feeding_type && <span>{t(`tracking.${entry.feeding_type}`)}</span>}
           {entry.diaper_type && <span>{t(`tracking.${entry.diaper_type}`)}</span>}
@@ -209,9 +256,8 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
           {entry.breast_condition && <span>{t(`tracking.${entry.breast_condition}`)}</span>}
         </div>
         {['notes', 'mood_notes', 'recovery_notes'].map(key => entry[key] && <p key={key} className="entry-notes">{entry[key]}</p>)}
-        <div className="pilot-actions"><button className="pilot-button secondary" disabled={loading || Boolean(pendingSave)} onClick={() => {
-          if (pendingSave) return
-          setRestoredForm(null); setEditing(entry); setEntryType(entry.entry_type); setShowAddForm(true)
+        <div className="pilot-actions"><button className="pilot-button secondary" disabled={loading || Boolean(pendingSave) || Boolean(draft.candidate) || draft.status === 'loading'} onClick={() => {
+          openRecord({ record: entry })
         }}>{t('work.editRecord')}</button>
           <button className="pilot-button secondary" disabled={loading || Boolean(pendingSave)} onClick={() => setDeleteTarget(entry)}>{t('common.delete')}</button></div>
         {deleteTarget?.record_key === entry.record_key && <div role="alertdialog" aria-label={t('work.deleteConfirm')}>
@@ -223,7 +269,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     <details className="pilot-panel"><summary>{t('pilot.optionalAnalysis')}</summary>
       <button className="pilot-button secondary" onClick={() => setShowCharts(value => !value)}>{t(showCharts ? 'tracking.hideCharts' : 'tracking.showCharts')}</button>
       {showCharts && <Charts userId={userId} refreshKey={attempt} visible={visible}
-        onRecord={!loading && !pendingSave ? () => { setEditing(null); setShowAddForm(true) } : undefined} />}
+        onRecord={!loading && !pendingSave && !draft.candidate && draft.status !== 'loading' ? () => openRecord({ entryType }) : undefined} />}
       <AIUseNotice scope="records" accepted={acceptedAI} onChange={setAcceptedAI} disabled={summaryLoading}
         includeProfile={includeProfile} onProfileChange={setIncludeProfile} includeParent={includeParent} onParentChange={setIncludeParent}
         includeNotes={includeNotes} onNotesChange={setIncludeNotes} />
@@ -291,7 +337,7 @@ function EntryForm({ entryType, initialEntry, restored, onDraftChange, locked, o
       ? <fieldset key={key}><legend>{t(`tracking.${label}`)}</legend><div className="record-choices">
         {kind.map(value => <button key={value} type="button" className="pilot-button secondary" aria-pressed={formData[key] === value}
           onClick={() => setFormData({ ...formData, [key]: formData[key] === value ? null : value })}>{t(`tracking.${value}`)}</button>)}
-      </div></fieldset> : <label key={key}>{t(`tracking.${label}`)}<input type="number" min="0" step={key.endsWith('_minutes') ? '1' : '0.1'} value={formData[key] ?? ''}
+      </div></fieldset> : <label key={key}>{t(`tracking.${label}`)}<input type="number" inputMode={key.endsWith('_minutes') ? 'numeric' : 'decimal'} min="0" step={key.endsWith('_minutes') ? '1' : '0.1'} value={formData[key] ?? ''}
           onChange={event => setFormData({ ...formData, [key]: event.target.value === '' ? null : Number(event.target.value) })} />
     </label>)}
     <details open={Boolean(initialEntry?.notes || initialEntry?.mood_notes || initialEntry?.recovery_notes)}><summary>{t('work.optionalNotes')}</summary>

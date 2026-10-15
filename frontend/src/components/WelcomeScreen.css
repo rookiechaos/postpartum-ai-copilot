@@ -5,6 +5,7 @@
 .welcome-header .subtitle { color: var(--color-muted); line-height: 1.8; }
 .welcome-body { margin-bottom: 1.5rem; }
 .welcome-content, .form-content { padding: 1rem 0; }
+.welcome-profile { min-width: 0; border: 0; }
 .welcome-content p { color: var(--color-muted); line-height: 1.8; margin-bottom: 1rem; }
 .welcome-content ul { list-style: none; }
 .welcome-content li { padding: .75rem 0; border-bottom: 1px solid var(--color-border); line-height: 1.8; }

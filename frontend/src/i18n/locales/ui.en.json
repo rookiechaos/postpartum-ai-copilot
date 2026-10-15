@@ -1,5 +1,5 @@
 {
-  "nav": { "label": "Family menu", "dashboard": "Home", "chat": "Ask", "tracking": "Records", "support": "Help", "settings": "Settings" },
+  "nav": { "label": "Family menu", "dashboard": "Home", "chat": "Ask AI", "tracking": "Records", "support": "Help", "settings": "Settings" },
   "account": { "actions": "Account and entrances", "languageNotice": "Changing language updates this device's display immediately. Choose Save settings to also save the language to your account." },
   "support": {
     "chooseView": "Choose contacts or consultation sheet",

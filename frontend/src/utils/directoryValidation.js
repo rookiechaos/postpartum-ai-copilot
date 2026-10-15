@@ -72,11 +72,11 @@ export function directoryServerIssues(validation, profile) {
 export function publicationChanges(published, draft) {
   const changes = []
   const value = (item, field) => item?.[field] ?? (field === 'service_status' ? 'active' : '')
-  const compare = (before, after, scope, name = '') => {
+  const compare = (before, after, scope, name = '', resourceKey) => {
     const fields = scope === 'business' ? Object.keys(businessLimits)
       : [...Object.keys(resourceLimits), 'category', 'service_status', 'checked_on', 'review_due_on']
     fields.forEach(field => {
-      if (value(before, field) !== value(after, field)) changes.push({ scope, name, field,
+      if (value(before, field) !== value(after, field)) changes.push({ scope, name, ...(resourceKey ? { resourceKey } : {}), field,
         before: String(value(before, field)), after: String(value(after, field)), kind: 'updated' })
     })
   }
@@ -84,9 +84,9 @@ export function publicationChanges(published, draft) {
   const old = new Map((published?.resources || []).map(item => [item.resource_key, item]))
   const next = new Map(draft.resources.map(item => [item.resource_key, item]))
   next.forEach((item, key) => {
-    if (!old.has(key)) changes.push({ name: item.name, kind: 'added' })
-    else compare(old.get(key), item, 'resource', item.name)
+    if (!old.has(key)) changes.push({ name: item.name, resourceKey: key, kind: 'added' })
+    else compare(old.get(key), item, 'resource', item.name, key)
   })
-  old.forEach((item, key) => { if (!next.has(key)) changes.push({ name: item.name, kind: 'removed' }) })
+  old.forEach((item, key) => { if (!next.has(key)) changes.push({ name: item.name, resourceKey: key, kind: 'removed' }) })
   return changes
 }

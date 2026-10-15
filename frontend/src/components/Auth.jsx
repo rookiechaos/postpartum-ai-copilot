@@ -5,7 +5,6 @@ import LanguageSelector from './LanguageSelector'
 import SupportDirectory from './SupportDirectory'
 import AccountRequests from './AccountRequests'
 import ServicePrivacyInfo from './ServicePrivacyInfo'
-import RecordingExample from './RecordingExample'
 import ConnectionNotice from './ConnectionNotice'
 import './Auth.css'
 
@@ -87,7 +86,6 @@ function Auth({ onSuccess, entry = 'family', onBack }) {
         <ConnectionNotice />
 
         <details className="pilot-panel"><summary>{t('work.beforeRegistration')}</summary><ServicePrivacyInfo /></details>
-        {entry === 'family' && <RecordingExample />}
         <div className="auth-tabs">
           <button
             type="button"
