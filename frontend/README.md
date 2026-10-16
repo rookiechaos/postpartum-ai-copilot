@@ -3,6 +3,8 @@
 React 18 / Vite / i18next web app for small Japanese postpartum-care pilots.
 See the [main README](../README.md) for the product scope and complete backend/worker setup.
 
+The [Japanese family/local-service revision](../docs/product/JAPANESE_EXPERIENCE.md) adds shared translated branding, published operator contacts on entry/sign-in, everyday labels, adaptive feeding fields and precise save/delete/undo states. Need-based contact filters expose verified eligibility, cost, application order and staying-with-family guidance. Its optional public `visiting_note` field requires the matching backend; no SQL migration or new dependency is added. This revision has not been run, built or tested.
+
 ## Entrances
 
 | URL | Experience |

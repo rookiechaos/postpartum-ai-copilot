@@ -80,8 +80,10 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
         <h3>{t('pilot.localSupport')}</h3>
         <fieldset className="support-purpose"><legend>{t('friendly.support.purpose')}</legend><div className="purpose-choices">
           {['all', 'parenting', 'postpartum', 'feeding'].map(key => <button type="button" key={key} className="pilot-button secondary"
-            aria-pressed={purpose === key} onClick={() => setPurpose(key)}>{t(`polish.purposes.${key}`)}</button>)}
+            aria-pressed={purpose === key} onClick={() => setPurpose(key)}>{t(`localCare.support.needs.${key}`)}</button>)}
         </div></fieldset>
+        <p className="field-hint">{t(purpose === 'all' ? 'localCare.support.purposeNotice' : 'localCare.support.matchedCategory',
+          { category: t(`polish.purposes.${purpose}`) })}</p>
         {unavailable && <p role="status">{t(shownProfile ? 'flows.directory.stale' : 'pilot.directoryUnavailable')}
           <button type="button" className="text-action" onClick={() => setDirectoryAttempt(value => value + 1)}>{t('friendly.support.reloadDirectory')}</button></p>}
         {!previewProfile && !unavailable && !profile && <p role="status">{t('common.loading')}</p>}
@@ -115,11 +117,13 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
           </div>
           <small>{t('pilot.checkedOn')}: {resource.checked_on || t('pilot.notChecked')}</small>
           {needsReview(resource.checked_on) && <p className="review-due">{t('work.confirmDetails')}</p>}
-          <details className="service-details"><summary>{t('friendly.support.details')}</summary>
+          <details className="service-details"><summary>{t('localCare.support.conditions')}</summary>
             <p>{resource.description}</p>
-            <p>{t('work.serviceAudience')}: {resource.audience || t('pilot.checkSource')}</p>
-            <p>{t('work.costNote')}: {resource.cost_note || t('pilot.checkSource')}</p>
-            {['application_steps', 'preparation', 'fallback_contact'].filter(field => field !== 'fallback_contact' || resource.service_status !== 'paused').map(field => resource[field] && <section key={field}>
+            <p>{t('work.resourceFields.audience')}: {resource.audience?.trim() || t('localCare.support.unconfirmed')}</p>
+            <p>{t('work.resourceFields.cost_note')}: {resource.cost_note?.trim() || t('localCare.support.unconfirmed')}</p>
+            <section><h4>{t('flows.directory.application_steps')}</h4><p className="preserve-lines">{resource.application_steps?.trim() || t('localCare.support.unconfirmed')}</p></section>
+            <section><h4>{t('localCare.support.visiting_note')}</h4><p className="preserve-lines">{resource.visiting_note?.trim() || t('localCare.support.unconfirmed')}</p></section>
+            {['preparation', 'fallback_contact'].filter(field => field !== 'fallback_contact' || resource.service_status !== 'paused').map(field => resource[field] && <section key={field}>
               <h4>{t(`flows.directory.${field}`)}</h4><p className="preserve-lines">{resource[field]}</p>
             </section>)}
           </details>

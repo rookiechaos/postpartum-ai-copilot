@@ -1,0 +1,72 @@
+{
+  "operator": {
+    "title": "Service operator and contact",
+    "name": "Operated by",
+    "unknown": "Not published yet",
+    "contact": "Contact",
+    "hours": "Contact hours",
+    "notListed": "Not published",
+    "details": "View contact details and hours",
+    "loadError": "Operator information could not be loaded.",
+    "reload": "Reload operator information",
+    "notice": "Ask the operator about using the app. For care consultations or bookings, check Find support."
+  },
+  "record": {
+    "babyGroup": "Baby care",
+    "selfGroup": "Your health and feelings",
+    "nowHint": "Record at the current time",
+    "retryHint": "Send the original content and time again.",
+    "check": "Check records",
+    "resend": "Resend the same record",
+    "stopRetry": "Stop retrying and check records",
+    "chooseFeeding": "Choose a feeding method to see its fields. You can also save without choosing a method.",
+    "feedingTime": "Time breastfeeding (minutes, optional)",
+    "feedingDuration": "Time feeding (minutes, optional)",
+    "feedingSide": "Breastfeeding side (optional)",
+    "milkAmount": "Formula amount (mL, optional)",
+    "knownAmount": "Amount taken (mL, only if known)",
+    "additionalFeeding": "Add or review other feeding details (optional)",
+    "additionalNotice": "Details entered here are saved too. Review any earlier values and clear fields you no longer need.",
+    "sides": { "left": "Left", "right": "Right", "both": "Both sides" },
+    "statuses": {
+      "saving": "Saving the record",
+      "saved": "Record saved",
+      "offline": "The record has not been sent",
+      "unconfirmed": "Could not confirm whether the record was saved",
+      "unsaved": "The record could not be saved",
+      "removing": "Deleting the record",
+      "removed": "Record deleted",
+      "removeFailed": "Could not confirm whether the record was deleted",
+      "restoring": "Restoring the deleted record",
+      "restored": "Deleted record restored",
+      "restoreFailed": "Could not confirm whether the record was restored",
+      "undoing": "Undoing the last record",
+      "undone": "Last record undone",
+      "undoFailed": "Could not confirm whether the record was undone"
+    },
+    "statusDetails": {
+      "offline": "You can send the same record when connected. Your input remains on this screen.",
+      "unconfirmed": "It may already be saved. Check your records or resend the same record.",
+      "unsaved": "Your input remains on this screen. Check the content and connection.",
+      "removeFailed": "It may already be deleted. Check your records.",
+      "restoreFailed": "It may already be restored. Check your records before retrying the same operation.",
+      "undoFailed": "It may already be undone. Check your records."
+    }
+  },
+  "support": {
+    "needs": { "all": "View all", "parenting": "I would like someone to listen", "postpartum": "I need some rest", "feeding": "I have a feeding question" },
+    "purposeNotice": "Start with what you need. Check each service's eligibility and application instructions.",
+    "matchedCategory": "Showing {{category}} contacts. Confirm with the contact whether they can provide the support you need.",
+    "conditions": "Eligibility, costs and applications",
+    "visiting_note": "Staying with family or registered in another municipality",
+    "unconfirmed": "This information has not been confirmed yet. Please ask the contact."
+  },
+  "organization": {
+    "fieldHints": {
+      "audience": "Verify who can use the service, including actual residence or baby-age conditions.",
+      "cost_note": "Verify the family's cost and any conditions that change the price.",
+      "application_steps": "State the verified order: municipal application or contacting the provider first.",
+      "visiting_note": "Verify conditions for people staying with family or registered elsewhere. Leave blank if unconfirmed."
+    }
+  }
+}

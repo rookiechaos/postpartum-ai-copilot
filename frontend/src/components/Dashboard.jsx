@@ -6,6 +6,7 @@ import { recordOperation, isRecordOperation } from '../utils/recordOperations'
 import RecordingExample from './RecordingExample'
 import FamilyCareOverview from './FamilyCareOverview'
 import RecordTime, { useRecordClock } from './RecordTime'
+import RecordSaveStatus from './RecordSaveStatus'
 import useConnection from '../utils/useConnection'
 import useAccountDraft from '../utils/useAccountDraft'
 import { DraftRecoveryNotice } from './DraftRecovery'
@@ -90,7 +91,7 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
   }
   const undoQuick = async () => {
     if (writing.current || !undo || pending) return
-    writing.current = true; setSaveStatus('saving')
+    writing.current = true; setSaveStatus('undoing')
     try { await api.deleteTrackingEntry(undo.id, undo); setUndo(null); setSaveStatus('undone'); refresh() }
     catch { setSaveStatus('undoFailed'); setAttempt(value => value + 1) }
     finally { writing.current = false }
@@ -101,9 +102,10 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
       <p>{userContext?.babyName ? t('dashboard.howIsBaby', { name: userContext.babyName }) : t('pilot.todayIntro')}</p></div></header>
     <section className="pilot-panel quick-record-panel"><h3>{t('polish.recordNow')}</h3><p>{t('friendly.home.intro')}</p>
       <div className="record-choices">{quickChoices.map(([key, data]) => <button type="button" key={key}
-        className="pilot-button" disabled={Boolean(pending) || Boolean(draft.candidate) || draft.status === 'loading' || saveStatus === 'saving'}
-        onClick={() => saveQuick(recordOperation(data))}>{t(`polish.quick.${key}`)}</button>)}</div>
-      {saveStatus && !(undo && saveStatus === 'saved') && <p role="status">{t(['offline', 'unconfirmed'].includes(saveStatus) ? `flows.connection.${saveStatus}Save` : `polish.saveStatus.${saveStatus}`)}</p>}
+        className="pilot-button" disabled={Boolean(pending) || Boolean(draft.candidate) || draft.status === 'loading' || ['saving', 'undoing'].includes(saveStatus)}
+        onClick={() => saveQuick(recordOperation(data))}><span className="quick-record-name">{t(`polish.quick.${key}`)}</span>
+          <small>{t('localCare.record.nowHint')}</small></button>)}</div>
+      {saveStatus && !(undo && saveStatus === 'saved') && <RecordSaveStatus status={saveStatus} />}
       {undo && !pending && ['saved', 'undoFailed'].includes(saveStatus) && <section className="quick-save-receipt" aria-label={t('friendly.home.saved')}>
         <p role="status"><strong>{t('friendly.home.saved')}</strong> · {t('friendly.home.savedRecord', { record: recordName(undo) })}</p>
         <RecordTime value={undo.timestamp} now={now} />
@@ -112,13 +114,13 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
           <button type="button" className="pilot-button secondary" onClick={undoQuick}>{t('friendly.home.undo')}</button>
         </div><small>{t('friendly.home.undoHint')}</small>
       </section>}
-      <DraftRecoveryNotice draft={draft} disabled={saveStatus === 'saving'} compact />
-      {pending && saveStatus !== 'saving' && <div className="pilot-actions"><p>{t('polish.pendingWriteNotice')}</p>
-        <button className="pilot-button secondary" onClick={() => setAttempt(value => value + 1)}>{t('flows.connection.checkRecords')}</button>
-        <button className="pilot-button secondary" onClick={() => saveQuick(pending)}>{t('polish.retrySameSave')}</button>
+      <DraftRecoveryNotice draft={draft} disabled={['saving', 'undoing'].includes(saveStatus)} compact />
+      {pending && saveStatus !== 'saving' && <div className="pilot-actions"><p>{t('localCare.record.retryHint')}</p>
+        <button className="pilot-button secondary" onClick={() => setAttempt(value => value + 1)}>{t('localCare.record.check')}</button>
+        <button className="pilot-button secondary" onClick={() => saveQuick(pending)}>{t('localCare.record.resend')}</button>
         <button className="pilot-button secondary" onClick={() => {
           if (window.confirm(t('polish.abandonWrite'))) { unconfirmedRequest.current = null; setPending(null); draft.clear(); setSaveStatus(''); refresh() }
-        }}>{t('polish.checkBeforeNew')}</button></div>}
+        }}>{t('localCare.record.stopRetry')}</button></div>}
       <button className="pilot-button secondary" onClick={() => onNavigate('tracking', 'feeding')}>{t('friendly.home.details')}</button>
       <p>{t('pilot.noPressure')}</p>
     </section>

@@ -4,6 +4,26 @@
 .record-time { display: flex; flex-direction: column; gap: .125rem; line-height: 1.7; overflow-wrap: anywhere; }
 .record-time time { color: var(--color-muted); font-size: .85rem; }
 .record-time-relative { font-weight: 600; }
+.record-time time { font-variant-numeric: tabular-nums; }
+.operator-info { padding: .75rem 1rem; margin-block: 1rem; border-inline-start: 3px solid var(--color-border); border-radius: .375rem; background: var(--color-warm-surface); color: var(--color-text); line-height: 1.8; }
+.operator-info > p { display: flex; flex-wrap: wrap; gap: .375rem .75rem; }
+.operator-info p, .operator-info dd { overflow-wrap: anywhere; }
+.operator-info summary { min-height: 44px; padding-block: .5rem; cursor: pointer; }
+.operator-info dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: .5rem .75rem; margin-block: .5rem; }
+.operator-info dt { font-weight: 600; }
+.operator-info dd { min-width: 0; margin: 0; }
+.operator-info dd a { display: flex; align-items: center; min-height: 44px; color: var(--color-link); text-decoration: underline; }
+.operator-info details > p { margin-top: .75rem; font-size: .9rem; }
+@media (max-width: 600px) {
+  .operator-info dl { grid-template-columns: minmax(0, 1fr); gap: .25rem; }
+  .operator-info dd { margin-bottom: .75rem; }
+}
+.record-save-status { padding: .75rem 1rem; margin-block: 1rem; border-inline-start: 3px solid var(--color-border); background: var(--color-tint); line-height: 1.8; }
+.record-save-status p + p { margin-top: .375rem; }
+.directory-editor .field-hint { display: block; font-weight: 400; }
+.support-directory .purpose-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.support-directory .purpose-choices .pilot-button { min-height: 60px; white-space: normal; }
+.support-directory .purpose-choices .pilot-button[aria-pressed="true"] { background: var(--color-brand); color: #fff; border-color: var(--color-brand); }
 .support-urgent-bar .urgent { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .25rem .75rem; align-items: center; }
 .support-urgent-bar .urgent h3, .support-urgent-bar .urgent p { grid-column: 1; margin: 0; }
 .support-urgent-bar .urgent .pilot-button { grid-column: 2; grid-row: 1 / span 2; margin: 0; }

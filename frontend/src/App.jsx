@@ -22,6 +22,7 @@ import InstallPrompt from './components/InstallPrompt'
 import LanguageSelector from './components/LanguageSelector'
 import OperatorPortal from './components/OperatorPortal'
 import Auth from './components/Auth'
+import ProductBrand from './components/ProductBrand'
 import { Home, MessageCircle, BarChart3, Phone, Settings as SettingsIcon, Moon } from 'lucide-react'
 import './App.css'
 import './components/Pilot.css'
@@ -266,7 +267,7 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
     <div className="app family-app" hidden={!familyVisible}>
       <header className="app-header">
         <div className="header-content">
-          <h1>🤱 {t('app.title')}</h1>
+          <ProductBrand as="h1" />
           <p className="tagline">{t('app.tagline')}</p>
         </div>
         <div className="header-actions">

@@ -6,6 +6,11 @@
 .pilot-eyebrow { color: var(--pilot-brand); font-weight: 600; }
 .entry-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 .entrance-card { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; min-width: 0; padding: 28px; border: 1px solid var(--pilot-border); border-radius: 20px; background: var(--color-surface); box-shadow: var(--shadow-panel); }
+.product-brand { display: flex; align-items: center; gap: .625rem; min-width: 0; font-weight: 600; }
+.product-brand > svg { flex: 0 0 auto; color: var(--color-brand); }
+.product-brand > span { min-width: 0; overflow-wrap: anywhere; }
+.auth-header .product-brand { justify-content: center; }
+.pilot-topbar .product-brand { font-size: 1.05rem; }
 .entrance-card > svg { color: var(--pilot-brand); }
 .entrance-card h2 { font-size: 1.4rem; }
 .entrance-card ul { padding-left: 22px; line-height: 2; flex: 1; }

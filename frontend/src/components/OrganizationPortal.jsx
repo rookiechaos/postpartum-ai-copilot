@@ -13,10 +13,10 @@ import { businessLimits, resourceLimits, directoryFieldId, normalizeDirectory, v
 
 const emptyResource = category => ({ resource_key: requestKey(), category, name: '', url: '', description: '', hours: '', area: '',
   audience: '', phone: '', booking_url: null, cost_note: '', checked_on: null, maintainer: '', review_due_on: null,
-  service_status: 'active', pause_notice: '', application_steps: '', preparation: '', fallback_contact: '' })
+  service_status: 'active', pause_notice: '', application_steps: '', visiting_note: '', preparation: '', fallback_contact: '' })
 const resourceGroups = {
   basic: ['name', 'url', 'area', 'phone', 'hours'],
-  details: ['description', 'audience', 'booking_url', 'cost_note', 'application_steps', 'preparation', 'fallback_contact', 'pause_notice'],
+  details: ['description', 'audience', 'booking_url', 'cost_note', 'application_steps', 'visiting_note', 'preparation', 'fallback_contact', 'pause_notice'],
   review: ['maintainer', 'checked_on', 'review_due_on'],
 }
 
@@ -46,7 +46,8 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
   const editingBlocked = busy || reloading
   const familyLink = `${window.location.origin}/family`
   const dirty = Boolean(profile && JSON.stringify(profile) !== JSON.stringify(savedDraft))
-  const unpublished = Boolean(profile && JSON.stringify(profile) !== JSON.stringify(published))
+  const changes = profile ? publicationChanges(published, profile) : []
+  const unpublished = changes.length > 0
   const canLeave = useCallback(() => {
     if (actionBusy.current) { setError(t('work.saveInProgress')); return false }
     return !dirty || window.confirm(`${t('work.unsavedTitle')}\n${t('work.unsavedDescription')}`)
@@ -156,7 +157,6 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
   const visibleResources = (profile?.resources || []).filter(item => !maintainerFilter ||
     (maintainerFilter === 'unassigned' ? !item.maintainer?.trim() : `name:${item.maintainer?.trim()}` === maintainerFilter))
   const maintainers = [...new Set((profile?.resources || []).map(item => item.maintainer?.trim()).filter(Boolean))]
-  const changes = profile ? publicationChanges(published, profile) : []
   const changedContacts = new Set(changes.map(item => item.resourceKey).filter(Boolean))
   const due = (profile?.resources || []).map(item => {
     const issues = ['name', 'url', 'area', 'audience', 'hours', 'maintainer'].filter(key => !item[key]?.trim())
@@ -172,7 +172,8 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
     pendingFocus.current = null
     reloadBusy.current = true; setReloading(true); setAttempt(value => value + 1)
   }
-  const labelFor = key => ['service_status', 'pause_notice', 'application_steps', 'preparation', 'fallback_contact'].includes(key) ? t(`flows.directory.${key}`)
+  const labelFor = key => key === 'visiting_note' ? t('localCare.support.visiting_note')
+    : ['service_status', 'pause_notice', 'application_steps', 'preparation', 'fallback_contact'].includes(key) ? t(`flows.directory.${key}`)
     : key === 'category' ? t('polish.supportPurpose')
     : ['maintainer', 'review_due_on'].includes(key) ? t(`polish.${key}`)
     : ['name', 'url', 'description', 'hours', 'checked_on'].includes(key) ? t(`pilot.resource.${key}`) : t(`work.resourceFields.${key}`)
@@ -183,8 +184,10 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
   const messageFor = issue => t(`ui.organization.errors.${issue.messageKey}`, issue.values || {})
   const inputAttributes = (scope, field, resourceKey = '') => {
     const id = directoryFieldId(scope, field, resourceKey)
+    const descriptions = [fieldIssue(scope, field, resourceKey) && `${id}-error`,
+      scope === 'resource' && ['audience', 'cost_note', 'application_steps', 'visiting_note'].includes(field) && `${id}-hint`].filter(Boolean)
     return { id, 'aria-invalid': fieldIssue(scope, field, resourceKey) ? true : undefined,
-      'aria-describedby': fieldIssue(scope, field, resourceKey) ? `${id}-error` : undefined }
+      'aria-describedby': descriptions.join(' ') || undefined }
   }
   const inlineError = (scope, field, resourceKey = '') => {
     const issue = fieldIssue(scope, field, resourceKey)
@@ -192,13 +195,15 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
   }
   const renderResourceField = key => <label key={key} htmlFor={directoryFieldId('resource', key, resource.resource_key)}>
     {labelFor(key)}<span className="field-badge">{t(['name', 'url'].includes(key) ? 'ui.organization.requiredForPublish' : 'ui.organization.optional')}</span>
-    {['description', 'cost_note', 'pause_notice', 'application_steps', 'preparation', 'fallback_contact'].includes(key) ? <textarea {...inputAttributes('resource', key, resource.resource_key)} rows={3}
+    {['description', 'cost_note', 'pause_notice', 'application_steps', 'visiting_note', 'preparation', 'fallback_contact'].includes(key) ? <textarea {...inputAttributes('resource', key, resource.resource_key)} rows={3}
       maxLength={resourceLimits[key]} value={resource[key] || ''} onChange={event => updateResource(key, event.target.value)} />
       : <input {...inputAttributes('resource', key, resource.resource_key)}
         type={['checked_on', 'review_due_on'].includes(key) ? 'date' : ['url', 'booking_url'].includes(key) ? 'url' : key === 'phone' ? 'tel' : 'text'}
         max={key === 'checked_on' ? japanDay() : undefined} value={resource[key] || ''} maxLength={resourceLimits[key]}
         onChange={event => updateResource(key, ['checked_on', 'review_due_on', 'booking_url'].includes(key) ? event.target.value || null : event.target.value)} />}
     {inlineError('resource', key, resource.resource_key)}
+    {['audience', 'cost_note', 'application_steps', 'visiting_note'].includes(key) && <span className="field-hint" id={`${directoryFieldId('resource', key, resource.resource_key)}-hint`}>
+      {t(`localCare.organization.fieldHints.${key}`)}</span>}
   </label>
   const renderServiceStatus = () => <label htmlFor={directoryFieldId('resource', 'service_status', resource.resource_key)}>
     {t('flows.directory.service_status')}<select {...inputAttributes('resource', 'service_status', resource.resource_key)}

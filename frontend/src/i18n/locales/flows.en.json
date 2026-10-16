@@ -83,7 +83,7 @@
     "statuses": { "active": "Contact information available", "paused": "Temporarily paused" },
     "paused": "This service is temporarily paused. Check the alternative contact.",
     "pause_notice": "Pause reason and expected return (public)",
-    "application_steps": "Steps to apply or use this service",
+    "application_steps": "Application and booking order",
     "preparation": "What to prepare before contacting",
     "fallback_contact": "Who to contact if unavailable or paused",
     "filterMaintainer": "Filter contacts by maintainer",

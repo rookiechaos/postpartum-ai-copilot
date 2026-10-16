@@ -1,10 +1,10 @@
 {
   "name": "産後のくらしサポート",
   "short_name": "産後サポート",
-  "description": "家庭と小さな支援機関のための記録と相談",
+  "description": "ご家庭と地域の支援者・施設のための記録と相談",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#edf4ef",
+  "background_color": "#f6f5f0",
   "theme_color": "#256354",
   "orientation": "portrait-primary",
   "icons": [
@@ -22,13 +22,13 @@
   "screenshots": [],
   "shortcuts": [
     {
-      "name": "家庭用の入口",
-      "short_name": "家庭用",
+      "name": "ご家庭で使う",
+      "short_name": "ご家庭",
       "url": "/family"
     },
     {
-      "name": "機関用の入口",
-      "short_name": "機関用",
+      "name": "支援者・施設の方へ",
+      "short_name": "施設の管理",
       "url": "/organization"
     }
   ],

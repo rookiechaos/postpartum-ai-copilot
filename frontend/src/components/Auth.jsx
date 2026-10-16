@@ -6,6 +6,8 @@ import SupportDirectory from './SupportDirectory'
 import AccountRequests from './AccountRequests'
 import ServicePrivacyInfo from './ServicePrivacyInfo'
 import ConnectionNotice from './ConnectionNotice'
+import ProductBrand from './ProductBrand'
+import OperatorInfo from './OperatorInfo'
 import './Auth.css'
 
 function Auth({ onSuccess, entry = 'family', onBack }) {
@@ -79,11 +81,12 @@ function Auth({ onSuccess, entry = 'family', onBack }) {
           <LanguageSelector />
         </div>
         <div className="auth-header">
-          <h1>🤱 {t('app.title')}</h1>
+          <ProductBrand as="h1" />
           <p className="auth-subtitle">{t(entry === 'organization' ? 'pilot.organizationTitle' : entry === 'operator' ? 'work.operatorTitle' : 'pilot.familyTitle')}</p>
           <p>{t(entry === 'organization' ? 'pilot.organizationAuthNote' : entry === 'operator' ? 'work.operatorScope' : 'pilot.familyAuthNote')}</p>
         </div>
         <ConnectionNotice />
+        <OperatorInfo />
 
         <details className="pilot-panel"><summary>{t('work.beforeRegistration')}</summary><ServicePrivacyInfo /></details>
         <div className="auth-tabs">

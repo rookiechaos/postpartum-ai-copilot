@@ -1,5 +1,7 @@
 # UI refinement for first-time family and community use
 
+The subsequent [Japanese family and local-service revision](JAPANESE_EXPERIENCE.md) refines wording, branding, operator identity, feeding fields, save states and local eligibility guidance. Its optional public directory field requires a matching backend/frontend deployment; the source-only acceptance restriction continues.
+
 This revision implements the product UI review for small Japanese family and community pilots. Work is **source only**: no application, worker, dependency installation, build, lint/parser, tests, browser, migration, print/QR check or real-data workflow was run. Source inspection and `git diff --check` do not verify rendering, accessibility or runtime behavior.
 
 ## Family flow

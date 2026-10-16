@@ -39,6 +39,7 @@ class LocalResource(BaseModel):
     service_status: Literal["active", "paused"] = "active"
     pause_notice: str = Field(default="", max_length=500)
     application_steps: str = Field(default="", max_length=800)
+    visiting_note: str = Field(default="", max_length=500)
     preparation: str = Field(default="", max_length=500)
     fallback_contact: str = Field(default="", max_length=500)
 

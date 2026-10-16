@@ -83,7 +83,7 @@
     "statuses": { "active": "受付案内あり", "paused": "一時休止" },
     "paused": "このサービスは一時休止中です。代わりの窓口を確認してください。",
     "pause_notice": "休止の理由・再開予定（公開）",
-    "application_steps": "申し込み・利用までの手順",
+    "application_steps": "申請・予約の順番",
     "preparation": "連絡前に準備するもの",
     "fallback_contact": "連絡できない・休止中の場合の相談先",
     "filterMaintainer": "担当で窓口を絞り込む",

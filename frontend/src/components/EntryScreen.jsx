@@ -3,18 +3,21 @@ import { useTranslation } from 'react-i18next'
 import { Baby, Building2, ArrowRight } from 'lucide-react'
 import LanguageSelector from './LanguageSelector'
 import SupportDirectory from './SupportDirectory'
+import ProductBrand from './ProductBrand'
+import OperatorInfo from './OperatorInfo'
 import './Pilot.css'
 
 export default function EntryScreen({ onChoose }) {
   const { t } = useTranslation()
   return (
     <main className="pilot-shell entry-screen">
-      <div className="pilot-topbar"><span>Postpartum AI Copilot</span><LanguageSelector /></div>
+      <div className="pilot-topbar"><ProductBrand /><LanguageSelector /></div>
       <header className="entry-intro">
         <p className="pilot-eyebrow">{t('pilot.eyebrow')}</p>
         <h1>{t('pilot.entryTitle')}</h1>
         <p>{t('pilot.entryDescription')}</p>
       </header>
+      <OperatorInfo />
       <div className="entry-grid">
         <article className="entrance-card">
           <Baby size={32} aria-hidden="true" />

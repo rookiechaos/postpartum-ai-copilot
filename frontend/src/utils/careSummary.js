@@ -17,6 +17,7 @@ export function buildCareSummary(entries, { includeParent = false, includeNotes 
         if (entry[key] != null) fields.push(`${entry[key]} ${unit}`)
       }
       if (entry.entry_type === 'feeding' && entry.feeding_type) fields.push(t(`tracking.${entry.feeding_type}`))
+      if (entry.entry_type === 'feeding' && entry.side) fields.push(t(`localCare.record.sides.${entry.side}`, { defaultValue: entry.side }))
       if (entry.entry_type === 'diaper' && entry.diaper_type) fields.push(t(`tracking.${entry.diaper_type}`))
       if (includeParent && entry.entry_type === 'mood' && entry.mood_level) fields.push(t(`tracking.${entry.mood_level}`))
       if (includeParent && entry.entry_type === 'recovery' && entry.breast_condition) fields.push(t(`tracking.${entry.breast_condition}`))

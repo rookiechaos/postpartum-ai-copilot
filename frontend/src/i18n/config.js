@@ -12,6 +12,8 @@ import flowsEnglish from './locales/flows.en.json'
 import flowsJapanese from './locales/flows.ja.json'
 import friendlyEnglish from './locales/friendly.en.json'
 import friendlyJapanese from './locales/friendly.ja.json'
+import localCareEnglish from './locales/localCare.en.json'
+import localCareJapanese from './locales/localCare.ja.json'
 
 i18n
   .use(LanguageDetector)
@@ -19,10 +21,10 @@ i18n
   .init({
     resources: {
       en: {
-        translation: { ...enTranslations, polish: polishEnglish, ui: uiEnglish, flows: flowsEnglish, friendly: friendlyEnglish }
+        translation: { ...enTranslations, polish: polishEnglish, ui: uiEnglish, flows: flowsEnglish, friendly: friendlyEnglish, localCare: localCareEnglish }
       },
       ja: {
-        translation: { ...jaTranslations, polish: polishJapanese, ui: uiJapanese, flows: flowsJapanese, friendly: friendlyJapanese }
+        translation: { ...jaTranslations, polish: polishJapanese, ui: uiJapanese, flows: flowsJapanese, friendly: friendlyJapanese, localCare: localCareJapanese }
       }
     },
     fallbackLng: 'ja',
@@ -39,9 +41,13 @@ i18n
   })
 
 const updatePageLanguage = () => {
-  if (typeof document !== 'undefined') document.documentElement.lang = i18n.resolvedLanguage || 'ja'
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = i18n.resolvedLanguage || 'ja'
+    if (i18n.isInitialized) document.title = i18n.t('app.title')
+  }
 }
 i18n.on('languageChanged', updatePageLanguage)
 i18n.on('initialized', updatePageLanguage)
+if (i18n.isInitialized) updatePageLanguage()
 
 export default i18n

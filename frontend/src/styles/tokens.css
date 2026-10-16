@@ -1,6 +1,7 @@
 :root {
-  --color-bg: #eef4f0;
+  --color-bg: #f6f5f0;
   --color-surface: #ffffff;
+  --color-warm-surface: #faf7ef;
   --color-text: #213b35;
   --color-muted: #526b64;
   --color-brand: #256354;
@@ -11,7 +12,7 @@
   --color-danger: #a12e2e;
   --color-danger-tint: #fff2f0;
   --radius-panel: 1rem;
-  --shadow-panel: 0 4px 20px #213b350a;
+  --shadow-panel: 0 2px 8px #213b3506;
   --content-width: 68rem;
   --pilot-ink: var(--color-text);
   --pilot-muted: var(--color-muted);
@@ -27,6 +28,7 @@
 html.high-contrast {
   --color-bg: #fff;
   --color-surface: #fff;
+  --color-warm-surface: #fff;
   --color-text: #000;
   --color-muted: #222;
   --color-brand: #164b38;

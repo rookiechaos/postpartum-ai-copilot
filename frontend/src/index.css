@@ -15,7 +15,15 @@ body {
   background: var(--color-bg);
   color: var(--color-text);
   min-height: 100vh;
+  line-height: 1.75;
 }
+
+html:lang(ja) :is(h1, h2, h3, h4, p, label, legend, summary, li, dt, dd) {
+  line-break: strict;
+  word-break: normal;
+}
+
+html:lang(ja) :is(h1, h2, h3, h4) { line-height: 1.5; }
 
 #root {
   min-height: 100vh;

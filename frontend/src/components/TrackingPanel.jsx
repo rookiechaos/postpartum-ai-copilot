@@ -12,6 +12,7 @@ import Charts from './Charts'
 import useConnection from '../utils/useConnection'
 import { useToast } from './Toast'
 import RecordTime, { useRecordClock } from './RecordTime'
+import RecordSaveStatus from './RecordSaveStatus'
 import { revealElement } from '../utils/focusView'
 import './TrackingPanel.css'
 
@@ -171,29 +172,31 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     draft.clear(); setAttempt(value => value + 1)
   }
   const removeEntry = async entry => {
-    if (loading || pendingSave) return
-    setLoading(true)
+    if (writing.current || loading || pendingSave) return
+    writing.current = true; setLoading(true); setSaveStatus('removing')
     try {
       await api.deleteTrackingEntry(entry.id, entry)
       setUndoEntry({ ...entry, restore_request_key: newRequestKey() }); setDeleteTarget(null)
-      if (editing?.record_key === entry.record_key) { setEditing(null); setShowAddForm(false) }
-      refresh()
+      if (editing?.record_key === entry.record_key) {
+        setEditing(null); setShowAddForm(false); setFormDraft(null); setRestoredForm(null); draft.clear()
+      }
+      setSaveStatus('removed'); refresh()
     } catch (err) {
       if (err.status === 409 || err.status === 404) {
-        setDeleteTarget(null); toast.error(t('work.recordConflict')); refresh()
-      } else toast.error(t('work.deleteFailed'))
+        setDeleteTarget(null); setSaveStatus(''); toast.error(t('work.recordConflict')); refresh()
+      } else { setSaveStatus('removeFailed'); toast.error(t('work.deleteFailed')) }
     }
-    finally { setLoading(false) }
+    finally { writing.current = false; setLoading(false) }
   }
   const restoreEntry = async () => {
-    if (!undoEntry || loading) return
+    if (!undoEntry || writing.current || loading || pendingSave) return
     const restoring = undoEntry
-    setLoading(true)
+    writing.current = true; setLoading(true); setSaveStatus('restoring')
     try {
       await api.addTrackingEntry({ ...payload(restoring), request_key: restoring.restore_request_key })
-      setUndoEntry(null); refresh(); toast.success(t('work.restored'))
-    } catch { toast.error(t('work.restoreFailed')) }
-    finally { setLoading(false) }
+      setUndoEntry(null); setSaveStatus('restored'); refresh(); toast.success(t('work.restored'))
+    } catch { setSaveStatus('restoreFailed'); toast.error(t('work.restoreFailed')) }
+    finally { writing.current = false; setLoading(false) }
   }
   const loadSummary = async () => {
     if (!acceptedAI || summaryLoading) return
@@ -228,15 +231,15 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
         <button type="button" className="pilot-button secondary" onClick={() => setOpenRequest(null)}>{t('friendly.record.discardOpen')}</button>
       </div>
     </section>}
-    {saveStatus && <p role="status">{t(['offline', 'unconfirmed'].includes(saveStatus) ? `flows.connection.${saveStatus}Save` : `polish.saveStatus.${saveStatus}`)}</p>}
+    <RecordSaveStatus status={saveStatus} />
     {pendingSave && <button type="button" className="pilot-button secondary" disabled={loading} onClick={() => setAttempt(value => value + 1)}>{t('flows.connection.checkRecords')}</button>}
-    {pendingSave && <p role="status">{t('polish.pendingWriteNotice')} {japanDateTime(pendingSave.data.timestamp, i18n.resolvedLanguage || 'ja')}</p>}
+    {pendingSave && <p>{t('localCare.record.retryHint')} {japanDateTime(pendingSave.data.timestamp, i18n.resolvedLanguage || 'ja')}</p>}
     {showAddForm && <div ref={formHeading} tabIndex={-1} className="record-form-region" role="region" aria-label={t(editing ? 'work.editRecord' : 'tracking.addEntry')}>
       <EntryForm key={`${editing ? `edit:${editing.record_key}:${editing.revision}` : 'new'}:${formRevision}`}
       entryType={entryType} initialEntry={editing} restored={restoredForm} onDraftChange={setFormDraft} locked={Boolean(pendingSave)}
-      onEntryTypeChange={setEntryType} onSubmit={saveEntry} onCancel={cancelForm} loading={loading} /></div>}
+      onEntryTypeChange={setEntryType} onSubmit={saveEntry} onCancel={cancelForm} loading={loading} saving={saveStatus === 'saving'} /></div>}
     {undoEntry && <div className="pilot-panel undo-notice" role="status"><p>{t('work.lastDeleted')}</p>
-      <button className="pilot-button secondary" disabled={loading} onClick={restoreEntry}>{t('work.undoDelete')}</button></div>}
+      <button className="pilot-button secondary" disabled={loading || Boolean(pendingSave)} onClick={restoreEntry}>{t('work.undoDelete')}</button></div>}
     <section className="entries-list"><h3>{t('tracking.recentEntries')}</h3><p>{t('pilot.japanTime')}</p>
       <label>{t('work.recordPeriod')}<select value={recordRange} disabled={loading} onChange={event => setRecordRange(Number(event.target.value))}>
         {[7, 30, 90, 365].map(days => <option key={days} value={days}>{t('work.rangeDays', { days })}</option>)}
@@ -248,6 +251,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
         <div className="entry-header"><strong>{t(`tracking.${entry.entry_type}`)}</strong><RecordTime value={entry.timestamp} now={now} /></div>
         <div className="entry-details">
           {entry.feeding_type && <span>{t(`tracking.${entry.feeding_type}`)}</span>}
+          {entry.side && <span>{t(`localCare.record.sides.${entry.side}`, { defaultValue: entry.side })}</span>}
           {entry.diaper_type && <span>{t(`tracking.${entry.diaper_type}`)}</span>}
           {['duration_minutes', 'sleep_duration_minutes'].map(key => entry[key] != null && <span key={key}>{entry[key]} {t('pilot.minutes')}</span>)}
           {['amount_ml', 'pumped_amount_ml'].map(key => entry[key] != null && <span key={key}>{entry[key]} mL</span>)}
@@ -283,7 +287,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   </div>
 }
 
-function EntryForm({ entryType, initialEntry, restored, onDraftChange, locked, onEntryTypeChange, onSubmit, onCancel, loading }) {
+function EntryForm({ entryType, initialEntry, restored, onDraftChange, locked, onEntryTypeChange, onSubmit, onCancel, loading, saving }) {
   const { t } = useTranslation()
   const [formData, setFormData] = useState(restored?.formData || (initialEntry ? payload(initialEntry) : {}))
   const [when, setWhen] = useState(restored?.when || (initialEntry ? 'specific' : 'now'))
@@ -301,14 +305,34 @@ function EntryForm({ entryType, initialEntry, restored, onDraftChange, locked, o
     setFormData(previous => ({ notes: previous.notes || '' }))
     setError('')
   }, [entryType])
+  const feedingMethod = formData.feeding_type
+  const breastFields = [['duration_minutes', 'duration', 'number'], ['side', 'side', ['left', 'right', 'both']]]
+  const milkFields = [['amount_ml', 'amount', 'number']]
+  const mainFeedingFields = feedingMethod === 'breast' ? breastFields : feedingMethod === 'formula' ? milkFields
+    : feedingMethod === 'mixed' ? [...breastFields, ...milkFields] : []
+  const otherFeedingFields = [...breastFields, ...milkFields].filter(([key]) => !mainFeedingFields.some(([main]) => main === key))
+  const hasOtherFeedingValues = otherFeedingFields.some(([key]) => formData[key] !== undefined && formData[key] !== null && formData[key] !== '')
   const fields = {
-    feeding: [['feeding_type', 'feedingType', ['breast', 'formula', 'mixed']], ['duration_minutes', 'duration', 'number'], ['amount_ml', 'amount', 'number']],
+    feeding: [['feeding_type', 'feedingType', ['breast', 'formula', 'mixed']], ...mainFeedingFields],
     diaper: [['diaper_type', 'diaperType', ['wet', 'dirty', 'both']]],
     sleep: [['sleep_duration_minutes', 'duration', 'number'], ['sleep_quality', 'quality', ['peaceful', 'restless', 'interrupted']]],
     mood: [['mood_level', 'moodLevel', ['very_low', 'low', 'neutral', 'good', 'very_good']], ['mood_notes', 'notes', 'textarea']],
     pumping: [['pumped_amount_ml', 'amount', 'number']],
     recovery: [['weight_kg', 'weight', 'number'], ['breast_condition', 'breastCondition', ['normal', 'engorged', 'blocked', 'painful', 'other']], ['recovery_notes', 'recoveryNotes', 'textarea']],
   }
+  const feedingLabels = { duration_minutes: feedingMethod === 'breast' ? 'feedingTime' : 'feedingDuration',
+    amount_ml: feedingMethod === 'formula' ? 'milkAmount' : 'knownAmount', side: 'feedingSide' }
+  const fieldLabel = (key, label) => t(entryType === 'feeding' && feedingLabels[key]
+    ? `localCare.record.${feedingLabels[key]}` : `tracking.${label}`)
+  const renderField = ([key, label, kind]) => Array.isArray(kind)
+    ? <fieldset key={key}><legend>{fieldLabel(key, label)}</legend><div className="record-choices">
+      {kind.map(value => <button key={value} type="button" className="pilot-button secondary" aria-pressed={formData[key] === value}
+        onClick={() => setFormData(previous => ({ ...previous, [key]: previous[key] === value ? null : value }))}>
+        {t(key === 'side' ? `localCare.record.sides.${value}` : `tracking.${value}`)}</button>)}
+    </div></fieldset>
+    : <label key={key}>{fieldLabel(key, label)}<input type="number" inputMode={key.endsWith('_minutes') ? 'numeric' : 'decimal'}
+      min="0" step={key.endsWith('_minutes') ? '1' : '0.1'} value={formData[key] ?? ''}
+      onChange={event => setFormData({ ...formData, [key]: event.target.value === '' ? null : Number(event.target.value) })} /></label>
   return <form className="entry-form" onSubmit={event => {
     event.preventDefault()
     if (loading) return
@@ -325,7 +349,8 @@ function EntryForm({ entryType, initialEntry, restored, onDraftChange, locked, o
     <label>{t('tracking.entryType')}<select value={entryType} onChange={event => {
       onEntryTypeChange(event.target.value)
     }}>
-      {types.map(type => <option key={type} value={type}>{t(`tracking.${type}`)}</option>)}
+      {[['babyGroup', ['feeding', 'diaper', 'sleep', 'pumping']], ['selfGroup', ['mood', 'recovery']]].map(([group, options]) =>
+        <optgroup key={group} label={t(`localCare.record.${group}`)}>{options.map(type => <option key={type} value={type}>{t(`tracking.${type}`)}</option>)}</optgroup>)}
     </select></label>
     <label>{t('work.recordTime')}<select value={when} onChange={event => setWhen(event.target.value)}>
       <option value="now">{t('work.now')}</option><option value="specific">{t('work.chooseTime')}</option>
@@ -333,13 +358,13 @@ function EntryForm({ entryType, initialEntry, restored, onDraftChange, locked, o
     {when === 'specific' && <label>{t('pilot.japanTime')}<input type="datetime-local" required value={recordedAt}
       min={japanDateTimeInput(earliestRecordTime())} max={japanDateTimeInput()} onChange={event => setRecordedAt(event.target.value)} /></label>}
     <p>{t('work.recordWindowNotice')}</p>
-    {fields[entryType].filter(([, , kind]) => kind !== 'textarea').map(([key, label, kind]) => Array.isArray(kind)
-      ? <fieldset key={key}><legend>{t(`tracking.${label}`)}</legend><div className="record-choices">
-        {kind.map(value => <button key={value} type="button" className="pilot-button secondary" aria-pressed={formData[key] === value}
-          onClick={() => setFormData({ ...formData, [key]: formData[key] === value ? null : value })}>{t(`tracking.${value}`)}</button>)}
-      </div></fieldset> : <label key={key}>{t(`tracking.${label}`)}<input type="number" inputMode={key.endsWith('_minutes') ? 'numeric' : 'decimal'} min="0" step={key.endsWith('_minutes') ? '1' : '0.1'} value={formData[key] ?? ''}
-          onChange={event => setFormData({ ...formData, [key]: event.target.value === '' ? null : Number(event.target.value) })} />
-    </label>)}
+    {fields[entryType].filter(([, , kind]) => kind !== 'textarea').map(renderField)}
+    {entryType === 'feeding' && <>
+      {!mainFeedingFields.length && <p className="field-hint">{t('localCare.record.chooseFeeding')}</p>}
+      {otherFeedingFields.length > 0 && <AdditionalFeedingFields key={feedingMethod || 'unspecified'} initiallyOpen={hasOtherFeedingValues}>
+        {otherFeedingFields.map(renderField)}
+      </AdditionalFeedingFields>}
+    </>}
     <details open={Boolean(initialEntry?.notes || initialEntry?.mood_notes || initialEntry?.recovery_notes)}><summary>{t('work.optionalNotes')}</summary>
       {fields[entryType].filter(([, , kind]) => kind === 'textarea').map(([key, label]) => <label key={key}>{t(`tracking.${label}`)}
         <textarea value={formData[key] || ''} maxLength={2000} rows={3} onChange={event => setFormData({ ...formData, [key]: event.target.value })} />
@@ -348,6 +373,16 @@ function EntryForm({ entryType, initialEntry, restored, onDraftChange, locked, o
     </details>
     {error && <p role="alert">{error}</p>}
   </fieldset><div className="form-actions"><button type="button" disabled={loading} onClick={onCancel}>{t('tracking.cancel')}</button>
-      <button type="submit" disabled={loading}>{t(loading ? 'tracking.adding' : locked ? 'polish.retrySameSave' : initialEntry ? 'work.saveChanges' : 'tracking.addEntryButton')}</button></div>
+      <button type="submit" disabled={loading}>{t(saving ? 'tracking.adding' : locked ? 'localCare.record.resend' : initialEntry ? 'work.saveChanges' : 'tracking.addEntryButton')}</button></div>
   </form>
+}
+
+function AdditionalFeedingFields({ initiallyOpen, children }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(initiallyOpen)
+  return <details className="additional-feeding" open={open} onToggle={event => {
+    if (event.target === event.currentTarget) setOpen(event.currentTarget.open)
+  }}><summary>{t('localCare.record.additionalFeeding')}</summary>
+    <p className="field-hint">{t('localCare.record.additionalNotice')}</p>{children}
+  </details>
 }

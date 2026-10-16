@@ -7,6 +7,9 @@
 .quick-record-panel .record-choices .pilot-button { background: var(--color-brand); color: #fff; border-color: var(--color-brand); font-weight: 600; }
 .quick-record-panel .record-choices .pilot-button:hover:not(:disabled) { background: var(--color-brand-hover); }
 .quick-record-panel .record-choices .pilot-button:disabled { opacity: .55; }
+.quick-record-panel .record-choices .pilot-button { flex-direction: column; min-height: 80px; gap: .25rem; }
+.quick-record-name { font-size: 1.15rem; }
+.quick-record-panel .record-choices small { font-size: .85rem; font-weight: 400; line-height: 1.6; }
 .family-secondary-actions { margin-block: 1rem; }
 .quick-save-receipt { padding: .75rem 1rem; margin-block: 1rem; border-inline-start: 3px solid var(--color-brand); background: var(--color-tint); line-height: 1.8; }
 .quick-save-receipt .pilot-actions { margin-block: .5rem; }

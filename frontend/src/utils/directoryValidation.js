@@ -5,7 +5,7 @@ export const businessLimits = { name: 100, municipality: 100, contact: 200, hour
   retention_notice: 1000, ai_data_notice: 1500, account_support_notice: 1000 }
 export const resourceLimits = { name: 100, url: 500, description: 500, hours: 200, area: 100, audience: 200,
   phone: 40, booking_url: 500, cost_note: 300, maintainer: 100, pause_notice: 500,
-  application_steps: 800, preparation: 500, fallback_contact: 500 }
+  application_steps: 800, visiting_note: 500, preparation: 500, fallback_contact: 500 }
 export const directoryFieldId = (scope, field, resourceKey = '') => `directory-${scope}-${resourceKey || 'business'}-${field}`
 
 const normalizePhone = value => String(value || '').normalize('NFKC').replace(/[‐‑‒–—−ー]/g, '-').trim()
@@ -13,6 +13,7 @@ export function normalizeDirectory(profile) {
   const normalize = item => ({ ...item, name: (item.name || '').trim(), phone: normalizePhone(item.phone) })
   return { ...normalize(profile), email: (profile.email || '').trim(), resources: profile.resources.map(item => ({
     ...normalize(item), url: (item.url || '').trim(), booking_url: item.booking_url?.trim() || null,
+    visiting_note: (item.visiting_note || '').trim(),
   })) }
 }
 function validDate(value) {
