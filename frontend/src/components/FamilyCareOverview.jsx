@@ -22,6 +22,9 @@ export default function FamilyCareOverview({ visible, refreshKey, onManage }) {
   const [conflict, setConflict] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [saved, setSaved] = useState(false)
+  const [acknowledging, setAcknowledging] = useState('')
+  const [ackError, setAckError] = useState('')
+  const acknowledgementBusy = useRef(false)
   const edited = useRef(false)
   const base = useRef(null)
   const saving = useRef(false)
@@ -81,15 +84,27 @@ export default function FamilyCareOverview({ visible, refreshKey, onManage }) {
     } catch (failure) { setError(failure.status === 409 ? 'conflict' : 'save'); setConflict(failure.status === 409) }
     finally { saving.current = false; setBusy(false) }
   }
+  const acknowledge = async note => {
+    if (acknowledgementBusy.current || busy || loading) return
+    acknowledgementBusy.current = true; setAcknowledging(note.author_id); setAckError('')
+    try {
+      await api.post(`/api/families/${selected}/handovers/${encodeURIComponent(note.author_id)}/acknowledge`, {
+        revision: note.revision, membership_revision: note.membership_revision,
+      })
+      setAttempt(value => value + 1)
+    } catch (failure) {
+      setAckError(failure.status === 409 ? 'conflict' : 'failed'); setAttempt(value => value + 1)
+    } finally { acknowledgementBusy.current = false; setAcknowledging('') }
+  }
   return <details className="pilot-panel family-overview" onToggle={event => {
     if (event.target === event.currentTarget) setExpanded(event.currentTarget.open)
   }}><summary>{t('friendly.home.family')}{edited.current ? ` · ${t('flows.overview.unsaved')}` : ''}</summary>
     {!selected && <p>{t('friendly.home.familyOff')}</p>}
     <p>{t('flows.overview.notice')}</p>
-    <label>{t('flows.overview.choose')}<select value={selected} disabled={busy} onChange={event => {
+    <label>{t('flows.overview.choose')}<select value={selected} disabled={busy || Boolean(acknowledging)} onChange={event => {
       if (edited.current && !window.confirm(t('flows.overview.reloadConfirm'))) return
       edited.current = false; base.current = null; setSelected(event.target.value); setOverview(null)
-      setForm({ text: '', shared: false }); setConflict(false); setSaved(false); setError('')
+      setForm({ text: '', shared: false }); setConflict(false); setSaved(false); setError(''); setAckError('')
     }}><option value="">{t('flows.overview.off')}</option>
       {families.map(family => <option key={family.family_id} value={family.family_id}>{family.name}</option>)}
     </select></label>
@@ -107,9 +122,24 @@ export default function FamilyCareOverview({ visible, refreshKey, onManage }) {
         </> : t('flows.overview.unknown')}</dd></div>
       })}</dl>}
       {overview?.checked_at && <p>{t('flows.overview.checkedAt', { time: date(overview.checked_at) })}</p>}
-      {overview?.handovers.map((note, index) => <article className="support-card" key={`${note.recorder_number}:${index}`}>
-        <h4>{t('polish.recordedBy', { name: label(note) })}</h4><p className="preserve-lines">{note.text}</p><time>{date(note.updated_at)}</time>
-      </article>)}
+      {ackError && <p role="alert">{t(`interaction.handover.${ackError}`)}</p>}
+      {overview?.handovers.map(note => {
+        const receipts = note.acknowledgements || []
+        const confirmed = receipts.some(receipt => receipt.is_me && receipt.note_revision === note.revision)
+        return <article className="support-card" key={note.author_id}>
+          <h4>{t('polish.recordedBy', { name: label(note) })}</h4><p>{t('interaction.handover.version', { number: note.revision })}</p>
+          <p className="preserve-lines">{note.text}</p><time>{date(note.updated_at)}</time>
+          <ul className="handover-receipts">{receipts.map(receipt => <li key={receipt.recorder_number}>
+            {t(receipt.note_revision === note.revision ? 'interaction.handover.receipt' : 'interaction.handover.previousReceipt', {
+              name: label(receipt), time: date(receipt.acknowledged_at), number: receipt.note_revision,
+            })}
+          </li>)}</ul>
+          {!note.is_own && <><p className="field-hint">{t('interaction.handover.notice')}</p>
+            <button type="button" className="pilot-button secondary" disabled={confirmed || Boolean(acknowledging) || busy || loading}
+              onClick={() => acknowledge(note)}>{t(confirmed ? 'interaction.handover.confirmed' : acknowledging === note.author_id ? 'settings.saving' : 'interaction.handover.confirm')}</button>
+          </>}
+        </article>
+      })}
       <details className="handover-editor"><summary>{t('friendly.home.note')}{edited.current ? ` · ${t('flows.overview.unsaved')}` : ''}</summary>
       <form onSubmit={save}><fieldset disabled={busy || !overview || conflict}>
         <legend>{t('flows.overview.noteTitle')}</legend>

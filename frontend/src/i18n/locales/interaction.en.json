@@ -1,0 +1,139 @@
+{
+  "close": "Close",
+  "record": {
+    "time": "Correct the time",
+    "quantity": "Add amount or duration",
+    "editNotice": "Changes apply only after you press Save changes. All times are in Japan time.",
+    "fullEdit": "Edit type, notes and other details",
+    "discard": "Close without saving your changes?",
+    "reload": "Reload the current record and discard your edits? An unconfirmed request may already have applied.",
+    "errors": {
+      "load": "Could not load this record. Check your connection and try again.",
+      "missing": "This record was not found. It may have been deleted on another screen.",
+      "conflict": "This record has changed. Reload its current content before editing again.",
+      "notApplied": "Your changes were not present when checked. Resend the same changes or close and review your records.",
+      "invalidTime": "Choose a time within the last 365 days that is not in the future.",
+      "invalid": "Check your input. Amounts must be nonnegative; durations must be nonnegative whole minutes."
+    }
+  },
+  "timeline": {
+    "title": "Today's timeline",
+    "scope": "Records to display",
+    "mine": "My records",
+    "family": "Shared family records: {{name}}",
+    "ownNotice": "These are records you created. Select one to see details or make corrections.",
+    "familyNotice": "Today's shared baby care records in the family you selected. Unshared records and adults' health and mood are excluded.",
+    "filter": "Filter by record type",
+    "all": "All",
+    "details": "View details",
+    "empty": "No records to display today. Care during unrecorded periods is unknown.",
+    "readOnly": "Shared family records are for viewing. Switch to My records to correct a record you created."
+  },
+  "shortcuts": {
+    "title": "Choose your usual buttons",
+    "notice": "Choose 1–4 buttons and arrange them. Only these button choices are saved for this account on this device.",
+    "choose": "Buttons on your home screen",
+    "sleep": "Time sleep",
+    "feedingTimer": "Time breastfeeding",
+    "timerHint": "Opens the timer",
+    "up": "Move up",
+    "down": "Move down",
+    "moveUp": "Move {{name}} up",
+    "moveDown": "Move {{name}} down",
+    "reset": "Restore the initial order",
+    "storageError": "Could not save these preferences on this device. Check your browser storage settings."
+  },
+  "timer": {
+    "title": "Time breastfeeding or sleep",
+    "notice": "Starting and stopping do not save a care record. Review the times and duration, then save.",
+    "choose": "Activity to time",
+    "breast": "Breastfeeding",
+    "start": "Start timing",
+    "running": "Timing in progress",
+    "awaiting": "Awaiting review and save",
+    "stop": "Stop and review",
+    "started": "Started: {{time}} (Japan time)",
+    "elapsed": "Time elapsed since starting",
+    "returned": "You left this screen. Check that the start and end match the activity you actually observed. An end time is never chosen automatically.",
+    "review": "Review or correct times (Japan time)",
+    "startTime": "Start time",
+    "endTime": "End time",
+    "duration": "Duration to record: {{count}} min",
+    "rounding": "Partial minutes are rounded down. Elapsed time may differ from actual feeding or sleep time.",
+    "confirm": "I checked the actual start, end and content to save",
+    "save": "Save the reviewed record",
+    "discard": "Discard this timer",
+    "discardConfirm": "Discard this timer without saving a care record?",
+    "pendingPreview": "Resending the original record: {{count}} min from {{time}} (Japan time). Its content will not change.",
+    "errors": {
+      "invalidTime": "Check the start and end. Use times within the last 365 days, with the end at or after the start and not in the future.",
+      "conflict": "The record for this operation may have changed or been deleted. Review your records.",
+      "draftClear": "Could not delete the saved draft. Check your connection and try discarding again.",
+      "notFound": "No saved result was found at the time of checking. The request may still be processing; check again or resend the same content.",
+      "checkFailed": "Could not check the saved result. Check your connection and try again."
+    }
+  },
+  "chat": {
+    "shorter": "Make it shorter",
+    "supplement": "Add my circumstances",
+    "replaceDraft": "Replace your current question or change the selected previous exchange?",
+    "draftNotice": "An editable question draft is ready. Review and select the previous exchange if you want to include it, then review and confirm sending. Nothing has been sent yet.",
+    "drafts": {
+      "shorter": "Please explain the previous answer briefly in plain language, keeping its cautions.",
+      "supplement": "I would like to add some circumstances to my previous question.\nWhat I would like to add:\n"
+    }
+  },
+  "handover": {
+    "version": "This note: version {{number}}",
+    "notice": "Tell your family you have read this version. Opening the screen does not acknowledge it. This does not record that care was performed.",
+    "confirm": "I have read this",
+    "confirmed": "This version acknowledged",
+    "receipt": "{{name}} acknowledged version {{number}}: {{time}}",
+    "previousReceipt": "{{name}} acknowledged the earlier version {{number}}: {{time}}. The current version is not acknowledged.",
+    "conflict": "The note or sharing settings changed. Read the current version before acknowledging.",
+    "failed": "The confirmation result was not received. Reload and review acknowledgements. Retrying the same version does not change the original time."
+  },
+  "support": {
+    "steps": { "1": "Choose a contact", "2": "Prepare what to say", "3": "Record your next step" },
+    "notice": "Start wherever useful. Preparation and progress recording are optional.",
+    "chooseFirst": "Choose a contact to prepare your opening and organize your next step.",
+    "choose": "View contacts",
+    "selected": "Selected contact: {{name}}",
+    "change": "Choose another",
+    "prepare": "Prepare for this contact",
+    "skipPreparation": "Skip preparation and record a next step",
+    "reviewProgress": "Review earlier progress and input",
+    "manualProgress": "Calling or opening a booking link does not mark a contact as reached. Select the actual situation and save it yourself.",
+    "backPreparation": "Prepare what to say",
+    "backChoice": "Choose a contact",
+    "next": "Go to next step (even if you have only prepared)",
+    "removed": "This contact is no longer listed. You can review your earlier draft and progress. Confirm contact details again.",
+    "checklist": "Before contacting them (optional)",
+    "checks": {
+      "question": "I organized what I want to ask",
+      "documents": "I checked what to bring or prepare (ask the contact about anything unknown)"
+    }
+  },
+  "weekly": {
+    "title": "Review this week's information one at a time",
+    "notice": "Work through contacts needing review that match the maintainer filter when you start. Viewing them does not change review dates or published content.",
+    "start": "Start reviewing {{count}} contacts",
+    "position": "Contact {{number}} of {{count}}",
+    "edit": "Edit the information",
+    "backReview": "Return to this week's review",
+    "later": "Review later",
+    "unchanged": "If you confirmed the information is unchanged",
+    "attest": "I checked the listed information. Apply the displayed checked and next review dates to the draft.",
+    "confirm": "Confirm unchanged and continue",
+    "editNotice": "Use the editor below. Changes remain in your local draft. Edit the checked and next review dates as needed.",
+    "edited": "I reviewed my edits; continue",
+    "complete": "Reviewed {{count}} contacts. Deferred: {{deferred}}.",
+    "finishNotice": "Changes have not been published. Save the draft, then preview the changes and family view before publishing. Contacts with missing fields remain on the review list.",
+    "preview": "Preview all changes together",
+    "close": "Return to the editor (keep draft changes)",
+    "source": "Open the source to verify",
+    "dateError": "Choose a checked date no later than today, and a next review date after it and no earlier than today.",
+    "removed": "This contact was removed from the draft.",
+    "next": "Continue"
+  }
+}

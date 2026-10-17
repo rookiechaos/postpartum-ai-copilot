@@ -29,6 +29,7 @@ import './App.css'
 import './components/Pilot.css'
 import './components/ProductFlows.css'
 import './styles/ui.css'
+import './styles/interactions.css'
 
 function App() {
   const { t } = useTranslation()

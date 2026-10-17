@@ -16,7 +16,7 @@ from dependencies.container import get_container
 from dependencies.database import get_db
 from middleware.auth import get_current_user
 from middleware.rate_limit import RATE_LIMITS, rate_limit
-from models.database import (FamilyDB, FamilyMemberDB, FamilyHandoverDB, FamilyInviteLinkDB,
+from models.database import (FamilyDB, FamilyMemberDB, FamilyHandoverDB, FamilyHandoverAcknowledgementDB, FamilyInviteLinkDB,
                              SupportJourneyDB, PilotProfileDB)
 from models.schemas import User
 
@@ -53,6 +53,17 @@ def family_overview(family_id: str, user: User = Depends(get_current_user), db: 
         FamilyMemberDB.status == "active").order_by(FamilyMemberDB.id).all()
     labels = {person.user_id: (person.permissions or {}).get("display_label", "") for person in people}
     numbers = {person.user_id: index + 1 for index, person in enumerate(people)}
+    member_revisions = {person.user_id: person.revision for person in people}
+    acknowledgements = db.query(FamilyHandoverAcknowledgementDB).filter(
+        FamilyHandoverAcknowledgementDB.family_id == family_id).all()
+
+    def receipts(note):
+        return [{"recorder_label": labels.get(receipt.user_id, ""),
+            "recorder_number": numbers[receipt.user_id], "note_revision": receipt.note_revision,
+            "is_me": receipt.user_id == user.user_id, "acknowledged_at": stamp(receipt.acknowledged_at)}
+            for receipt in acknowledgements if receipt.author_id == note.user_id
+            and receipt.author_membership_revision == note.membership_revision
+            and member_revisions.get(receipt.user_id) == receipt.reader_membership_revision]
     # No parent records or free-text tracking notes enter the home overview.
     allowed = ("record_key", "timestamp", "entry_type", "recorded_by", "feeding_type", "diaper_type",
                "amount_ml", "duration_minutes", "sleep_duration_minutes", "pumped_amount_ml")
@@ -76,9 +87,84 @@ def family_overview(family_id: str, user: User = Depends(get_current_user), db: 
         "membership_revision": me.revision,
         "own_handover": {"text": own.text if own_visible else "", "shared": own.shared if current else False,
             "revision": own.revision if own else 0, "updated_at": stamp(own.updated_at) if own_visible else None},
-        "handovers": [{"text": note.text, "recorder_label": labels.get(note.user_id, ""),
+        "handovers": [{"author_id": note.user_id, "revision": note.revision, "is_own": note.user_id == user.user_id,
+            "membership_revision": note.membership_revision, "acknowledgements": receipts(note),
+            "text": note.text, "recorder_label": labels.get(note.user_id, ""),
             "recorder_number": numbers.get(note.user_id), "updated_at": stamp(note.updated_at)}
             for note, person in notes if note.text.strip()]}
+
+
+@router.get("/api/families/{family_id}/timeline")
+def family_timeline(family_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    member_of(db, family_id, user.user_id)
+    records = get_container().get("family_service").get_shared_tracking_data(family_id, user.user_id, days=2, db=db)
+    people = db.query(FamilyMemberDB).filter(FamilyMemberDB.family_id == family_id,
+        FamilyMemberDB.status == "active").order_by(FamilyMemberDB.id).all()
+    numbers = {person.user_id: index + 1 for index, person in enumerate(people)}
+    today = datetime.now(timezone(timedelta(hours=9))).date()
+    # The home timeline never broadens sharing to adult records or free-text notes.
+    allowed = ("record_key", "timestamp", "entry_type", "feeding_type", "diaper_type", "side",
+               "amount_ml", "duration_minutes", "sleep_duration_minutes", "sleep_quality", "pumped_amount_ml")
+    result = []
+    for entry in records:
+        if entry["entry_type"] not in ("feeding", "diaper", "sleep", "pumping"):
+            continue
+        recorded_at = datetime.fromisoformat(entry["timestamp"].replace("Z", "+00:00"))
+        if recorded_at.tzinfo is None:
+            recorded_at = recorded_at.replace(tzinfo=timezone.utc)
+        if recorded_at.astimezone(timezone(timedelta(hours=9))).date() != today:
+            continue
+        result.append({**{key: entry[key] for key in allowed if key in entry},
+            "recorder_label": entry.get("recorder_label", ""), "recorder_number": numbers.get(entry["recorded_by"]),
+            "is_own": entry["recorded_by"] == user.user_id})
+    return {"family_id": family_id, "day": today.isoformat(), "records": result, "checked_at": stamp(datetime.utcnow())}
+
+
+class HandoverAcknowledgement(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    revision: int = Field(ge=1, strict=True)
+    membership_revision: int = Field(ge=1, strict=True)
+
+
+@router.post("/api/families/{family_id}/handovers/{author_id}/acknowledge")
+def acknowledge_handover(family_id: str, author_id: str, body: HandoverAcknowledgement,
+                        user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if author_id == user.user_id:
+        raise HTTPException(422, "Confirm another family member's handover")
+    # A consistent lock order serializes acknowledgements with membership changes.
+    members = {member_id: member_of(db, family_id, member_id, write=True)
+        for member_id in sorted((user.user_id, author_id))}
+    author = members[author_id]
+    if author.revision != body.membership_revision:
+        db.rollback()
+        raise HTTPException(409, "Handover sharing changed; review again")
+    # Guard the exact visible version, and lock against a concurrent note edit.
+    changed = db.query(FamilyHandoverDB).filter(FamilyHandoverDB.family_id == family_id,
+        FamilyHandoverDB.user_id == author_id, FamilyHandoverDB.revision == body.revision,
+        FamilyHandoverDB.membership_revision == author.revision, FamilyHandoverDB.shared.is_(True),
+        FamilyHandoverDB.text != "", FamilyHandoverDB.updated_at >= datetime.utcnow() - timedelta(days=7),
+    ).update({"revision": FamilyHandoverDB.revision}, synchronize_session=False)
+    if changed != 1:
+        db.rollback()
+        raise HTTPException(409, "Handover changed; read the current version before confirming")
+    key = (family_id, author_id, user.user_id)
+    row = db.get(FamilyHandoverAcknowledgementDB, key)
+    reader_revision = members[user.user_id].revision
+    if row is None:
+        row = FamilyHandoverAcknowledgementDB(family_id=family_id, author_id=author_id, user_id=user.user_id)
+        db.add(row)
+    if row.note_revision != body.revision or row.author_membership_revision != author.revision or row.reader_membership_revision != reader_revision:
+        row.note_revision = body.revision
+        row.author_membership_revision = author.revision
+        row.reader_membership_revision = reader_revision
+        row.acknowledged_at = datetime.utcnow()
+    confirmed_at = row.acknowledged_at
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Confirmation changed; reload before trying again") from None
+    return {"confirmed": True, "revision": body.revision, "acknowledged_at": stamp(confirmed_at)}
 
 
 class HandoverWrite(BaseModel):

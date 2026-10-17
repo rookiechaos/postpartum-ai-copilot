@@ -1,0 +1,38 @@
+.record-compact-editor { margin-top: 1rem; border-top: 1px solid var(--color-border); }
+.record-compact-editor label, .care-timer label, .weekly-directory-review label, .shortcut-settings label, .call-script fieldset label { display: block; margin-block: .75rem; line-height: 1.8; }
+.record-compact-editor input, .care-timer input:not([type="checkbox"]), .weekly-directory-review input:not([type="checkbox"]) { display: block; box-sizing: border-box; max-width: 100%; width: 100%; min-height: 46px; padding: .65rem; margin-top: .35rem; color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; }
+.care-timeline .timeline-filters { margin-block: 1rem; }
+.timeline-filters [aria-pressed="true"], .care-timer [aria-pressed="true"], .support-steps [aria-current="step"] { background: var(--color-tint); border: 2px solid var(--color-brand); color: var(--color-brand); font-weight: 600; }
+.day-timeline { list-style: none; padding: 0; margin-inline-start: .5rem; border-inline-start: 2px solid var(--color-border); }
+.day-timeline li { padding: 0 0 1rem 1rem; position: relative; }
+.day-timeline li::before { content: ''; position: absolute; inset-inline-start: -.35rem; top: 1.1rem; width: .55rem; height: .55rem; border-radius: 50%; background: var(--color-brand); }
+.timeline-record { display: flex; flex-direction: column; align-items: start; gap: .35rem; width: 100%; padding: .9rem; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface); color: var(--color-text); text-align: start; cursor: pointer; line-height: 1.7; }
+.timeline-record small { color: var(--color-muted); }
+.timeline-record:disabled { opacity: .6; cursor: default; }
+dialog.record-sheet.pilot-panel { position: fixed; inset: 0; margin: auto; width: min(36rem, calc(100% - 2rem)); max-width: none; max-height: 85vh; max-height: 85dvh; box-sizing: border-box; overflow: auto; overscroll-behavior: contain; color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 16px; padding: 1.25rem; }
+.record-sheet::backdrop { background: rgb(0 0 0 / .4); }
+.record-sheet-content > header { display: flex; justify-content: space-between; gap: 1rem; align-items: start; }
+.record-sheet-content > header h3 { margin: .4rem 0 1rem; }
+.record-sheet .pilot-actions { flex-wrap: wrap; }
+.record-sheet [type="checkbox"] { width: 20px; height: 20px; }
+.shortcut-settings { padding-block: 1rem; }
+.shortcut-settings ol { padding-inline-start: 1.5rem; }
+.shortcut-settings li { margin-block: .75rem; }
+.shortcut-settings li > span { display: block; margin-bottom: .4rem; }
+.timer-display { font-variant-numeric: tabular-nums; font-size: 2rem; font-weight: 600; }
+.support-steps { margin-block: 1rem; padding: 1rem; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-tint); }
+.support-steps ol { list-style: none; padding: 0; }
+.support-steps li { flex: 1 1 10rem; }
+.support-steps li button { width: 100%; }
+.weekly-directory-review { border-top: 1px solid var(--color-border); padding-top: 1rem; margin-top: 1rem; }
+.weekly-contact-facts { display: grid; gap: .75rem; }
+.weekly-contact-facts dt { font-weight: 600; }
+.weekly-contact-facts dd { margin: .25rem 0 0; }
+.handover-receipts { padding-inline-start: 1.25rem; font-size: .9rem; line-height: 1.8; }
+.high-contrast dialog.record-sheet.pilot-panel, .high-contrast :is(.timeline-record, .support-steps) { background: #fff; color: #000; border-color: #333; }
+@media (max-width: 700px) {
+  dialog.record-sheet.pilot-panel { inset-block-start: auto; inset-block-end: 0; margin: 0; width: 100%; max-height: 88vh; max-height: 88dvh; border-radius: 16px 16px 0 0; padding-bottom: max(1.25rem, env(safe-area-inset-bottom)); }
+  .record-sheet .pilot-actions > button { flex: 1 1 9rem; }
+  .support-steps { padding: .75rem; }
+  .support-steps li { flex-basis: 100%; }
+}

@@ -82,7 +82,7 @@ export function useSupportJourneys(userId, visible) {
     setMessage: (key, message, name) => updateEditor(key, editor => ({ ...editor, message }), name) }
 }
 
-export default function SupportProgress({ contactKey, contactName, row, progress, archived = false }) {
+export default function SupportProgress({ contactKey, contactName, row, progress, archived = false, expanded = false }) {
   const { t, i18n } = useTranslation()
   const editor = progress.editors[contactKey] || editorFromRow(row, contactName)
   const { form, revision, busy, message, conflict, edited } = editor
@@ -95,11 +95,14 @@ export default function SupportProgress({ contactKey, contactName, row, progress
     if (time && !Number.isFinite(time.getTime())) { progress.setMessage(contactKey, 'invalidTime', contactName); return }
     progress.save(contactKey, { state: form.state, next_contact_at: time?.toISOString() || null, revision, cleared }, contactName)
   }
-  return <details className="support-progress"><summary>{row && !row.cleared
+  const Container = expanded ? 'section' : 'details'
+  const Title = expanded ? 'h4' : 'summary'
+  return <Container className="support-progress"><Title>{row && !row.cleared
     ? t('friendly.support.ownProgress', { state: t(`flows.journey.states.${row.state}`) }) : t('flows.journey.title')}
-    {edited ? ` · ${t('flows.journey.unsaved')}` : ''}</summary>
+    {edited ? ` · ${t('flows.journey.unsaved')}` : ''}</Title>
     {row && !row.cleared && <p>{t('friendly.support.ownProgressHint')}</p>}
     <p>{t('flows.journey.notice')}</p>
+    {archived && !row && <p role="status">{t('flows.journey.archivedDraftNotice')}</p>}
     {row?.updated_at && !row.cleared && <p>{t('flows.journey.updated', { time: japanDateTime(row.updated_at, i18n.resolvedLanguage || 'ja') })}</p>}
     <form onSubmit={save}><fieldset disabled={busy || !progress.ready || conflict}>
       <legend>{t('flows.journey.edit')}</legend>
@@ -119,5 +122,5 @@ export default function SupportProgress({ contactKey, contactName, row, progress
       if (edited && !window.confirm(t('flows.journey.reloadConfirm'))) return
       progress.reloadContact(contactKey)
     }}>{t('friendly.support.reloadProgress')}</button>}
-  </details>
+  </Container>
 }

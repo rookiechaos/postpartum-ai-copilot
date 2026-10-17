@@ -17,3 +17,9 @@ export function isRecordOperation(value) {
     && ['feeding', 'diaper', 'sleep', 'mood', 'pumping', 'recovery'].includes(value.entry_type)
     && typeof value.timestamp === 'string' && Number.isFinite(new Date(value.timestamp).getTime()))
 }
+
+// Updates replace a record on the server. Always carry every existing care field
+// so a compact editor cannot erase notes or measurements it does not display.
+export const recordFields = ['entry_type', 'timestamp', 'feeding_type', 'duration_minutes', 'amount_ml', 'side', 'diaper_type',
+  'sleep_duration_minutes', 'sleep_quality', 'mood_level', 'mood_notes', 'pumped_amount_ml', 'weight_kg', 'breast_condition', 'recovery_notes', 'notes']
+export const recordPayload = entry => Object.fromEntries(recordFields.filter(key => entry[key] !== undefined).map(key => [key, entry[key]]))

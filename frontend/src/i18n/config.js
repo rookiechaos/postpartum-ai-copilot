@@ -14,6 +14,8 @@ import friendlyEnglish from './locales/friendly.en.json'
 import friendlyJapanese from './locales/friendly.ja.json'
 import localCareEnglish from './locales/localCare.en.json'
 import localCareJapanese from './locales/localCare.ja.json'
+import interactionEnglish from './locales/interaction.en.json'
+import interactionJapanese from './locales/interaction.ja.json'
 
 i18n
   .use(LanguageDetector)
@@ -21,10 +23,10 @@ i18n
   .init({
     resources: {
       en: {
-        translation: { ...enTranslations, polish: polishEnglish, ui: uiEnglish, flows: flowsEnglish, friendly: friendlyEnglish, localCare: localCareEnglish }
+        translation: { ...enTranslations, polish: polishEnglish, ui: uiEnglish, flows: flowsEnglish, friendly: friendlyEnglish, localCare: localCareEnglish, interaction: interactionEnglish }
       },
       ja: {
-        translation: { ...jaTranslations, polish: polishJapanese, ui: uiJapanese, flows: flowsJapanese, friendly: friendlyJapanese, localCare: localCareJapanese }
+        translation: { ...jaTranslations, polish: polishJapanese, ui: uiJapanese, flows: flowsJapanese, friendly: friendlyJapanese, localCare: localCareJapanese, interaction: interactionJapanese }
       }
     },
     fallbackLng: 'ja',

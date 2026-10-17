@@ -16,7 +16,7 @@ from models.database import DraftPreferenceDB, UserDraftDB
 from models.schemas import User
 
 router = APIRouter(prefix="/api/drafts", tags=["private-drafts"])
-DraftKind = Literal["record", "quick", "chat", "sheet"]
+DraftKind = Literal["record", "quick", "chat", "sheet", "timer"]
 
 
 class DraftSettings(BaseModel):

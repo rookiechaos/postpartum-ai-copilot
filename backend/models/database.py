@@ -200,6 +200,18 @@ class FamilyHandoverDB(Base):
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
 
+class FamilyHandoverAcknowledgementDB(Base):
+    """Last explicit acknowledgement per reader and author; contains no note text."""
+    __tablename__ = "family_handover_acknowledgements"
+    family_id = Column(String, primary_key=True)
+    author_id = Column(String, primary_key=True)
+    user_id = Column(String, primary_key=True)
+    note_revision = Column(Integer, nullable=False)
+    author_membership_revision = Column(Integer, nullable=False)
+    reader_membership_revision = Column(Integer, nullable=False)
+    acknowledged_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
 class FamilyInviteLinkDB(Base):
     __tablename__ = "family_invite_links"
     id = Column(String(36), primary_key=True, default=lambda: str(uuid4()))

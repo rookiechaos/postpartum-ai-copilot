@@ -4,6 +4,7 @@ import api from '../utils/api'
 import LanguageSelector from './LanguageSelector'
 import SupportDirectory from './SupportDirectory'
 import FamilyHandout from './FamilyHandout'
+import WeeklyDirectoryReview from './WeeklyDirectoryReview'
 import ConnectionNotice from './ConnectionNotice'
 import { needsReview, phoneHref, publicHttps } from '../utils/publicDirectory'
 import { japanDay, japanDateTime } from '../utils/japanTime'
@@ -30,6 +31,7 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
   const [selected, setSelected] = useState('')
   const [editorTask, setEditorTask] = useState('all')
   const [maintainerFilter, setMaintainerFilter] = useState('')
+  const [weeklyActive, setWeeklyActive] = useState(false)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState('')
   const [issues, setIssues] = useState([])
@@ -227,6 +229,10 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
     {status === 'failed' && <p role="alert">{t('pilot.loadFailed')} <button disabled={editingBlocked} onClick={reload}>{t('pilot.retry')}</button></p>}
     {profile && <>
       <section className="pilot-panel review-queue"><h2>{t('friendly.organization.tasks')}</h2>
+        <label>{t('flows.directory.filterMaintainer')}<select value={maintainerFilter} disabled={editingBlocked} onChange={event => setMaintainerFilter(event.target.value)}>
+          <option value="">{t('flows.directory.allMaintainers')}</option><option value="unassigned">{t('polish.noMaintainer')}</option>
+          {maintainers.map(name => <option key={name} value={`name:${name}`}>{name}</option>)}
+        </select></label>
         <div className="maintenance-summary">
           <span>{t('friendly.organization.reviewCount', { count: due.length })}</span>
           <span>{t('friendly.organization.changedCount', { count: changedContacts.size })}</span>
@@ -240,6 +246,13 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
             : ['name', 'url'].includes(key) ? t(`pilot.resource.${key}`) : t(`work.reviewIssues.${key}`)).join(' / ')}</p>
         </li>)}</ul> : <p>{t('work.noReviewDue')}</p>}
         </details>
+        <WeeklyDirectoryReview profile={profile} due={due} maintainerFilter={maintainerFilter} blocked={editingBlocked}
+          hasUnpublishedChanges={unpublished} onSessionChange={setWeeklyActive}
+          onEdit={key => focusField('directory-contact-heading', key)}
+          onConfirm={(key, checkedOn, dueOn) => change(previous => ({ ...previous, resources: previous.resources.map(item =>
+            item.resource_key === key ? { ...item, checked_on: checkedOn, review_due_on: dueOn } : item) }))}
+          onSaveDraft={() => { const next = validate(false); if (next) perform('/api/pilot/organization/draft', { profile: next, revision }, 'draftSaved') }}
+          onPreview={() => { const next = validate(true); if (next) { setPreviewed(true); focusField('directory-preview-heading') } }} />
       </section>
       <form className="pilot-panel pilot-form directory-editor" noValidate onSubmit={event => {
         event.preventDefault()
@@ -299,10 +312,6 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
         <p className="field-hint">{t('ui.organization.normalizationNotice')}</p>
         <div className="pilot-actions">{['postpartum', 'parenting', 'feeding'].map(category => <button key={category} type="button"
           className="pilot-button secondary" disabled={editingBlocked || profile.resources.length >= 10} onClick={() => addResource(category)}>{t(`polish.purposes.${category}`)}</button>)}</div>
-        <label>{t('flows.directory.filterMaintainer')}<select value={maintainerFilter} disabled={editingBlocked} onChange={event => setMaintainerFilter(event.target.value)}>
-          <option value="">{t('flows.directory.allMaintainers')}</option><option value="unassigned">{t('polish.noMaintainer')}</option>
-          {maintainers.map(name => <option key={name} value={`name:${name}`}>{name}</option>)}
-        </select></label>
         {visibleResources.length === 0 && <p>{t('flows.directory.noMatches')}</p>}
         <ul className="contact-editor-list">{visibleResources.map(item => <li key={item.resource_key}>
           <div className="contact-list-info">
@@ -327,6 +336,8 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
         </li>)}</ul>
         {resource && <section key={resource.resource_key} className="contact-editor" aria-labelledby="directory-contact-heading">
           <h3 id="directory-contact-heading" tabIndex={-1}>{t('polish.editContact')}: {resource.name || t('work.unnamedResource')}</h3>
+          {weeklyActive && <button type="button" className="pilot-button secondary" disabled={editingBlocked}
+            onClick={() => focusField('weekly-review-heading')}>{t('interaction.weekly.backReview')}</button>}
           <div className="editor-task-choices" role="group" aria-label={t('polish.editContact')}>
             {['all', 'phone', 'status'].map(task => <button type="button" className="pilot-button secondary" key={task}
               disabled={editingBlocked} aria-pressed={editorTask === task}

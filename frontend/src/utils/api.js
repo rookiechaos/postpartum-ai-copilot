@@ -427,6 +427,9 @@ export const api = {
   updateTrackingEntry(entryId, data) {
     return this.post(`/api/tracking/entries/${entryId}/update`, data)
   },
+  getTrackingEntry({ id, record_key }) {
+    return this.get(`/api/tracking/entries/${id}?${new URLSearchParams({ record_key })}`)
+  },
   deleteTrackingEntry(entryId, { record_key, revision }) {
     const query = new URLSearchParams({ record_key, revision })
     return this.delete(`/api/tracking/entries/${entryId}?${query}`)

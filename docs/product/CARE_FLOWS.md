@@ -1,5 +1,7 @@
 # Household handover and human-support workflows
 
+For the later daily timeline, handover-version acknowledgements, reviewed timers, three-step help and weekly institution review, see [Everyday interactions](INTERACTIONS.md). Those changes also remain source-only and include an additional table and erasure inventory.
+
 This revision is **source only**. No app/worker startup, dependency installation, build, parser/lint, tests, browser/QR/print acceptance, migrations or real-data workflow was run, following the user's instruction. Source review and `git diff --check` do not establish runtime correctness.
 
 ## Implemented behavior

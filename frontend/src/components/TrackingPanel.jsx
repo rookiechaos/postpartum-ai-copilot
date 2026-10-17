@@ -4,7 +4,7 @@ import api from '../utils/api'
 import taskManager from '../utils/taskManager'
 import { japanDateTime, japanDateTimeInput, utcDate } from '../utils/japanTime'
 import { earliestRecordTime } from '../utils/trackingPolicy'
-import { recordOperation, requestKey as newRequestKey, isRecordOperation } from '../utils/recordOperations'
+import { recordOperation, recordPayload as payload, requestKey as newRequestKey, isRecordOperation } from '../utils/recordOperations'
 import useAccountDraft from '../utils/useAccountDraft'
 import { DraftRecoveryNotice } from './DraftRecovery'
 import AIUseNotice from './AIUseNotice'
@@ -17,9 +17,6 @@ import { revealElement } from '../utils/focusView'
 import './TrackingPanel.css'
 
 const types = ['feeding', 'diaper', 'sleep', 'mood', 'pumping', 'recovery']
-const recordFields = ['entry_type', 'timestamp', 'feeding_type', 'duration_minutes', 'amount_ml', 'side', 'diaper_type',
-  'sleep_duration_minutes', 'sleep_quality', 'mood_level', 'mood_notes', 'pumped_amount_ml', 'weight_kg', 'breast_condition', 'recovery_notes', 'notes']
-const payload = entry => Object.fromEntries(recordFields.filter(key => entry[key] !== undefined).map(key => [key, entry[key]]))
 
 export default function TrackingPanel({ userId, initialEntryType, requestKey = 0, onRecordsChanged, visible = true }) {
   const { t, i18n } = useTranslation()

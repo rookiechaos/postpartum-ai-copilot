@@ -16,12 +16,19 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
   const [scriptError, setScriptError] = useState('')
   const [scriptTarget, setScriptTarget] = useState('')
   const [scriptRequest, setScriptRequest] = useState(0)
+  const [journeyStep, setJourneyStep] = useState(1)
+  const [contactKey, setContactKey] = useState('')
+  const [scriptKey, setScriptKey] = useState('')
+  const [prepared, setPrepared] = useState({})
+  const stepHeading = useRef(null)
+  const pendingStepFocus = useRef(false)
   const scriptHeading = useRef(null)
   const pendingScriptFocus = useRef(false)
   const progress = useSupportJourneys(userId, visible && !compact && !previewProfile)
   const progressEnabled = Boolean(userId && !compact && !previewProfile)
-  const progressFor = (key, name, archived = false) => <SupportProgress key={key} contactKey={key} contactName={name}
-    row={progress.rows.find(row => row.contact_key === key)} progress={progress} archived={archived} />
+  const wizardEnabled = progressEnabled
+  const progressFor = (key, name, archived = false, expanded = false) => <SupportProgress key={key} contactKey={key} contactName={name}
+    row={progress.rows.find(row => row.contact_key === key)} progress={progress} archived={archived} expanded={expanded} />
   useEffect(() => {
     if (visible && pendingScriptFocus.current && scriptTarget) {
       pendingScriptFocus.current = false; revealElement(scriptHeading.current)
@@ -37,6 +44,13 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
     return () => { active = false }
   }, [previewProfile, visible, directoryAttempt])
   const shownProfile = previewProfile || profile
+  const selectedContact = contactKey === 'organization' && shownProfile?.name ? { ...shownProfile, resource_key: 'organization' }
+    : shownProfile?.resources?.find(resource => resource.resource_key === contactKey)
+  const selectedName = selectedContact?.name || progress.rows.find(row => row.contact_key === contactKey)?.contact_name || progress.editors[contactKey]?.contact_name || ''
+  const openStep = step => { setJourneyStep(step); pendingScriptFocus.current = false; pendingStepFocus.current = true }
+  useEffect(() => {
+    if (visible && wizardEnabled && pendingStepFocus.current && revealElement(stepHeading.current)) pendingStepFocus.current = false
+  }, [journeyStep, visible])
   const retainedContacts = new Map(progress.rows.filter(row => !row.cleared).map(row => [row.contact_key, row]))
   Object.entries(progress.editors).forEach(([key, editor]) => {
     if (editor.edited || editor.busy) retainedContacts.set(key, { contact_key: key, contact_name: editor.contact_name })
@@ -44,9 +58,10 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
   const archived = [...retainedContacts.values()].filter(row => row.contact_key === 'organization'
     ? !shownProfile?.name : !shownProfile?.resources?.some(resource => resource.resource_key === row.contact_key))
   const hasArchivedDrafts = archived.some(row => progress.editors[row.contact_key]?.edited)
-  const prepareCall = name => {
-    if (script && name !== scriptTarget && !window.confirm(t('polish.replaceCallScript'))) return
-    if (!script || name !== scriptTarget) setScript(t('polish.callScriptTemplate', { name }))
+  const prepareCall = (name, key = '') => {
+    if (script && key !== scriptKey && !window.confirm(t('polish.replaceCallScript'))) return
+    if (!script || key !== scriptKey) setScript(t('polish.callScriptTemplate', { name }))
+    setContactKey(key); setScriptKey(key); setJourneyStep(2); pendingStepFocus.current = false
     setScriptTarget(name); setScriptError(''); pendingScriptFocus.current = true; setScriptRequest(value => value + 1)
   }
   const childAdvice = <article className="support-card">
@@ -77,6 +92,17 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
             <a href="https://www.cfa.go.jp/policies/kosodateshien/sodankikan" target="_blank" rel="noreferrer">{t('work.communitySupportLink')}</a>
           </article>
         </div></details>
+        {wizardEnabled && <section className="support-steps"><h3 ref={stepHeading} tabIndex={-1}>{t(`interaction.support.steps.${journeyStep}`)}</h3>
+          <p>{t('interaction.support.notice')}</p><ol className="pilot-actions">{[1, 2, 3].map(step => <li key={step}>
+            <button type="button" className="pilot-button secondary" aria-current={journeyStep === step ? 'step' : undefined}
+              onClick={() => openStep(step)}>{step}. {t(`interaction.support.steps.${step}`)}</button>
+          </li>)}</ol>
+          {journeyStep !== 1 && !selectedName && <p>{t('interaction.support.chooseFirst')} <button type="button" className="text-action" onClick={() => openStep(1)}>{t('interaction.support.choose')}</button></p>}
+          {selectedName && <p>{t('interaction.support.selected', { name: selectedName })} <button type="button" className="text-action" onClick={() => openStep(1)}>{t('interaction.support.change')}</button></p>}
+        </section>}
+        {wizardEnabled && journeyStep !== 1 && unavailable && <p role="status">{t(shownProfile ? 'flows.directory.stale' : 'pilot.directoryUnavailable')}
+          <button type="button" className="text-action" onClick={() => setDirectoryAttempt(value => value + 1)}>{t('friendly.support.reloadDirectory')}</button></p>}
+        <div hidden={wizardEnabled && journeyStep !== 1}>
         <h3>{t('pilot.localSupport')}</h3>
         <fieldset className="support-purpose"><legend>{t('friendly.support.purpose')}</legend><div className="purpose-choices">
           {['all', 'parenting', 'postpartum', 'feeding'].map(key => <button type="button" key={key} className="pilot-button secondary"
@@ -94,14 +120,14 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
           <p>{t('pilot.hours')}: {shownProfile.hours || t('pilot.notProvided')}</p>
           {phoneHref(shownProfile.phone) && <a className="pilot-button" href={phoneHref(shownProfile.phone)}>{t('work.callContact')} · {shownProfile.phone}</a>}
           {shownProfile.email && <a href={`mailto:${encodeURIComponent(shownProfile.email)}`}>{t('work.emailContact')}</a>}
-          <button type="button" className="text-action" onClick={() => prepareCall(shownProfile.name)}>{t('polish.prepareCall')}</button>
+          <button type="button" className="text-action" onClick={() => prepareCall(shownProfile.name, 'organization')}>{t(wizardEnabled ? 'interaction.support.prepare' : 'polish.prepareCall')}</button>
+          {wizardEnabled && <button type="button" className="text-action" onClick={() => { setContactKey('organization'); openStep(3) }}>{t('interaction.support.skipPreparation')}</button>}
           <details className="service-details"><summary>{t('friendly.support.operatorDetails')}</summary>
           <p>{t('pilot.contact')}: {shownProfile.contact || t('pilot.notProvided')}</p>
           <p>{t('pilot.noMonitoring')}</p>
           <p>{t('pilot.retention')}: {shownProfile.retention_notice || t('pilot.retentionUnknown')}</p>
           {shownProfile.account_support_notice && <p>{shownProfile.account_support_notice}</p>}
           </details>
-          {progressEnabled && progressFor('organization', shownProfile.name)}
         </article>}
         {shownProfile?.resources?.map((resource, index) => <article key={resource.resource_key || index} className="support-card local-support-card"
           hidden={purpose !== 'all' && (resource.category || 'parenting') !== purpose}>
@@ -113,7 +139,8 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
           <div className="service-actions">
             {phoneHref(resource.phone) && <a className="pilot-button" href={phoneHref(resource.phone)}>{t('work.callContact')} · {resource.phone}</a>}
             {resource.service_status !== 'paused' && publicHttps(resource.booking_url) && <a className={`pilot-button${phoneHref(resource.phone) ? ' secondary' : ''}`} href={publicHttps(resource.booking_url)} target="_blank" rel="noreferrer">{t('work.booking')}</a>}
-            <button type="button" className="text-action" onClick={() => prepareCall(resource.name)}>{t('polish.prepareCall')}</button>
+            <button type="button" className="text-action" onClick={() => prepareCall(resource.name, resource.resource_key)}>{t(wizardEnabled ? 'interaction.support.prepare' : 'polish.prepareCall')}</button>
+            {wizardEnabled && resource.resource_key && <button type="button" className="text-action" onClick={() => { setContactKey(resource.resource_key); openStep(3) }}>{t('interaction.support.skipPreparation')}</button>}
           </div>
           <small>{t('pilot.checkedOn')}: {resource.checked_on || t('pilot.notChecked')}</small>
           {needsReview(resource.checked_on) && <p className="review-due">{t('work.confirmDetails')}</p>}
@@ -127,19 +154,48 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
               <h4>{t(`flows.directory.${field}`)}</h4><p className="preserve-lines">{resource[field]}</p>
             </section>)}
           </details>
-          {progressEnabled && resource.resource_key && progressFor(resource.resource_key, resource.name)}
         </article>)}
+        {shownProfile && purpose !== 'all' && !shownProfile.resources?.some(resource => (resource.category || 'parenting') === purpose)
+          && <p>{t('polish.noPurposeContacts')}</p>}
+        </div>
         {progressEnabled && progress.error && <p role="alert">{t('flows.journey.loadError')} <button type="button" className="text-action" onClick={progress.reload}>{t('friendly.support.reloadAllProgress')}</button></p>}
         {progressEnabled && shownProfile && archived.length > 0 && <details>
           <summary>{t('flows.journey.archived')}{hasArchivedDrafts ? ` · ${t('flows.journey.unsaved')}` : ''}</summary><p>{t('flows.journey.archivedNotice')}</p>
           {hasArchivedDrafts && <p>{t('flows.journey.archivedDraftNotice')}</p>}
           {archived.map(row => <article key={row.contact_key}>
-            <h4>{row.contact_name}</h4>{progressFor(row.contact_key, row.contact_name, true)}
+            <h4>{row.contact_name}</h4><button type="button" className="text-action" onClick={() => { setContactKey(row.contact_key); openStep(3) }}>{t('interaction.support.reviewProgress')}</button>
           </article>)}
         </details>}
-        {shownProfile && purpose !== 'all' && !shownProfile.resources?.some(resource => (resource.category || 'parenting') === purpose)
-          && <p>{t('polish.noPurposeContacts')}</p>}
-        {scriptTarget && <section className="pilot-panel call-script"><h3 ref={scriptHeading} tabIndex={-1}>{t('polish.callScriptTitle', { name: scriptTarget })}</h3>
+        {wizardEnabled && journeyStep === 3 && selectedName && <section className="pilot-panel support-next-step"><h3>{selectedName}</h3>
+          <p>{t('interaction.support.manualProgress')}</p>
+          {!selectedContact && <p role="status">{t('interaction.support.removed')}</p>}
+          {progressFor(contactKey, selectedName, !selectedContact, true)}
+          <div className="pilot-actions"><button type="button" className="pilot-button secondary" onClick={() => {
+            if (selectedContact) prepareCall(selectedName, contactKey); else openStep(1)
+          }}>{t('interaction.support.backPreparation')}</button>
+            {onPrepareSheet && <button type="button" className="pilot-button secondary" onClick={() => onPrepareSheet('')}>{t('ui.support.sheet')}</button>}
+          </div>
+        </section>}
+        {scriptTarget && (!wizardEnabled || journeyStep === 2) && scriptKey === contactKey && <section className="pilot-panel call-script"><h3 ref={scriptHeading} tabIndex={-1}>{t('polish.callScriptTitle', { name: scriptTarget })}</h3>
+          {wizardEnabled && <>
+            {!selectedContact ? <p role="status">{t('interaction.support.removed')}</p> : <>
+              <p>{t('work.serviceArea')}: {selectedContact.area || selectedContact.municipality || t('pilot.notProvided')}</p>
+              <p>{t('pilot.hours')}: {selectedContact.hours || t('pilot.notProvided')}</p>
+              {selectedContact.service_status === 'paused' && <p>{t('flows.directory.paused')}: {selectedContact.pause_notice || t('pilot.notProvided')}</p>}
+              {['application_steps', 'preparation', 'fallback_contact'].map(field => <section key={field}><h4>{t(`flows.directory.${field}`)}</h4>
+                <p className="preserve-lines">{selectedContact[field] || t('localCare.support.unconfirmed')}</p>
+              </section>)}
+              <fieldset><legend>{t('interaction.support.checklist')}</legend>{['question', 'documents'].map(key => <label key={key}>
+                <input type="checkbox" checked={prepared[contactKey]?.[key] || false} onChange={event => {
+                  const checked = event.target.checked
+                  setPrepared(previous => ({ ...previous, [contactKey]: { ...previous[contactKey], [key]: checked } }))
+                }} />{t(`interaction.support.checks.${key}`)}</label>)}</fieldset>
+              <div className="service-actions">
+                {phoneHref(selectedContact.phone) && <a className="pilot-button" href={phoneHref(selectedContact.phone)}>{t('work.callContact')} · {selectedContact.phone}</a>}
+                {selectedContact.service_status !== 'paused' && publicHttps(selectedContact.booking_url) && <a className="pilot-button secondary" href={publicHttps(selectedContact.booking_url)} target="_blank" rel="noreferrer">{t('work.booking')}</a>}
+              </div>
+            </>}
+          </>}
           <p>{t('polish.callScriptNotice')}</p><textarea aria-label={t('polish.callScript')} rows={7} maxLength={1000}
             value={script} onChange={event => setScript(event.target.value)} />
           <button type="button" className="pilot-button secondary" onClick={async () => {
@@ -148,7 +204,11 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
           }}>{t('polish.copyScript')}</button>
           {onPrepareSheet && <button type="button" className="pilot-button secondary" disabled={!script.trim()} onClick={() => onPrepareSheet(script)}>{t('polish.prepareSheetFromCall')}</button>}
           {scriptError && <p role="status">{scriptError}</p>}
+          {wizardEnabled && <div className="pilot-actions"><button type="button" className="pilot-button secondary" onClick={() => openStep(1)}>{t('interaction.support.backChoice')}</button>
+            <button type="button" className="pilot-button" onClick={() => openStep(3)}>{t('interaction.support.next')}</button></div>}
         </section>}
+        {wizardEnabled && journeyStep === 2 && selectedName && scriptKey !== contactKey && <button type="button" className="pilot-button secondary"
+          onClick={() => prepareCall(selectedName, contactKey)}>{t('interaction.support.prepare')}</button>}
         <p className="pilot-note">{t('pilot.directoryNote')}</p>
       </>}
     </section>

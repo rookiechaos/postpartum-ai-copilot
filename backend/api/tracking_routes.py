@@ -13,6 +13,7 @@ from middleware.auth import get_current_user
 from middleware.authorization import check_user_authorization
 from middleware.rate_limit import rate_limit, RATE_LIMITS
 from models.schemas import User, TrackingEntry, TrackingEntryCreate, TrackingEntryUpdate, TrackingSummary, EmotionalCheckIn
+from models.database import TrackingEntryDB, TrackingWriteDB
 from services.task_queue import TaskPriority
 from services.ai_data_scope import profile_for_ai, records_for_ai
 from exceptions import (
@@ -29,6 +30,31 @@ router = APIRouter(tags=["tracking"])
 
 container = get_container()
 settings = get_settings()
+
+
+@router.get("/api/tracking/operations/{request_key}")
+@rate_limit(RATE_LIMITS["tracking"])
+def read_tracking_operation(request: Request, request_key: UUID,
+                            current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    receipt = db.get(TrackingWriteDB, (current_user.user_id, str(request_key)))
+    if receipt is None:
+        return {"state": "not_found", "record": None}
+    row = db.query(TrackingEntryDB).filter(TrackingEntryDB.record_key == receipt.record_key,
+        TrackingEntryDB.user_id == current_user.user_id).first()
+    if row is None:
+        return {"state": "deleted", "record": None}
+    return {"state": "saved", "record": container.get("tracking_service")._entry_to_dict(row)}
+
+
+@router.get("/api/tracking/entries/{entry_id}", response_model=TrackingEntry)
+@rate_limit(RATE_LIMITS["tracking"])
+def read_tracking_entry(request: Request, entry_id: int, record_key: UUID,
+                        current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = db.query(TrackingEntryDB).filter(TrackingEntryDB.id == entry_id,
+        TrackingEntryDB.record_key == str(record_key), TrackingEntryDB.user_id == current_user.user_id).first()
+    if row is None:
+        raise HTTPException(404, "Tracking entry not found")
+    return container.get("tracking_service")._entry_to_dict(row)
 
 
 @router.post("/api/tracking/entries/{entry_id}/update", response_model=TrackingEntry)

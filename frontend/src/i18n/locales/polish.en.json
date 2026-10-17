@@ -31,7 +31,7 @@
   "previousIncluded": "The previous exchange shown above will be attached. Profile attachments are a separate choice.",
   "previousExcluded": "No previous exchange will be attached. Profile attachments are a separate choice.",
   "draftRecovery": "Recover drafts after reopening",
-  "draftPrivacy": "Off by default. Enabling saves record input and retries, your question and selected previous exchange, and your current consultation sheet to your own account, beyond this device. Only input confirmed as saved can be recovered. Drafts stop being recoverable after 7 days and are deleted when accessed. Disabling removes saved drafts. Signing out clears screen memory.",
+  "draftPrivacy": "Off by default. Enabling saves record input and retries, breastfeeding and sleep timers, your question and selected previous exchange, and your current consultation sheet to your own account, beyond this device. Only input confirmed as saved can be recovered. Drafts stop being recoverable after 7 days and are deleted when accessed. Disabling removes saved drafts. Signing out clears screen memory.",
   "enableRecovery": "Save drafts to my account for optional recovery",
   "draftFound": "A previous draft is available",
   "draftRestoreNotice": "Restoring replaces your current input in this area. The text or records may be old. Review before use. Recovery never sends to AI or saves a care record automatically.",
