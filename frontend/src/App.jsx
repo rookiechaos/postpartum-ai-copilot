@@ -23,6 +23,7 @@ import LanguageSelector from './components/LanguageSelector'
 import OperatorPortal from './components/OperatorPortal'
 import Auth from './components/Auth'
 import ProductBrand from './components/ProductBrand'
+import { NotificationDelivery } from './components/NotificationManager'
 import { Home, MessageCircle, BarChart3, Phone, Settings as SettingsIcon, Moon } from 'lucide-react'
 import './App.css'
 import './components/Pilot.css'
@@ -263,7 +264,7 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
   ]
 
   return (
-    <>{pendingInvite && <FamilyInviteReview token={pendingInvite} onHandled={handleInvitation} />}
+    <><NotificationDelivery userId={userId} />{pendingInvite && <FamilyInviteReview token={pendingInvite} onHandled={handleInvitation} />}
     <div className="app family-app" hidden={!familyVisible}>
       <header className="app-header">
         <div className="header-content">

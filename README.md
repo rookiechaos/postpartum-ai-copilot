@@ -10,6 +10,7 @@ AIに詳しくなくても、授乳を記録する、困りごとを整理する
 実際の利用開始前に、[基本機能の変更と未実施の受入確認](docs/product/PRODUCT_IMPROVEMENTS.md)、[7項目の製品改善・移行事項](docs/product/PRODUCT_POLISH.md)、[UI構成の整理と未実施の表示確認](docs/product/UI_REFINEMENT.md)を確認してください。過去の検証結果は今回の動作確認を意味しません。
 今回追加した[家族の引き継ぎ・相談の進捗・アカウント対応の仕様と未実施の確認](docs/product/CARE_FLOWS.md)も参照してください。
 最新の[日本語・地域サービス向けの改善と未実施の確認](docs/product/JAPANESE_EXPERIENCE.md)では、案内・入力・運営者表示を整えています。地域案内の追加項目を使うため、対応するバックエンドとフロントエンドを一緒に更新してください。
+[今回のリポジトリレビュー修正と更新時の注意](docs/security/REPO_REVIEW_FIXES_2026-10-16.md)では、外部AIへの送信、通知の受け取り、運営統計の権限、ログと検索資料の扱いを見直しています。起動・ビルド・テストは未実施です。
 
 ## 家庭・機関の入口と運営者の管理
 
@@ -60,7 +61,7 @@ AIの重要な注意は回答の前に表示し、全文を残します。冒頭
 ダウンロードして相手に渡したコピーをアプリから撤回することはできません。
 
 家庭の設定は「プロフィール」「データとプライバシー」「表示」「ヘルプ」にまとめています。
-表示では文字サイズ・コントラスト・動きを端末ごとに調整できます。通知はブラウザーの許可と既存の予約の確認・停止を扱い、配信保証や自動の授乳時刻提案は行いません。
+表示では文字サイズ・コントラスト・動きを端末ごとに調整できます。通知を許可した場合、家庭画面を開いて接続している間に、保存済みの通知予定を確認します。ブラウザーが通知を受け付けた後に結果を記録しますが、本人が読んだことを示すものではありません。閉じた画面・オフラインでの配信保証や、自動の授乳時刻提案は行いません。
 運営統計は家庭の設定に表示しません。
 ホームの「家族との育児の引き継ぎ」から、各自のアカウントIDで招待・参加できます。参加だけでは共有せず、本人がこの家族に見せる赤ちゃんの記録・自分の気分や回復・自由記入メモを別々に選びます。共有一覧は直近7日間で、記録者を表示します。APIからの取得にも同じ期間制限を適用します。参加状況や共有設定が変わると古い画面からの保存を止め、最新の設定の確認を求めます。招待の取り消し・参加者の権限取り消し・退出に対応し、機関の編集権限には家庭へのアクセスを付けません。
 相談先は用途ごとに絞り、名前・対象地域・受付時間・電話／予約を先に表示します。申し込み・準備の詳細は必要なときに開けます。電話で話す内容を編集・コピーでき、相談用紙へ入れる質問は本人が欄を選んで確認します。窓口への自動送信はありません。
@@ -217,6 +218,9 @@ Use the [manual support procedure and data inventory](docs/product/PRODUCT_IMPRO
 
 ### Docker / hosted deployment
 
+Set a unique, URL-safe `POSTGRES_PASSWORD` in the ignored environment file before starting Compose (for example, generate it with `openssl rand -hex 32`). A missing/empty value stops startup. PostgreSQL is available only on the internal container network; its port is not published on the host.
+For an existing PostgreSQL volume, changing this variable does not rotate the database password: coordinate the actual credential rotation and API/worker configuration through the operator's database procedure. Keep the existing volume and backups.
+
 ```bash
 docker compose --env-file do-not-upload/local/backend.env up -d --build
 ```
@@ -243,6 +247,9 @@ Background workers process AI tasks through OpenAI, Claude or Gemini.
 | `GET /api/pilot/organization` | Institution allowlist | Load directory for editing |
 | `POST /api/pilot/organization` | Institution allowlist | Validate and save public information |
 | `POST /api/tracking/entries/{id}/update`, `DELETE /api/tracking/entries/{id}` | Authenticated owner | Correct or delete only the caller's record |
+| `GET /api/tracking/{user_id}/daily-summary`, `GET /api/tracking/{user_id}/weekly-summary` | Authenticated owner | Current local JST counts; no external AI call |
+| `GET /api/notifications/due`, `POST /api/notifications/{id}/acknowledge` | Authenticated owner | Read due reminder IDs and report browser acceptance; no automatic worker completion |
+| Product/global task/NPS statistics | Admin allowlist | Operational statistics; own user-path and usage statistics remain owner-scoped |
 | `POST /api/pilot/account-help`, `GET /api/pilot/account-help/{reference}` | Public; status requires a random reference | Receive sign-in help and look up a status without account enumeration |
 | `GET /api/account/requests`, `POST /api/account/requests` | Authenticated owner | Own account/privacy requests |
 | `GET /api/admin/account-requests`, `POST /api/admin/account-requests/{reference}` | Admin allowlist | Private support queue and public replies |
@@ -253,10 +260,11 @@ The `pilot_profiles` and new `account_requests` tables use the existing startup 
 The latest polish phase additionally registers record-save receipts, account draft preferences/content and institution workspaces/publication history. The migration adds `family_members.revision` and unique family membership enforcement, and fails rather than silently merging any legacy duplicates. Family sharing writes require the member revision from a fresh read; shared-data requests accept only 1–7 days. Institution mutation bodies require a workspace revision. See [rollout and pending acceptance](docs/product/PRODUCT_POLISH.md#database-and-rollout); deploy frontend/backend together after later authorized validation.
 The care-flow revision adds five tables for handovers, invitation hashes, private help progress, operator workflow attestations and status events through existing startup initialization. It adds no columns to existing tables. Deploy the matching API, worker and frontend together; table creation and acceptance have not been executed. See [CARE_FLOWS](docs/product/CARE_FLOWS.md) for API contracts, manual execution boundaries and the expanded erasure inventory.
 The scope flags and legacy API limitations are documented in [the change guide](docs/product/PRODUCT_IMPROVEMENTS.md).
+The [repository review fixes](docs/security/REPO_REVIEW_FIXES_2026-10-16.md) describe the new notification receipt contract, fresh profile reads, bounded authentication refresh, private error diagnostics and the separate curated RAG collection. Existing vector collections are retained but no longer queried; approved public sources need explicit re-ingestion. Deploy the matching frontend/API/worker together. No database migration or source re-indexing was executed during these edits.
 
 ## Verification
 
-**Not run for this change:** application startup, dependency installation, build, tests, scanners and browser/print/QR acceptance. The commands below are instructions for a later authorized verification session, not evidence that this revision passes.
+**Not run for this change:** application/worker startup, dependency installation, build, lint/parser/compile checks, tests, database migration, vector ingestion and browser/print/QR acceptance. Source review, Git whitespace checks and the read-only publication privacy scan were performed for the repository-review fixes. The commands below are instructions for a later authorized verification session, not evidence that this revision passes runtime acceptance.
 
 ```bash
 python -W ignore tests/regression/japan_pilot_checks.py

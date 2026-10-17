@@ -1,13 +1,105 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
-import websocketManager from '../utils/websocketManager'
+import useConnection from '../utils/useConnection'
 import { japanDateTime } from '../utils/japanTime'
 import './NotificationManager.css'
 
+const permissionEvent = 'postpartum-notification-permission'
+const deliveryEvent = 'postpartum-notification-delivery'
+
+function useNotificationPermission() {
+  const read = () => 'Notification' in window ? Notification.permission : 'unsupported'
+  const [permission, setPermission] = useState(read)
+  useEffect(() => {
+    const update = () => setPermission(read())
+    window.addEventListener('focus', update)
+    window.addEventListener(permissionEvent, update)
+    return () => { window.removeEventListener('focus', update); window.removeEventListener(permissionEvent, update) }
+  }, [])
+  return permission
+}
+
+// Mounted for the family login session, independently of the settings page.
+// The account-bound database queue works across API/worker processes. Neither a
+// worker send nor a GET marks delivery; the browser acknowledges acceptance.
+export function NotificationDelivery({ userId }) {
+  const { t } = useTranslation()
+  const permission = useNotificationPermission()
+  const { online, reconnections } = useConnection()
+  const shown = useRef(new Set())
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    if (!userId || permission !== 'granted' || !online) return
+    let active = true
+    let inFlight = false
+    const notices = new Set()
+    const workerTags = new Map()
+    const controller = new AbortController()
+    const closeWorkerNotice = async (registration, tag) => {
+      try { (await registration.getNotifications({ tag })).forEach(item => item.close()) } catch {}
+    }
+    const show = async id => {
+      const tag = `postpartum-reminder-${id}`
+      const options = { body: t('notifications.genericBody'), icon: '/icon.svg', tag, data: { url: '/family' } }
+      let registration = null
+      if ('serviceWorker' in navigator) registration = await navigator.serviceWorker.getRegistration().catch(() => null)
+      if (!active) return false
+      if (registration?.active && typeof registration.showNotification === 'function') {
+        if (!workerTags.has(registration)) workerTags.set(registration, new Set())
+        workerTags.get(registration).add(tag)
+        await registration.showNotification(t('notifications.genericTitle'), options)
+        if (!active) { await closeWorkerNotice(registration, tag); return false }
+      } else {
+        const notice = new Notification(t('notifications.genericTitle'), options)
+        notices.add(notice)
+        notice.onclose = () => notices.delete(notice)
+        notice.onclick = () => { window.focus(); notice.close() }
+      }
+      return true
+    }
+    const poll = async () => {
+      if (!active || inFlight || document.visibilityState !== 'visible') return
+      inFlight = true
+      let acknowledged = false
+      try {
+        const due = await api.get('/api/notifications/due', { signal: controller.signal })
+        if (!active) return
+        for (const reminder of due) {
+          if (!active) return
+          if (!shown.current.has(reminder.id)) {
+            if (!await show(reminder.id)) return
+            shown.current.add(reminder.id)
+          }
+          const receipt = await api.post(`/api/notifications/${reminder.id}/acknowledge`, {}, { signal: controller.signal })
+          if (!active) return
+          if (!receipt?.acknowledged) throw new Error('Reminder acknowledgment unavailable')
+          acknowledged = true
+        }
+        setFailed(false)
+      } catch { if (active) setFailed(true) }
+      finally {
+        inFlight = false
+        if (active && acknowledged) window.dispatchEvent(new Event(deliveryEvent))
+      }
+    }
+    poll()
+    const timer = setInterval(poll, 30000)
+    window.addEventListener('focus', poll)
+    document.addEventListener('visibilitychange', poll)
+    return () => {
+      active = false; controller.abort(); clearInterval(timer)
+      window.removeEventListener('focus', poll); document.removeEventListener('visibilitychange', poll)
+      notices.forEach(item => item.close())
+      workerTags.forEach((tags, registration) => tags.forEach(tag => closeWorkerNotice(registration, tag)))
+    }
+  }, [userId, permission, online, reconnections, t])
+  return failed && permission === 'granted' ? <p role="status" className="notification-delivery-status">{t('notifications.deliveryFailed')}</p> : null
+}
+
 export default function NotificationManager({ userId }) {
   const { t, i18n } = useTranslation()
-  const [permission, setPermission] = useState(() => 'Notification' in window ? Notification.permission : 'unsupported')
+  const permission = useNotificationPermission()
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -19,36 +111,19 @@ export default function NotificationManager({ userId }) {
   }, [userId, t])
   useEffect(() => { load() }, [load])
   useEffect(() => {
-    const visible = new Set()
-    const receive = data => {
-      load()
-      if (permission !== 'granted') return
-      try {
-        // Keep care details off the lock screen; the user can open the authenticated app.
-        const notification = new Notification(t('notifications.genericTitle'), {
-          body: t('notifications.genericBody'), icon: '/icon-192x192.png',
-          tag: `notification-${data.notification_id}`,
-        })
-        visible.add(notification)
-        notification.onclose = () => visible.delete(notification)
-        notification.onclick = () => { window.focus(); notification.close() }
-      } catch { setError(t('notifications.failed')) }
-    }
-    const token = localStorage.getItem('access_token')
-    if (token) websocketManager.connect(token)
-    websocketManager.on('notification', receive)
-    return () => { websocketManager.off('notification', receive); visible.forEach(item => item.close()) }
-  }, [permission, load, t])
+    window.addEventListener(deliveryEvent, load)
+    return () => window.removeEventListener(deliveryEvent, load)
+  }, [load])
   const requestPermission = async () => {
     setError('')
-    try { setPermission(await Notification.requestPermission()) }
+    try { await Notification.requestPermission(); window.dispatchEvent(new Event(permissionEvent)) }
     catch { setError(t('notifications.permissionFailed')) }
   }
   const disable = async id => {
     if (loading) return
     setLoading(true)
     try { await api.delete(`/api/notifications/${encodeURIComponent(id)}`); await load() }
-    catch { setError(t('notifications.failed')) }
+    catch (failure) { await load(); setError(t(failure.status === 409 ? 'notifications.changed' : 'notifications.failed')) }
     finally { setLoading(false) }
   }
   const pending = notifications.filter(item => item.is_enabled && !item.is_sent)

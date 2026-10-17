@@ -59,7 +59,7 @@ class AIWorker:
             await self.rag_service.initialize()
         except Exception as e:
             logger.log_warning(
-                f"RAG initialization failed: {e}",
+                "RAG initialization failed",
                 context={"worker_id": self.worker_id},
             )
 
@@ -156,7 +156,7 @@ class AIWorker:
                 rag_context = retrieved["context"]
             except Exception as e:
                 logger.log_warning(
-                    f"RAG search failed: {e}",
+                    "RAG search failed",
                     context={"user_id": user_id},
                 )
 

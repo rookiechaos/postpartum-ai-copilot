@@ -44,7 +44,7 @@ def register_all_services(container=None):
         try:
             return RAGService()
         except Exception as e:
-            logger.log_warning(f"RAG service initialization failed: {e}")
+            logger.log_warning("RAG service initialization failed", context={"action": "rag_initialization"})
             return None
     
     def create_community_service():

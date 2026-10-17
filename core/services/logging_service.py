@@ -27,6 +27,30 @@ def sanitize_log_path(text: str) -> str:
     return _HOME_PATH_PATTERN.sub(r"\1<redacted>", text)
 
 
+def safe_error_context(context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Keep diagnostic codes/counts only; free text and nested request data are omitted."""
+    selected = {}
+    labels = {"action", "method", "error_code", "task_type", "event_type"}
+    numbers = {"status_code", "notification_id", "duration_ms", "retry_count", "limit"}
+    for key, value in (context or {}).items():
+        if key in labels and isinstance(value, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.:-]{0,79}", value):
+            selected[key] = value
+        elif key in numbers and isinstance(value, (int, float)) and not isinstance(value, bool):
+            selected[key] = value
+        elif key == "route" and isinstance(value, str) and re.fullmatch(r"/[A-Za-z0-9_/{}/.:-]{0,250}", value):
+            # Callers supply the declared route template, never the actual request URL.
+            selected[key] = value
+    return selected
+
+
+def safe_error_traceback(error: Exception) -> str:
+    """Locations without exception messages, source lines, locals or exception chains."""
+    return "\n".join(
+        f"{Path(frame.f_code.co_filename).name}:{line} in {frame.f_code.co_name}"
+        for frame, line in list(traceback.walk_tb(getattr(error, "__traceback__", None)))[-20:]
+    )
+
+
 class SanitizedFormatter(logging.Formatter):
     """Logging formatter that redacts home-directory paths."""
 
@@ -90,7 +114,7 @@ class StructuredLogger:
             "user_id": user_id,
             "status_code": status_code,
             "response_time_ms": response_time_ms,
-            "error": error
+            "error": "[REDACTED]" if error else None
         }
         
         if error or status_code >= 400:
@@ -116,7 +140,7 @@ class StructuredLogger:
             "query_length": query_length,
             "response_time_ms": response_time_ms,
             "success": success,
-            "error": error
+            "error": "[REDACTED]" if error else None
         }
         
         if error or not success:
@@ -142,7 +166,7 @@ class StructuredLogger:
             "user_id": user_id,
             "event_type": event_type,
             "duration_ms": duration_ms,
-            "error": error
+            "error": "[REDACTED]" if error else None
         }
         
         if error or event_type == "failed":
@@ -156,47 +180,14 @@ class StructuredLogger:
         context: Optional[Dict[str, Any]] = None,
         user_id: Optional[str] = None
     ):
-        """
-        Log error with sensitive data filtering
-        
-        Automatically filters out sensitive information from context
-        """
-        # Filter sensitive data from context
-        if context:
-            from services.code_security_audit import CodeSecurityAuditor
-            filtered_context = {}
-            for key, value in context.items():
-                # Check if key or value contains sensitive data
-                key_str = str(key).lower()
-                value_str = str(value) if value else ""
-                
-                # Skip sensitive keys
-                sensitive_keys = ['password', 'secret', 'token', 'api_key', 'apikey', 'key']
-                if any(sk in key_str for sk in sensitive_keys):
-                    filtered_context[key] = "[REDACTED]"
-                    continue
-                
-                # Check value for sensitive patterns
-                is_safe, warnings = CodeSecurityAuditor.check_sensitive_data_logging(value_str)
-                if not is_safe:
-                    filtered_context[key] = "[REDACTED]"
-                else:
-                    filtered_context[key] = value
-            
-            context = filtered_context
-        
+        """Log exception type/locations with an allowlist of operational metadata."""
         error_data = {
             "event": "error",
             "timestamp": datetime.utcnow().isoformat(),
             "error_type": type(error).__name__,
-            "error_message": sanitize_log_path(str(error)),
-            # A handler may replace an unsafe exception with a safe one. Never
-            # include the ambient exception or its request input through a chain.
-            "traceback": sanitize_log_path("".join(traceback.format_exception(
-                type(error), error, error.__traceback__, chain=False
-            ))),
-            "user_id": user_id,
-            "context": context or {}
+            "error_message": "Exception details omitted for privacy",
+            "traceback": safe_error_traceback(error),
+            "context": safe_error_context(context)
         }
         
         self.logger.error(f"Error: {json.dumps(error_data, default=str)}")
@@ -272,7 +263,7 @@ class StructuredLogger:
             "event": "warning",
             "timestamp": datetime.utcnow().isoformat(),
             "message": message,
-            "context": context or {}
+            "context": safe_error_context(context)
         }
         self.logger.warning(f"Warning: {json.dumps(log_data)}")
 

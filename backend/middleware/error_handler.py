@@ -8,7 +8,6 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from exceptions import PostpartumException
 from services.logging_service import logger
-import traceback
 
 
 async def postpartum_exception_handler(request: Request, exc: PostpartumException):
@@ -26,7 +25,7 @@ async def postpartum_exception_handler(request: Request, exc: PostpartumExceptio
     logger.log_error(
         error=exc,
         context={
-            "endpoint": request.url.path,
+            "route": getattr(request.scope.get("route"), "path", "/"),
             "method": request.method,
             "error_code": exc.error_code,
             "details": exc.details
@@ -51,9 +50,8 @@ async def postpartum_exception_handler(request: Request, exc: PostpartumExceptio
     elif isinstance(exc, (DatabaseError, AIServiceError, TaskQueueError)):
         status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
 
-    from config.settings import get_settings
     internal_error = isinstance(exc, (DatabaseError, AIServiceError, TaskQueueError, ServiceUnavailableError))
-    expose_details = get_settings().debug or not internal_error
+    expose_details = not internal_error
     
     return JSONResponse(
         status_code=status_code,
@@ -78,7 +76,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     logger.log_error(
         error=ValueError("Request validation failed"),
         context={
-            "endpoint": request.url.path,
+            "route": getattr(request.scope.get("route"), "path", "/"),
             "method": request.method,
             "validation_errors": errors
         },
@@ -102,12 +100,10 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     """Handle HTTP exceptions"""
-    from config.settings import get_settings
-
     logger.log_error(
         error=exc,
         context={
-            "endpoint": request.url.path,
+            "route": getattr(request.scope.get("route"), "path", "/"),
             "method": request.method,
             "status_code": exc.status_code
         },
@@ -122,7 +118,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
                 "type": "HTTPException",
                 "message": (
                     "Unable to complete the request. Please try again later."
-                    if exc.status_code >= 500 and not get_settings().debug else exc.detail
+                    if exc.status_code >= 500 else exc.detail
                 ),
                 "code": f"HTTP_{exc.status_code}",
                 "details": {}
@@ -132,78 +128,21 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 
 
 async def general_exception_handler(request: Request, exc: Exception):
-    """
-    Handle general exceptions
-    
-    Logs the error and returns a generic error response.
-    Attempts to recover from certain errors.
-    Ensures no sensitive information is leaked in production.
-    """
+    """Return a safe failure; diagnostics never include request text or SQL parameters."""
     from config.settings import get_settings
-    
-    settings = get_settings()
-    
-    # Attempt error recovery for certain errors
-    error_recovered = False
-    recovery_message = None
-    
-    # Database connection errors - could be transient
-    if "database" in str(exc).lower() or "connection" in str(exc).lower():
-        recovery_message = "Database connection issue detected. Please retry."
-    
-    # Network errors - could be transient
-    if "timeout" in str(exc).lower() or "network" in str(exc).lower():
-        recovery_message = "Network issue detected. Please retry."
-        error_recovered = True
-    
-    # Sanitize error message for production
-    error_message = str(exc)
-    if not settings.debug:
-        # Remove sensitive information from error messages
-        sensitive_patterns = [
-            r'/[\w/]+\.db',  # Database file paths
-            r'/[\w/]+\.log',  # Log file paths
-            r'password[=:]\s*\S+',  # Password in error messages
-            r'secret[=:]\s*\S+',  # Secret keys
-            r'api[_-]?key[=:]\s*\S+',  # API keys
-            r'token[=:]\s*\S+',  # Tokens
-        ]
-        import re
-        for pattern in sensitive_patterns:
-            error_message = re.sub(pattern, '[REDACTED]', error_message, flags=re.IGNORECASE)
-    
-    logger.log_error(
-        error=exc,
-        context={
-            "endpoint": request.url.path,
-            "method": request.method,
-            "traceback": traceback.format_exc(),
-            "recovered": error_recovered,
-            "recovery_message": recovery_message
-        },
-        user_id=getattr(request.state, "user_id", None)
-    )
-    
-    # Prepare error details - sanitize for production
-    error_details = {}
-    if settings.debug:
-        error_details["traceback"] = traceback.format_exc()
-        error_details["error_type"] = type(exc).__name__
-        error_details["error_message"] = error_message
-    else:
-        # In production, only include safe information
-        error_details = None
-    
-    return JSONResponse(
-        status_code=500,
-        content={
-            "error": {
-                "type": "InternalServerError",
-                "message": recovery_message or "An internal server error occurred",
-                "code": "INTERNAL_ERROR",
-                "recovered": error_recovered,
-                "details": error_details
-            }
-        }
-    )
 
+    logger.log_error(exc, context={
+        "route": getattr(request.scope.get("route"), "path", "/"),
+        "method": request.method,
+        "status_code": 500,
+    })
+    details = {"error_type": type(exc).__name__} if get_settings().debug else None
+    return JSONResponse(status_code=500, content={
+        "error": {
+            "type": "InternalServerError",
+            "message": "An internal server error occurred",
+            "code": "INTERNAL_ERROR",
+            "recovered": False,
+            "details": details,
+        }
+    })

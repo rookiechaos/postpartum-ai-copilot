@@ -82,7 +82,7 @@ async def get_product_dashboard(
 @router.get("/metrics/dau")
 async def get_dau(
     date: Optional[str] = Query(None, description="Date in YYYY-MM-DD format"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Get Daily Active Users"""
@@ -96,6 +96,8 @@ async def get_dau(
                 raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
         dau = analytics_service.get_dau(date=target_date, db=db)
         return {"dau": dau, "date": date or datetime.utcnow().date().isoformat()}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.log_error(e, context={"action": "get_dau"})
         raise HTTPException(
@@ -107,7 +109,7 @@ async def get_dau(
 @router.get("/metrics/mau")
 async def get_mau(
     month: Optional[str] = Query(None, description="Month in YYYY-MM format"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Get Monthly Active Users"""
@@ -135,7 +137,7 @@ async def get_mau(
 async def get_retention(
     cohort_date: str = Query(..., description="Cohort date in YYYY-MM-DD format"),
     days: int = Query(7, ge=1, le=365, description="Days after cohort"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Get retention rate for a cohort"""
@@ -164,7 +166,7 @@ async def get_retention(
 @router.get("/metrics/retention-analysis")
 async def get_retention_analysis(
     days: int = Query(30, ge=1, le=365, description="Number of days to analyze"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Get comprehensive retention analysis (day 1, 7, 14, 30 retention rates)"""
@@ -183,7 +185,7 @@ async def get_retention_analysis(
 @router.get("/metrics/conversion-funnel")
 async def get_conversion_funnel(
     days: int = Query(7, ge=1, le=365),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Get conversion funnel data"""
@@ -202,7 +204,7 @@ async def get_conversion_funnel(
 @router.get("/metrics/feature-usage")
 async def get_feature_usage(
     days: int = Query(7, ge=1, le=365),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Get feature usage statistics"""

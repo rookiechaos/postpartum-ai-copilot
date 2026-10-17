@@ -102,7 +102,7 @@ class NSFWDetector:
                 result = await self._check_openai_moderation(text)
                 return result
             except Exception as e:
-                logger.log_warning(f"OpenAI moderation failed: {e}, falling back to keyword check")
+                logger.log_warning("OpenAI moderation failed; using keyword checks", context={"action": "input_check"})
         
         # Fallback to keyword-based detection
         return await self._check_keywords(text, check_type)

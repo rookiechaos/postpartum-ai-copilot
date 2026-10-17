@@ -3,7 +3,7 @@ Tracking Service - Manages tracking entries and user context
 """
 
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, or_
+from sqlalchemy import desc, or_, func
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from hashlib import sha256
@@ -248,19 +248,11 @@ class TrackingService:
         user_id: str,
         db: Session
     ) -> Dict[str, Any]:
-        """Get user context (baby age, birth type, etc.)"""
-        # Try cache first
-        from services.cache_service import get_cache
-        cache = get_cache()
-        cache_key = f"user_context:{user_id}"
-        cached = cache.get(cache_key)
-        if cached is not None:
-            return cached
-        
+        """Read current account context in API and independent worker processes."""
         def _get_context():
             context_db = db.query(UserContextDB).filter(
                 UserContextDB.user_id == user_id
-            ).first()
+            ).populate_existing().first()
             
             if context_db:
                 context = context_db.context or {}
@@ -275,14 +267,11 @@ class TrackingService:
             
             return context
         
-        context = await query_in_executor(
+        return await query_in_executor(
             _get_context,
             db,
             error_message=f"Failed to get user context for user {user_id}"
         )
-        # Cache for 30 minutes
-        cache.set(cache_key, context, ttl=1800)
-        return context
     
     async def update_user_context(
         self,
@@ -329,12 +318,6 @@ class TrackingService:
             db,
             error_message=f"Failed to update user context for user {user_id}"
         )
-        
-        # Update cache
-        from services.cache_service import get_cache
-        cache = get_cache()
-        cache_key = f"user_context:{user_id}"
-        cache.set(cache_key, updated_context, ttl=1800)
         
         # Invalidate language cache if language changed
         old_language = old_context.get("language") if old_context else None
@@ -474,138 +457,43 @@ class TrackingService:
             error_message=f"Failed to get recovery trends for user {user_id}"
         )
     
-    async def generate_daily_summary(
-        self,
-        user_id: str,
-        db: Session,
-        ai_service = None
-    ) -> Dict[str, Any]:
-        """Generate daily summary of tracking data with caching"""
-        # Get today's entries
-        japan_timezone = timezone(timedelta(hours=9))
-        today = datetime.now(japan_timezone).date()
-        start_of_day = datetime.combine(today, datetime.min.time(), tzinfo=japan_timezone).astimezone(timezone.utc).replace(tzinfo=None)
-        end_of_day = start_of_day + timedelta(days=1)
-        
-        # Check cache first (cache key includes date to ensure daily refresh)
-        from services.cache_service import get_cache
-        cache = get_cache()
-        cache_key = f"daily_summary:{user_id}:{today.isoformat()}"
-        cached_summary = cache.get(cache_key)
-        if cached_summary is not None:
-            return cached_summary
-        
-        def _get_daily_entries():
-            entries = db.query(TrackingEntryDB).filter(
+    async def _calendar_summary(self, user_id: str, db: Session, period: str) -> Dict[str, Any]:
+        """Count owned records in Japan calendar periods without an AI call or stale cache."""
+        japan = timezone(timedelta(hours=9))
+        today = datetime.now(japan).date()
+        first_day = today if period == "daily" else today - timedelta(days=today.weekday())
+        start = datetime.combine(first_day, datetime.min.time(), tzinfo=japan).astimezone(timezone.utc).replace(tzinfo=None)
+        end = start + timedelta(days=1 if period == "daily" else 7)
+
+        def _counts():
+            rows = db.query(TrackingEntryDB.entry_type, func.count(TrackingEntryDB.id)).filter(
                 TrackingEntryDB.user_id == user_id,
-                TrackingEntryDB.timestamp >= start_of_day,
-                TrackingEntryDB.timestamp < end_of_day
-            ).order_by(TrackingEntryDB.timestamp).all()
-            return [self._entry_to_dict(e) for e in entries]
-        
-        entries = await query_in_executor(
-            _get_daily_entries,
-            db,
-            error_message=f"Failed to get daily entries for user {user_id}"
-        )
-        
-        # Get user context
+                TrackingEntryDB.timestamp >= start,
+                TrackingEntryDB.timestamp < end,
+            ).group_by(TrackingEntryDB.entry_type).all()
+            return {kind: count for kind, count in rows}
+
+        counts = await query_in_executor(_counts, db, error_message="Failed to count care records")
         context = await self.get_user_context(user_id, db)
-        
-        # Generate AI summary if ai_service is provided
-        if ai_service:
-            language = context.get("language", "en") or "en"
-            summary = await ai_service.generate_tracking_summary(
-                entries=entries,
-                context=context,
-                period="daily",
-                language=language
-            )
-            result = {
-                "period": "daily",
-                "date": today.isoformat(),
-                "entries_count": len(entries),
-                "summary": summary.get("summary_text", ""),
-                "timestamp": summary.get("timestamp")
-            }
-        else:
-            # Basic summary without AI
-            result = {
-                "period": "daily",
-                "date": today.isoformat(),
-                "entries_count": len(entries),
-                "summary": f"You tracked {len(entries)} entries today. You're doing great!",
-                "timestamp": datetime.utcnow().isoformat()
-            }
-        
-        # Cache the result (TTL: 1 hour, but will be invalidated by date in key)
-        # Use longer TTL since the date in key ensures daily refresh
-        cache.set(cache_key, result, ttl=3600)
-        return result
-    
-    async def generate_weekly_summary(
-        self,
-        user_id: str,
-        db: Session,
-        ai_service = None
-    ) -> Dict[str, Any]:
-        """Generate weekly summary of tracking data with caching"""
-        # Get this week's entries
-        today = datetime.utcnow().date()
-        start_of_week = today - timedelta(days=today.weekday())
-        start_of_week_datetime = datetime.combine(start_of_week, datetime.min.time())
-        
-        # Check cache first (cache key includes week start date to ensure weekly refresh)
-        from services.cache_service import get_cache
-        cache = get_cache()
-        cache_key = f"weekly_summary:{user_id}:{start_of_week.isoformat()}"
-        cached_summary = cache.get(cache_key)
-        if cached_summary is not None:
-            return cached_summary
-        
-        def _get_weekly_entries():
-            entries = db.query(TrackingEntryDB).filter(
-                TrackingEntryDB.user_id == user_id,
-                TrackingEntryDB.timestamp >= start_of_week_datetime
-            ).order_by(TrackingEntryDB.timestamp).all()
-            return [self._entry_to_dict(e) for e in entries]
-        
-        entries = await query_in_executor(
-            _get_weekly_entries,
-            db,
-            error_message=f"Failed to get weekly entries for user {user_id}"
-        )
-        
-        # Get user context
-        context = await self.get_user_context(user_id, db)
-        
-        # Generate AI summary if ai_service is provided
-        if ai_service:
-            language = context.get("language", "en") or "en"
-            summary = await ai_service.generate_tracking_summary(
-                entries=entries,
-                context=context,
-                period="weekly",
-                language=language
-            )
-            result = {
-                "period": "weekly",
-                "week_start": start_of_week.isoformat(),
-                "entries_count": len(entries),
-                "summary": summary.get("summary_text", ""),
-                "timestamp": summary.get("timestamp")
-            }
-        else:
-            # Basic summary without AI
-            result = {
-                "period": "weekly",
-                "week_start": start_of_week.isoformat(),
-                "entries_count": len(entries),
-                "summary": f"You tracked {len(entries)} entries this week. Keep up the great work!",
-                "timestamp": datetime.utcnow().isoformat()
-            }
-        
-        # Cache the result (TTL: 6 hours, but will be invalidated by week start date in key)
-        # Use longer TTL since the week start date in key ensures weekly refresh
-        cache.set(cache_key, result, ttl=21600)
-        return result
+        language = context.get("language")
+        japanese = not isinstance(language, str) or language.startswith("ja")
+        total = sum(counts.values())
+        label = "今日" if period == "daily" else "今週"
+        english_label = "today" if period == "daily" else "this week"
+        return {
+            "period": period,
+            "date" if period == "daily" else "week_start": first_day.isoformat(),
+            "entries_count": total,
+            "record_counts": counts,
+            "summary": (f"{label}記録した件数は{total}件です。未記録の内容は含みません。" if japanese else
+                        f"Recorded {total} entries {english_label}. Unrecorded care is unknown."),
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+
+    async def generate_daily_summary(self, user_id: str, db: Session, ai_service=None) -> Dict[str, Any]:
+        """Read local statistics. The legacy ai_service argument is ignored for privacy."""
+        return await self._calendar_summary(user_id, db, "daily")
+
+    async def generate_weekly_summary(self, user_id: str, db: Session, ai_service=None) -> Dict[str, Any]:
+        """Read local weekly statistics; AI analysis requires the separate scoped action."""
+        return await self._calendar_summary(user_id, db, "weekly")

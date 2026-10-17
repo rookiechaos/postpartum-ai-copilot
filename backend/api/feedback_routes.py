@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from dependencies.database import get_db
 from middleware.auth import get_current_user, get_optional_user
+from middleware.admin import require_admin
 from models.schemas import User
 from services.logging_service import logger
 from dependencies.container import get_container
@@ -203,10 +204,10 @@ async def submit_nps_survey(
 @router.get("/nps/stats")
 async def get_nps_stats(
     days: int = Query(30, ge=1, le=365, description="Number of days to analyze"),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    """Get NPS statistics (admin or public)"""
+    """Get operator-only NPS statistics"""
     try:
         feedback_service = container.get("feedback_service")
         stats = feedback_service.get_nps_stats(days=days, db=db)

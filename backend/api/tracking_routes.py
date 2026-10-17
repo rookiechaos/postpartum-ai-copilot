@@ -208,16 +208,13 @@ async def get_daily_summary(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get daily summary of tracking data"""
+    """Read local daily statistics; never perform external AI processing."""
     check_user_authorization(current_user, user_id, "tracking summary")
     tracking_service = container.get("tracking_service")
-    ai_service = container.get("ai_service")
-
     try:
         summary = await tracking_service.generate_daily_summary(
             user_id=user_id,
             db=db,
-            ai_service=ai_service
         )
         return summary
     except PostpartumException:
@@ -234,16 +231,13 @@ async def get_weekly_summary(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get weekly summary of tracking data"""
+    """Read local weekly statistics; AI analysis is a separate opt-in request."""
     check_user_authorization(current_user, user_id, "tracking summary")
     tracking_service = container.get("tracking_service")
-    ai_service = container.get("ai_service")
-
     try:
         summary = await tracking_service.generate_weekly_summary(
             user_id=user_id,
             db=db,
-            ai_service=ai_service
         )
         return summary
     except PostpartumException:

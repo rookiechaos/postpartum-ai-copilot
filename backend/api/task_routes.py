@@ -10,6 +10,7 @@ from models.schemas import (
     TaskRequest, TaskResponse, TaskStatus, TaskPriority
 )
 from middleware.auth import get_current_user
+from middleware.admin import require_admin
 from models.schemas import User
 from dependencies.database import get_db
 from dependencies.container import get_container
@@ -166,7 +167,7 @@ async def get_task_stats(
 async def get_task_performance(
     task_type: Optional[str] = Query(None, description="Filter by task type"),
     days: int = Query(7, ge=1, le=90),
-    current_user: Optional[User] = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """

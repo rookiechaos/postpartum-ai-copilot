@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 from models.database import NotificationDB, TrackingEntryDB, UserContextDB
 from services.logging_service import logger
-from services.websocket_manager import connection_manager
+from exceptions import DatabaseError
 from utils.locale_loader import load_locale_file
 import json
 
@@ -99,132 +99,66 @@ class NotificationService:
             logger.log_error(e, context={"action": "get_user_notifications", "user_id": user_id})
             return []
     
-    def get_pending_notifications(
-        self,
-        db: Session,
-        before_time: Optional[datetime] = None
-    ) -> List[Dict[str, Any]]:
-        """Get notifications that should be sent now"""
+    def get_pending_notifications(self, db: Session, before_time: Optional[datetime] = None,
+                                  *, user_id: Optional[str] = None, limit: int = 25) -> List[Dict[str, Any]]:
+        """The database is the shared queue; each authenticated browser reads only its owner."""
+        if not user_id:
+            return []
         try:
             now = before_time or datetime.utcnow()
-            query = db.query(NotificationDB).filter(
-                and_(
-                    NotificationDB.is_enabled == True,
-                    NotificationDB.is_sent == False,
-                    NotificationDB.scheduled_time <= now
-                )
-            )
-            
-            notifications = query.all()
-            return [self._notification_to_dict(n) for n in notifications]
-        except Exception as e:
-            logger.log_error(e, context={"action": "get_pending_notifications"})
-            return []
-    
-    def mark_notification_sent(
-        self,
-        notification_id: int,
-        db: Session
-    ) -> bool:
-        """Mark a notification as sent"""
+            rows = db.query(NotificationDB).filter(
+                NotificationDB.user_id == user_id,
+                NotificationDB.is_enabled.is_(True), NotificationDB.is_sent.is_(False),
+                NotificationDB.scheduled_time <= now,
+            ).order_by(NotificationDB.scheduled_time, NotificationDB.id).limit(limit).all()
+            return [self._notification_to_dict(row) for row in rows]
+        except Exception as error:
+            logger.log_error(error, context={"action": "get_pending_notifications"})
+            raise DatabaseError("Unable to load due reminders") from error
+
+    def mark_notification_sent(self, notification_id: int, db: Session, *, user_id: Optional[str] = None) -> bool:
+        """Acknowledge browser acceptance, never an unverified worker send or a user read."""
+        if not user_id:
+            return False
         try:
-            notification = db.query(NotificationDB).filter(
-                NotificationDB.id == notification_id
-            ).first()
-            
-            if not notification:
+            row = db.query(NotificationDB).filter(NotificationDB.id == notification_id,
+                NotificationDB.user_id == user_id).with_for_update().first()
+            if row is None:
                 return False
-            
-            notification.is_sent = True
-            notification.sent_at = datetime.utcnow()
-            
-            # If recurring, create next occurrence
-            if notification.is_recurring:
-                next_time = self._calculate_next_occurrence(
-                    notification.scheduled_time,
-                    notification.recurrence_pattern
-                )
-                if next_time:
-                    # Create next notification
-                    next_notification = NotificationDB(
-                        user_id=notification.user_id,
-                        notification_type=notification.notification_type,
-                        title=notification.title,
-                        message=notification.message,
-                        scheduled_time=next_time,
-                        is_recurring=True,
-                        recurrence_pattern=notification.recurrence_pattern,
-                        action_url=notification.action_url,
-                        notification_metadata=notification.notification_metadata,
-                        is_enabled=True,
-                        is_sent=False
-                    )
-                    db.add(next_notification)
-            
+            if row.is_sent:
+                return True  # A lost acknowledgment response may safely be retried.
+            now = datetime.utcnow()
+            changed = db.query(NotificationDB).filter(NotificationDB.id == notification_id,
+                NotificationDB.user_id == user_id, NotificationDB.is_enabled.is_(True),
+                NotificationDB.is_sent.is_(False), NotificationDB.scheduled_time <= now,
+            ).update({"is_sent": True, "sent_at": now, "updated_at": now}, synchronize_session=False)
+            if changed != 1:
+                db.rollback()
+                return db.query(NotificationDB.id).filter(NotificationDB.id == notification_id,
+                    NotificationDB.user_id == user_id, NotificationDB.is_sent.is_(True)).first() is not None
+            if row.is_recurring:
+                next_time = self._calculate_next_occurrence(row.scheduled_time, row.recurrence_pattern)
+                # Skip missed occurrences rather than flooding the browser after an absence.
+                interval = timedelta(days=1 if row.recurrence_pattern == "daily" else 7)
+                if next_time is not None and next_time <= now:
+                    next_time += interval * ((now - next_time) // interval + 1)
+                if next_time is not None:
+                    db.add(NotificationDB(user_id=user_id, notification_type=row.notification_type,
+                        title=row.title, message=row.message, scheduled_time=next_time,
+                        is_recurring=True, recurrence_pattern=row.recurrence_pattern,
+                        action_url=row.action_url, notification_metadata=row.notification_metadata,
+                        is_enabled=True, is_sent=False))
             db.commit()
             return True
-        except Exception as e:
+        except Exception as error:
             db.rollback()
-            logger.log_error(e, context={"action": "mark_notification_sent", "notification_id": notification_id})
-            return False
-    
-    def send_notification(
-        self,
-        notification: Dict[str, Any],
-        db: Session
-    ) -> bool:
-        """
-        Send a notification via WebSocket and mark as sent
-        
-        Args:
-            notification: Notification dictionary
-            db: Database session
-        
-        Returns:
-            True if sent successfully
-        """
-        try:
-            user_id = notification["user_id"]
-            
-            # Send via WebSocket
-            message = {
-                "type": "notification",
-                "notification_id": notification["id"],
-                "title": notification["title"],
-                "message": notification["message"],
-                "notification_type": notification["notification_type"],
-                "action_url": notification.get("action_url"),
-                "metadata": notification.get("metadata", {}),
-                "timestamp": datetime.utcnow().isoformat()
-            }
-            
-            # Send to user via WebSocket
-            import asyncio
-            loop = None
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
-            if loop.is_running():
-                asyncio.create_task(connection_manager.send_to_user(user_id, message))
-            else:
-                loop.run_until_complete(connection_manager.send_to_user(user_id, message))
-            
-            # Mark as sent
-            self.mark_notification_sent(notification["id"], db)
-            
-            logger.log_info(
-                f"Notification sent: {notification['notification_type']} to user {user_id}",
-                context={"notification_id": notification["id"]}
-            )
-            
-            return True
-        except Exception as e:
-            logger.log_error(e, context={"action": "send_notification", "notification_id": notification.get("id")})
-            return False
-    
+            logger.log_error(error, context={"action": "acknowledge_notification", "notification_id": notification_id})
+            raise DatabaseError("Unable to acknowledge reminder delivery") from error
+
+    def send_notification(self, notification: Dict[str, Any], db: Session) -> bool:
+        """Retired worker API: a process-local socket table cannot prove browser delivery."""
+        return False
+
     def create_smart_feeding_reminder(
         self,
         user_id: str,
@@ -339,25 +273,18 @@ class NotificationService:
         user_id: str,
         db: Session
     ) -> bool:
-        """Disable a notification"""
+        """Stop an owned pending reminder, serialized with browser acknowledgment."""
         try:
-            notification = db.query(NotificationDB).filter(
-                and_(
-                    NotificationDB.id == notification_id,
-                    NotificationDB.user_id == user_id
-                )
-            ).first()
-            
-            if not notification:
-                return False
-            
-            notification.is_enabled = False
+            changed = db.query(NotificationDB).filter(
+                NotificationDB.id == notification_id, NotificationDB.user_id == user_id,
+                NotificationDB.is_sent.is_(False),
+            ).update({"is_enabled": False, "updated_at": datetime.utcnow()}, synchronize_session=False)
             db.commit()
-            return True
+            return changed == 1
         except Exception as e:
             db.rollback()
             logger.log_error(e, context={"action": "disable_notification", "notification_id": notification_id})
-            return False
+            raise DatabaseError("Unable to stop reminder") from e
     
     def _calculate_next_occurrence(
         self,

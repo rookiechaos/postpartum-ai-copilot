@@ -3,6 +3,8 @@
 React 18 / Vite / i18next web app for small Japanese postpartum-care pilots.
 See the [main README](../README.md) for the product scope and complete backend/worker setup.
 
+The [repository review fixes](../docs/security/REPO_REVIEW_FIXES_2026-10-16.md) preserve quick-save fields for correction, bound token refresh/retry and move reminder delivery into the authenticated family session. Due reminders are polled while the family page is visible, connected and notification permission is granted. Browser acceptance is acknowledged through the owner's API; it does not prove the person read the notice. This requires the matching API and has not been run, built or tested.
+
 The [Japanese family/local-service revision](../docs/product/JAPANESE_EXPERIENCE.md) adds shared translated branding, published operator contacts on entry/sign-in, everyday labels, adaptive feeding fields and precise save/delete/undo states. Need-based contact filters expose verified eligibility, cost, application order and staying-with-family guidance. Its optional public `visiting_note` field requires the matching backend; no SQL migration or new dependency is added. This revision has not been run, built or tested.
 
 ## Entrances

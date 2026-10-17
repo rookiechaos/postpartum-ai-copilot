@@ -2,17 +2,16 @@
 Notification Routes - API endpoints for notifications
 """
 
-from fastapi import APIRouter, Depends, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from dependencies.database import get_db
 from middleware.auth import get_current_user
 from models.schemas import User
 from dependencies.container import get_container
-from middleware.authorization import check_user_authorization
-from exceptions import DatabaseError, NotFoundError, ValidationError
+from exceptions import ConflictError, DatabaseError, ValidationError
 
 router = APIRouter()
 container = get_container()
@@ -27,6 +26,12 @@ class NotificationCreate(BaseModel):
     recurrence_pattern: Optional[str] = Field(default=None, description="daily, weekly, or custom")
     action_url: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+
+    @field_validator("scheduled_time")
+    @classmethod
+    def utc_schedule(cls, value):
+        # Legacy timestamps without a zone are UTC; explicit offsets are normalized.
+        return value.astimezone(timezone.utc).replace(tzinfo=None) if value.tzinfo else value
 
 
 class NotificationResponse(BaseModel):
@@ -82,7 +87,7 @@ async def create_notification(
 @router.get("/", response_model=List[NotificationResponse])
 async def get_notifications(
     include_sent: bool = False,
-    limit: int = 100,
+    limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -95,6 +100,24 @@ async def get_notifications(
         limit=limit
     )
     return [NotificationResponse(**n) for n in notifications]
+
+
+@router.get("/due")
+async def due_notifications(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Read the account's due IDs without changing delivery state or exposing care text."""
+    rows = container.get("notification_service").get_pending_notifications(db, user_id=current_user.user_id, limit=25)
+    return [{"id": row["id"]} for row in rows]
+
+
+@router.post("/{notification_id}/acknowledge")
+async def acknowledge_notification(notification_id: int, current_user: User = Depends(get_current_user),
+                                   db: Session = Depends(get_db)):
+    """The browser reports acceptance; ownership and due/enabled state are checked server-side."""
+    accepted = container.get("notification_service").mark_notification_sent(
+        notification_id, db, user_id=current_user.user_id)
+    if not accepted:
+        raise HTTPException(409, "Reminder is no longer available for delivery")
+    return {"acknowledged": True}
 
 
 @router.post("/smart/feeding", response_model=NotificationResponse)
@@ -152,23 +175,6 @@ async def disable_notification(
     """Disable a notification"""
     notification_service = container.get("notification_service")
     
-    # Get notification to check ownership
-    notifications = notification_service.get_user_notifications(
-        user_id=current_user.user_id,
-        db=db,
-        include_sent=True,
-        limit=1000
-    )
-    
-    notification = next((n for n in notifications if n["id"] == notification_id), None)
-    if not notification:
-        raise NotFoundError(
-            "Notification not found",
-            details={"notification_id": notification_id, "user_id": current_user.user_id}
-        )
-    
-    check_user_authorization(current_user, notification["user_id"], "notification")
-    
     success = notification_service.disable_notification(
         notification_id=notification_id,
         user_id=current_user.user_id,
@@ -176,10 +182,7 @@ async def disable_notification(
     )
     
     if not success:
-        raise DatabaseError(
-            "Failed to disable notification",
-            details={"notification_id": notification_id, "user_id": current_user.user_id}
-        )
+        raise ConflictError("Reminder changed; refresh the schedule before stopping it")
     
     return {"message": "Notification disabled"}
 

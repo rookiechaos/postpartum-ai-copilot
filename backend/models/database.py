@@ -18,7 +18,7 @@ DATABASE_URL = settings.database_url
 
 # Configure engine based on database type
 if DATABASE_URL.startswith("postgresql"):
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=20)
+    engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=20, hide_parameters=True)
 else:
     # SQLite configuration
     sqlite_url = make_url(DATABASE_URL)
@@ -32,7 +32,7 @@ else:
             resolved_path = PROJECT_ROOT / resolved_path
         resolved_path.parent.mkdir(parents=True, exist_ok=True)
         sqlite_url = sqlite_url.set(database=str(resolved_path))
-    engine = create_engine(sqlite_url, connect_args={"check_same_thread": False})
+    engine = create_engine(sqlite_url, connect_args={"check_same_thread": False}, hide_parameters=True)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

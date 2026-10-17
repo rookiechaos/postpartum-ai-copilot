@@ -81,7 +81,9 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
       const result = await api.addTrackingEntry(operation)
       await draft.clear()
       unconfirmedRequest.current = null
-      setUndo(result); setPending(null); setSaveStatus('saved'); refresh()
+      // The receipt carries identity/version only; keep the submitted care fields
+      // so its name and edit action refer to the record that was actually saved.
+      setUndo({ ...operation, ...result }); setPending(null); setSaveStatus('saved'); refresh()
     } catch (failure) {
       if (!(failure.status >= 400 && failure.status < 500)) unconfirmedRequest.current = operation.request_key
       setSaveStatus(unconfirmedRequest.current === operation.request_key ? 'unconfirmed' : 'unsaved')

@@ -3,7 +3,9 @@ Unit tests for TrackingService
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 from services.tracking_service import TrackingService
 from models.schemas import TrackingEntry, EntryType, FeedingType
 
@@ -164,44 +166,38 @@ async def test_generate_daily_summary(test_db_session, mock_user_id):
     assert isinstance(summary, dict)
     assert "date" in summary
     assert "entries_count" in summary
-    assert "summary_text" in summary or "insights" in summary
+    assert "summary" in summary and "record_counts" in summary
 
 
 @pytest.mark.asyncio
-async def test_generate_daily_summary_with_ai(test_db_session, mock_user_id):
-    """Test generating daily summary with AI service"""
-    service = TrackingService()
-    
-    # Create some tracking entries
+async def test_calendar_summaries_ignore_legacy_ai_argument(test_db_session, mock_user_id):
+    """A read must not send profile/record information even if a legacy caller supplies AI."""
     from models.database import TrackingEntryDB
-    for i in range(3):
-        entry = TrackingEntryDB(
-            user_id=mock_user_id,
-            entry_type="feeding",
-            timestamp=datetime.utcnow() - timedelta(hours=3-i)
-        )
-        test_db_session.add(entry)
+    instant = datetime(2026, 10, 16, 3)
+
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return instant.replace(tzinfo=timezone.utc).astimezone(tz) if tz else instant
+
+        @classmethod
+        def utcnow(cls):
+            return instant
+
+    for _ in range(3):
+        test_db_session.add(TrackingEntryDB(user_id=mock_user_id, entry_type="feeding", timestamp=instant))
+    test_db_session.add(TrackingEntryDB(user_id="other_review_account", entry_type="mood", timestamp=instant,
+                                       mood_notes="private-note-marker"))
     test_db_session.commit()
-    
-    # Mock AI service (optional, may not be available in test mode)
-    try:
-        from services.ai_service import AIService
-        ai_service = AIService()
-        summary = await service.generate_daily_summary(
-            user_id=mock_user_id,
-            db=test_db_session,
-            ai_service=ai_service
-        )
-        
-        assert isinstance(summary, dict)
-        assert "date" in summary
-    except Exception:
-        # If AI service not available, test without it
-        summary = await service.generate_daily_summary(
-            user_id=mock_user_id,
-            db=test_db_session
-        )
-        assert isinstance(summary, dict)
+    service = TrackingService()
+    ai = SimpleNamespace(generate_tracking_summary=AsyncMock())
+    with patch("services.tracking_service.datetime", FrozenDatetime):
+        daily = await service.generate_daily_summary(mock_user_id, test_db_session, ai_service=ai)
+        weekly = await service.generate_weekly_summary(mock_user_id, test_db_session, ai_service=ai)
+    assert daily["date"] == "2026-10-16"
+    assert weekly["week_start"] == "2026-10-12"
+    assert daily["record_counts"] == weekly["record_counts"] == {"feeding": 3}
+    ai.generate_tracking_summary.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -228,7 +224,7 @@ async def test_generate_weekly_summary(test_db_session, mock_user_id):
     assert isinstance(summary, dict)
     assert "week_start" in summary or "period" in summary
     assert "entries_count" in summary or "total_entries" in summary
-    assert "summary_text" in summary or "insights" in summary
+    assert "summary" in summary and "record_counts" in summary
 
 
 @pytest.mark.asyncio

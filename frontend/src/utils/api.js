@@ -135,15 +135,18 @@ function triggerUnauthorized() {
   }
 }
 
-/** Build fetch options with optional timeout (AbortController). Returns { signal, timeoutId }. */
+/** Bound the whole request, including refresh/retry, and preserve caller cancellation. */
 function withTimeout(options, defaultTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {
   const timeoutMs = options.timeout ?? defaultTimeoutMs
-  if (options.signal) {
-    return { signal: options.signal, timeoutId: null }
-  }
   const controller = new AbortController()
+  const cancel = () => controller.abort()
+  if (options.signal?.aborted) cancel()
+  else options.signal?.addEventListener('abort', cancel, { once: true })
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-  return { signal: controller.signal, timeoutId }
+  return { signal: controller.signal, cleanup: () => {
+    clearTimeout(timeoutId)
+    options.signal?.removeEventListener('abort', cancel)
+  } }
 }
 
 function communicationError(error, write = false) {
@@ -158,40 +161,46 @@ function communicationError(error, write = false) {
 }
 
 /** Call /api/auth/refresh with refresh_token; does NOT retry on 401 (avoids loop). */
-async function refreshAccessToken() {
+async function refreshAccessToken(callerSignal) {
   const session = getAuthSession()
   const refreshToken = getRefreshToken()
   if (!refreshToken) return null
-  const response = await fetch(`${API_BASE}/api/auth/refresh`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${refreshToken}`
-    },
-    body: JSON.stringify({ refresh_token: refreshToken })
-  })
-  if (!isCurrentSession(session)) return null
-  if (refreshToken !== getRefreshToken()) return getToken()
-  if (!response.ok) return null
-  const data = await response.json().catch(() => null)
-  if (!isCurrentSession(session)) return null
-  if (refreshToken !== getRefreshToken()) return getToken()
-  if (data?.access_token) {
-    setToken(data.access_token)
-    if (data.refresh_token) {
-      localStorage.setItem('refresh_token', data.refresh_token)
+  const { signal, cleanup } = withTimeout({ signal: callerSignal })
+  try {
+    const response = await fetch(`${API_BASE}/api/auth/refresh`, {
+      method: 'POST',
+      signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${refreshToken}`
+      },
+      body: JSON.stringify({ refresh_token: refreshToken })
+    })
+    if (!isCurrentSession(session)) return null
+    if (refreshToken !== getRefreshToken()) return getToken()
+    if ([401, 403].includes(response.status)) return null
+    // A timeout, rate limit or server error does not invalidate the login.
+    if (!response.ok) throw await responseError(response, session)
+    const data = await response.json()
+    if (!isCurrentSession(session)) return null
+    if (refreshToken !== getRefreshToken()) return getToken()
+    if (data?.access_token) {
+      setToken(data.access_token)
+      if (data.refresh_token) {
+        localStorage.setItem('refresh_token', data.refresh_token)
+      }
+      notifyAuthChange(true)
+      return data.access_token
     }
-    notifyAuthChange(true)
-    return data.access_token
-  }
-  return null
+    throw new SyntaxError('Refresh response unavailable')
+  } finally { cleanup() }
 }
 
 export const api = {
   clearLegacyOfflineStorage,
   async get(endpoint, options = {}, isRetry = false) {
     const session = getAuthSession()
-    const { signal, timeoutId } = withTimeout(options)
+    const { signal, cleanup } = withTimeout(options)
     try {
       const response = await fetch(`${API_BASE}${endpoint}`, {
         ...options,
@@ -204,10 +213,10 @@ export const api = {
       })
       assertSession(session)
       if (response.status === 401 && !isRetry) {
-        const newToken = await refreshAccessToken()
+        const newToken = await refreshAccessToken(signal)
         assertSession(session)
         if (newToken) {
-          return await this.get(endpoint, options, true)
+          return await this.get(endpoint, { ...options, signal }, true)
         }
         this.logout({ reason: 'expired' })
         triggerUnauthorized()
@@ -231,13 +240,13 @@ export const api = {
       console.error('API GET error:', error)
       throw communicationError(error)
     } finally {
-      if (timeoutId) clearTimeout(timeoutId)
+      cleanup()
     }
   },
 
   async post(endpoint, data, options = {}, isRetry = false) {
     const session = getAuthSession()
-    const { signal, timeoutId } = withTimeout(options)
+    const { signal, cleanup } = withTimeout(options)
     try {
       const response = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
@@ -252,10 +261,10 @@ export const api = {
       })
       assertSession(session)
       if (response.status === 401 && !isRetry && !endpoint.startsWith('/api/auth/')) {
-        const newToken = await refreshAccessToken()
+        const newToken = await refreshAccessToken(signal)
         assertSession(session)
         if (newToken) {
-          return await this.post(endpoint, data, options, true)
+          return await this.post(endpoint, data, { ...options, signal }, true)
         }
         this.logout({ reason: 'expired' })
         triggerUnauthorized()
@@ -279,13 +288,13 @@ export const api = {
       console.error('API POST error:', error)
       throw communicationError(error, true)
     } finally {
-      if (timeoutId) clearTimeout(timeoutId)
+      cleanup()
     }
   },
 
   async delete(endpoint, options = {}, isRetry = false) {
     const session = getAuthSession()
-    const { signal, timeoutId } = withTimeout(options)
+    const { signal, cleanup } = withTimeout(options)
     try {
       const response = await fetch(`${API_BASE}${endpoint}`, {
         method: 'DELETE',
@@ -299,10 +308,10 @@ export const api = {
       })
       assertSession(session)
       if (response.status === 401 && !isRetry) {
-        const newToken = await refreshAccessToken()
+        const newToken = await refreshAccessToken(signal)
         assertSession(session)
         if (newToken) {
-          return await this.delete(endpoint, options, true)
+          return await this.delete(endpoint, { ...options, signal }, true)
         }
         this.logout({ reason: 'expired' })
         triggerUnauthorized()
@@ -329,7 +338,7 @@ export const api = {
       console.error('API DELETE error:', error)
       throw communicationError(error, true)
     } finally {
-      if (timeoutId) clearTimeout(timeoutId)
+      cleanup()
     }
   },
 

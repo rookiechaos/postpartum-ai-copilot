@@ -89,18 +89,21 @@ VITE_ASYNC_MODE=true
 
 2. **Create environment files**
 
-   Copy `backend/env.example` to `backend/.env` and fill in your values.
+   Copy `do-not-upload/local/backend.env.example` to `do-not-upload/local/backend.env` and fill in real values. Set a unique JWT secret and a unique, URL-safe `POSTGRES_PASSWORD` (for example, generated with `openssl rand -hex 32`). A missing/empty database password stops Compose startup.
+   For an existing PostgreSQL volume, environment changes do not rotate the stored database password; coordinate its actual rotation and the API/worker configuration. Keep the existing data volume and backups.
 
 3. **Start services with Docker Compose**
 
    ```bash
-   docker-compose up -d
+   docker compose --env-file do-not-upload/local/backend.env up -d --build
    ```
 
    This will start:
    - PostgreSQL database
    - API server (port 8000)
    - Worker processes
+
+   PostgreSQL is reachable only on the container network; no database port is published on the host. Build/host the frontend separately. Matching frontend/API/worker versions are required for the reminder acknowledgment flow. The new curated RAG collection excludes older sample collections without deleting them; operator-approved source re-ingestion is a separate, explicit operation. See [review fixes and pending acceptance](../security/REPO_REVIEW_FIXES_2026-10-16.md).
 
 4. **Check service status**
 
