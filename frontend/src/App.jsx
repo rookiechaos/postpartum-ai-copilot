@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import api from './utils/api'
+import { CareSessionProvider } from './utils/CareSession'
 import useEntranceNavigation from './utils/useEntranceNavigation'
 import { applyDisplaySettings, readDisplaySettings } from './utils/displaySettings'
 import { revealElement } from './utils/focusView'
@@ -134,8 +135,10 @@ function App() {
     registerLeaveGuard={registerLeaveGuard} onExit={() => chooseEntry(null)} />
   if (entry === 'organization') return <OrganizationPortal key={`${sessionKey}:${userId}:organization`}
     userId={userId} registerLeaveGuard={registerLeaveGuard} onFamily={() => chooseEntry('family')} onExit={() => chooseEntry(null)} />
-  return <AuthenticatedApp key={`${sessionKey}:${userId}:family`} userId={userId} onChooseEntry={chooseEntry}
-    pendingInvite={pendingInvite} onInvitationHandled={clearInvite} />
+  return <CareSessionProvider key={`${sessionKey}:${userId}:family`} userId={userId}>
+    <AuthenticatedApp userId={userId} onChooseEntry={chooseEntry}
+      pendingInvite={pendingInvite} onInvitationHandled={clearInvite} />
+  </CareSessionProvider>
 }
 
 // A new login mounts fresh private state, including all child components.
@@ -154,6 +157,8 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
   const [supportRequest, setSupportRequest] = useState({ key: 0, view: 'contacts', question: '' })
   const [navigationKey, setNavigationKey] = useState(0)
   const [familyRequest, setFamilyRequest] = useState({ id: '', key: 0 })
+  const [dashboardRequest, setDashboardRequest] = useState({ key: 0 })
+  const [firstTask, setFirstTask] = useState('')
   const familyVisible = !nightMode && !pendingInvite
   const panelRefs = useRef({})
   const pendingPanelFocus = useRef(false)
@@ -218,13 +223,15 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  const handleWelcomeComplete = async (formData = {}) => {
+  const handleWelcomeComplete = async (formData = {}, task = 'record') => {
     const suppliedFields = Object.fromEntries(Object.entries(formData).filter(([, value]) => value !== ''))
     const saved = await api.updateUserContext(userId, { ...suppliedFields, language: i18n.resolvedLanguage || 'ja' })
     localStorage.setItem(`hasCompletedWelcome:${userId}`, 'true')
     setUserContext(saved.context)
     setShowWelcome(false)
-    navigate(familyRequest.id ? 'family' : 'dashboard')
+    setFirstTask(task)
+    navigate(familyRequest.id || task === 'family' ? 'family' : task === 'support' ? 'support' : 'dashboard',
+      task === 'support' ? { view: 'contacts' } : task === 'record' ? { section: 'quick-record-heading' } : undefined)
   }
 
   const handleContextUpdate = (newContext) => {
@@ -232,13 +239,15 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
   }
 
   const navigate = (tab, detail) => {
+    if (tab === 'dashboard' && detail) setDashboardRequest(previous => ({ ...detail, key: previous.key + 1 }))
     if (tab === 'tracking' && detail) { setTrackingRequest(detail); setTrackingRequestKey(value => value + 1) }
     if (tab === 'chat' && detail) { setChatDraft(detail); setChatRequestKey(value => value + 1) }
     const supportDestination = tab === 'support' && ['contacts', 'sheet'].includes(detail?.view) ? detail : null
     if (supportDestination) setSupportRequest(previous => ({ key: previous.key + 1, view: supportDestination.view,
+      contactKey: supportDestination.contactKey || '',
       question: supportDestination.view === 'sheet' && typeof supportDestination.question === 'string' ? supportDestination.question : '' }))
     // A requested support view or incoming question owns its more specific focus target.
-    pendingPanelFocus.current = !supportDestination && !(detail && tab === 'chat')
+    pendingPanelFocus.current = !supportDestination && !(detail && ['chat', 'tracking', 'dashboard'].includes(tab))
     setNavigationKey(value => value + 1)
     setVisitedTabs(previous => previous.includes(tab) ? previous : [...previous, tab])
     setActiveTab(tab)
@@ -306,12 +315,17 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
 
       <main className="app-main">
         <ConnectionNotice onCheck={() => navigate('tracking')} />
+        {firstTask && <section className="pilot-panel first-task-guide"><h3>{t(`continuity.onboarding.tasks.${firstTask}.title`)}</h3>
+          <p>{t(`continuity.onboarding.tasks.${firstTask}.hint`)}</p>
+          <button type="button" className="text-action" onClick={() => setFirstTask('')}>{t('continuity.onboarding.dismiss')}</button>
+        </section>}
         {visitedTabs.map(tab => <section key={tab} className="family-tab-panel" hidden={activeTab !== tab} tabIndex={-1}
           ref={element => { panelRefs.current[tab] = element }}
           aria-labelledby={tabs.some(item => item.id === tab) ? `family-tab-${tab}` : undefined}
           aria-label={tab === 'checkin' ? t('checkin.title') : tab === 'family' ? t('polish.familyHandoff') : undefined}>
             {tab === 'dashboard' && (
               <Dashboard userId={userId} userContext={userContext} refreshKey={recordVersion} visible={activeTab === 'dashboard' && familyVisible}
+                navigationRequest={dashboardRequest}
                 onNavigate={navigate} onRecordsChanged={() => setRecordVersion(value => value + 1)} />
             )}
             {tab === 'chat' && <ChatInterface userId={userId} initialDraft={chatDraft} draftVersion={chatRequestKey} visible={activeTab === 'chat' && familyVisible}

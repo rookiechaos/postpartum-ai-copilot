@@ -5,7 +5,7 @@ Database Helper Utilities - Common database query patterns and error handling
 import asyncio
 from typing import Callable, TypeVar, Any, Optional
 from sqlalchemy.orm import Session
-from exceptions import DatabaseError
+from exceptions import DatabaseError, ValidationError, ConflictError, NotFoundError
 
 T = TypeVar('T')
 
@@ -32,6 +32,11 @@ async def query_in_executor(
     loop = asyncio.get_event_loop()
     try:
         return await loop.run_in_executor(None, func)
+    except (ValidationError, ConflictError, NotFoundError):
+        # Expected care validation/access conflicts must remain actionable 4xx
+        # responses, rather than appearing to clients as uncertain server writes.
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         error_msg = error_message or f"Database query failed: {str(e)}"

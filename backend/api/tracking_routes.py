@@ -16,6 +16,7 @@ from models.schemas import User, TrackingEntry, TrackingEntryCreate, TrackingEnt
 from models.database import TrackingEntryDB, TrackingWriteDB
 from services.task_queue import TaskPriority
 from services.ai_data_scope import profile_for_ai, records_for_ai
+from services.care_subjects import accessible_subjects
 from exceptions import (
     PostpartumException,
     DatabaseError,
@@ -43,7 +44,7 @@ def read_tracking_operation(request: Request, request_key: UUID,
         TrackingEntryDB.user_id == current_user.user_id).first()
     if row is None:
         return {"state": "deleted", "record": None}
-    return {"state": "saved", "record": container.get("tracking_service")._entry_to_dict(row)}
+    return {"state": "saved", "record": container.get("tracking_service")._owned_entries([row], db, current_user.user_id)[0]}
 
 
 @router.get("/api/tracking/entries/{entry_id}", response_model=TrackingEntry)
@@ -54,7 +55,34 @@ def read_tracking_entry(request: Request, entry_id: int, record_key: UUID,
         TrackingEntryDB.record_key == str(record_key), TrackingEntryDB.user_id == current_user.user_id).first()
     if row is None:
         raise HTTPException(404, "Tracking entry not found")
-    return container.get("tracking_service")._entry_to_dict(row)
+    return container.get("tracking_service")._owned_entries([row], db, current_user.user_id)[0]
+
+
+@router.post("/api/tracking/duplicate-check")
+@rate_limit(RATE_LIMITS["tracking"])
+def check_family_duplicates(request: Request, entry: TrackingEntryCreate,
+                            current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from datetime import timezone
+    subject = next((item for item in accessible_subjects(db, current_user.user_id)
+        if item["subject_id"] == str(entry.subject_id)), None)
+    if not subject or not subject["family_id"] or entry.entry_type.value not in ("feeding", "diaper", "sleep", "pumping"):
+        return {"matches": []}
+    if entry.timestamp is None:
+        raise HTTPException(422, "Choose an event time before checking")
+    timestamp = entry.timestamp.replace(tzinfo=timezone.utc) if entry.timestamp.tzinfo is None else entry.timestamp
+    records = container.get("family_service").get_shared_tracking_data(subject["family_id"], current_user.user_id, days=7, db=db)
+    matches = []
+    for record in records:
+        if record["recorded_by"] == current_user.user_id or record["entry_type"] != entry.entry_type.value:
+            continue
+        date = datetime.fromisoformat(record["timestamp"].replace("Z", "+00:00"))
+        date = date.replace(tzinfo=timezone.utc) if date.tzinfo is None else date
+        if abs((date - timestamp).total_seconds()) > 300:
+            continue
+        if any(getattr(entry, key) is not None and record.get(key) != getattr(entry, key).value for key in ("feeding_type", "diaper_type")):
+            continue
+        matches.append({key: record.get(key) for key in ("record_key", "timestamp", "entry_type", "recorder_label", "feeding_type", "diaper_type", "amount_ml", "duration_minutes", "sleep_duration_minutes")})
+    return {"matches": matches[:3]}
 
 
 @router.post("/api/tracking/entries/{entry_id}/update", response_model=TrackingEntry)

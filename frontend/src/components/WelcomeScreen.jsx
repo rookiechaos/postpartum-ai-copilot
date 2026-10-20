@@ -10,12 +10,12 @@ export default function WelcomeScreen({ onComplete, onExit }) {
   const [error, setError] = useState('')
   const savingRef = useRef(false)
   const [formData, setFormData] = useState({ babyAge: '', birthType: '', feedingType: '', babyName: '' })
-  const complete = async (profile = formData) => {
+  const complete = async (profile = formData, task = 'record') => {
     if (savingRef.current) return
     savingRef.current = true
     setSaving(true)
     setError('')
-    try { await onComplete(profile) }
+    try { await onComplete(profile, task) }
     catch { setError(t('pilot.saveFailed', 'Unable to save your settings. Please try again.')) }
     finally { savingRef.current = false; setSaving(false) }
   }
@@ -53,6 +53,10 @@ export default function WelcomeScreen({ onComplete, onExit }) {
           <button className="btn-primary" disabled={saving} onClick={step === 0 ? () => complete({}) : () => complete()}>
             {saving ? t('settings.saving') : t('friendly.welcome.start')}
           </button>
+          {step === 0 && <>
+            <button type="button" className="btn-secondary" disabled={saving} onClick={() => complete({}, 'family')}>{t('continuity.onboarding.family')}</button>
+            <button type="button" className="btn-secondary" disabled={saving} onClick={() => complete({}, 'support')}>{t('continuity.onboarding.support')}</button>
+          </>}
           {step === 0 ? <button className="btn-link" disabled={saving} onClick={() => setStep(1)}>{t('friendly.welcome.profile')}</button>
             : <button className="btn-link" disabled={saving} onClick={() => complete({})}>{t('friendly.welcome.withoutProfile')}</button>}
         </div>

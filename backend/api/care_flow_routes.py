@@ -6,7 +6,7 @@ import secrets
 from typing import Literal, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -19,6 +19,7 @@ from middleware.rate_limit import RATE_LIMITS, rate_limit
 from models.database import (FamilyDB, FamilyMemberDB, FamilyHandoverDB, FamilyHandoverAcknowledgementDB, FamilyInviteLinkDB,
                              SupportJourneyDB, PilotProfileDB)
 from models.schemas import User
+from services.care_periods import period_bounds, in_period
 
 router = APIRouter(tags=["care-flows"])
 
@@ -65,7 +66,7 @@ def family_overview(family_id: str, user: User = Depends(get_current_user), db: 
             and receipt.author_membership_revision == note.membership_revision
             and member_revisions.get(receipt.user_id) == receipt.reader_membership_revision]
     # No parent records or free-text tracking notes enter the home overview.
-    allowed = ("record_key", "timestamp", "entry_type", "recorded_by", "feeding_type", "diaper_type",
+    allowed = ("record_key", "timestamp", "end_timestamp", "subject_id", "subject_name", "entry_type", "recorded_by", "feeding_type", "diaper_type",
                "amount_ml", "duration_minutes", "sleep_duration_minutes", "pumped_amount_ml")
     latest = {}
     for kind in categories:
@@ -95,7 +96,8 @@ def family_overview(family_id: str, user: User = Depends(get_current_user), db: 
 
 
 @router.get("/api/families/{family_id}/timeline")
-def family_timeline(family_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def family_timeline(family_id: str, period: Literal["today", "yesterday", "last24"] = Query("today"),
+                    user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     member_of(db, family_id, user.user_id)
     records = get_container().get("family_service").get_shared_tracking_data(family_id, user.user_id, days=2, db=db)
     people = db.query(FamilyMemberDB).filter(FamilyMemberDB.family_id == family_id,
@@ -103,21 +105,20 @@ def family_timeline(family_id: str, user: User = Depends(get_current_user), db: 
     numbers = {person.user_id: index + 1 for index, person in enumerate(people)}
     today = datetime.now(timezone(timedelta(hours=9))).date()
     # The home timeline never broadens sharing to adult records or free-text notes.
-    allowed = ("record_key", "timestamp", "entry_type", "feeding_type", "diaper_type", "side",
+    start, end = period_bounds(period)
+    allowed = ("record_key", "timestamp", "end_timestamp", "subject_id", "subject_name", "entry_type", "feeding_type", "diaper_type", "side",
                "amount_ml", "duration_minutes", "sleep_duration_minutes", "sleep_quality", "pumped_amount_ml")
     result = []
     for entry in records:
         if entry["entry_type"] not in ("feeding", "diaper", "sleep", "pumping"):
             continue
-        recorded_at = datetime.fromisoformat(entry["timestamp"].replace("Z", "+00:00"))
-        if recorded_at.tzinfo is None:
-            recorded_at = recorded_at.replace(tzinfo=timezone.utc)
-        if recorded_at.astimezone(timezone(timedelta(hours=9))).date() != today:
+        if not in_period(entry, start, end):
             continue
         result.append({**{key: entry[key] for key in allowed if key in entry},
             "recorder_label": entry.get("recorder_label", ""), "recorder_number": numbers.get(entry["recorded_by"]),
             "is_own": entry["recorded_by"] == user.user_id})
-    return {"family_id": family_id, "day": today.isoformat(), "records": result, "checked_at": stamp(datetime.utcnow())}
+    return {"family_id": family_id, "day": today.isoformat(), "period": period,
+        "records": result, "checked_at": stamp(datetime.utcnow())}
 
 
 class HandoverAcknowledgement(BaseModel):
@@ -325,8 +326,10 @@ def accept_link(request: Request, body: InviteToken, user: User = Depends(get_cu
 
 class JourneyWrite(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    state: Literal["preparing", "waiting", "booked"] = "preparing"
+    state: Literal["preparing", "waiting", "booked", "completed", "paused"] = "preparing"
     next_contact_at: Optional[datetime] = None
+    contact_response: Optional[str] = Field(default=None, max_length=1500)
+    next_steps: Optional[str] = Field(default=None, max_length=1500)
     revision: int = Field(ge=0, strict=True)
     cleared: StrictBool = False
 
@@ -342,6 +345,7 @@ class JourneyWrite(BaseModel):
 
 def journey_dict(row):
     return {"contact_key": row.contact_key, "contact_name": row.contact_name, "state": row.state,
+        "contact_response": row.contact_response, "next_steps": row.next_steps,
         "next_contact_at": stamp(row.next_contact_at), "revision": row.revision, "cleared": row.cleared,
         "updated_at": stamp(row.updated_at)}
 
@@ -362,7 +366,9 @@ def save_journey(contact_key: str, body: JourneyWrite, user: User = Depends(get_
     if contact_key not in names and existing is None:
         raise HTTPException(404, "Contact not found")
     values = {"contact_name": names.get(contact_key, existing.contact_name if existing else ""),
-        "state": body.state if not body.cleared else "preparing", "next_contact_at": None if body.cleared else body.next_contact_at,
+        "state": body.state if not body.cleared else "preparing", "next_contact_at": None if body.cleared or body.state in ("completed", "paused") else body.next_contact_at,
+        "contact_response": "" if body.cleared else body.contact_response if body.contact_response is not None else existing.contact_response if existing else "",
+        "next_steps": "" if body.cleared else body.next_steps if body.next_steps is not None else existing.next_steps if existing else "",
         "cleared": body.cleared, "revision": body.revision + 1, "updated_at": datetime.utcnow()}
     try:
         if body.revision == 0:

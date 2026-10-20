@@ -4,9 +4,11 @@ from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional, Literal
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
+from hashlib import sha256
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -14,7 +16,7 @@ from config.settings import get_settings
 from dependencies.database import get_db
 from middleware.auth import get_current_user
 from middleware.rate_limit import RATE_LIMITS, rate_limit
-from models.database import PilotProfileDB, DirectoryWorkspaceDB, DirectoryHistoryDB
+from models.database import PilotProfileDB, DirectoryWorkspaceDB, DirectoryHistoryDB, DirectoryReviewTaskDB
 from models.schemas import User
 
 router = APIRouter(prefix="/api/pilot", tags=["local-pilot"])
@@ -135,6 +137,30 @@ class DirectoryDraftWrite(DirectoryWrite):
     profile: DraftProfile
 
 
+class DirectoryReviewWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    revision: int = Field(ge=0, strict=True)
+    workspace_revision: int = Field(ge=1, strict=True)
+    decision: Literal["pending", "deferred", "checked", "edited"]
+    reason: str = Field(default="", max_length=500)
+    assignee: str = Field(default="", max_length=100)
+    next_review_on: Optional[date] = None
+    confirmed: StrictBool = False
+    profile: Optional[DraftProfile] = None
+
+
+def resource_digest(resource):
+    return sha256(json.dumps(resource, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+
+
+def review_tasks(db, profile):
+    resources = {str(item["resource_key"]): item for item in profile.get("resources", [])}
+    return [{"contact_key": row.contact_key, "revision": row.revision, **row.details,
+        "stale": row.contact_key not in resources or resource_digest(resources[row.contact_key]) != row.resource_digest,
+        "updated_at": row.updated_at.isoformat() + "Z"}
+        for row in db.query(DirectoryReviewTaskDB).all()]
+
+
 def workspace(db, user_id):
     row = db.get(DirectoryWorkspaceDB, "local")
     if row is None:
@@ -169,7 +195,7 @@ def staff_state(db, user_id):
             "changes": changes, "published_at": item.published_at.isoformat() + "Z"})
     return {**read_profile(db), "workspace": {"profile": row.profile, "revision": row.revision,
         "updated_at": row.updated_at.isoformat() + "Z"},
-        "history": summaries}
+        "history": summaries, "review_tasks": review_tasks(db, row.profile)}
 
 
 def replace_draft(db, profile, revision, user_id):
@@ -194,6 +220,50 @@ def save_directory_draft(request: Request, body: DirectoryDraftWrite,
     current_user: User = Depends(require_institution_staff), db: Session = Depends(get_db)):
     replace_draft(db, body.profile.model_dump(mode="json"), body.revision, current_user.user_id)
     db.commit()
+    return staff_state(db, current_user.user_id)
+
+
+@router.post("/organization/review-tasks/{contact_key}")
+@rate_limit(RATE_LIMITS["default"])
+def save_review_task(request: Request, contact_key: UUID, body: DirectoryReviewWrite,
+                     current_user: User = Depends(require_institution_staff), db: Session = Depends(get_db)):
+    row = workspace(db, current_user.user_id)
+    locked = db.query(DirectoryWorkspaceDB).filter(DirectoryWorkspaceDB.id == "local",
+        DirectoryWorkspaceDB.revision == body.workspace_revision).update(
+        {"revision": DirectoryWorkspaceDB.revision}, synchronize_session=False)
+    if locked != 1:
+        db.rollback()
+        raise HTTPException(409, "The institution draft changed; review again")
+    today = datetime.now(timezone(timedelta(hours=9))).date()
+    if body.decision != "pending" and (body.next_review_on is None or body.next_review_on <= today):
+        raise HTTPException(422, "Choose a next review date after today")
+    if body.decision == "deferred" and not body.reason.strip():
+        raise HTTPException(422, "Record why this review was deferred")
+    if body.decision in ("checked", "edited") and (not body.confirmed or body.profile is None):
+        raise HTTPException(422, "Confirm the reviewed draft before recording completion")
+    profile = body.profile.model_dump(mode="json") if body.profile else row.profile
+    resource = next((item for item in profile.get("resources", []) if str(item["resource_key"]) == str(contact_key)), None)
+    if resource is None:
+        raise HTTPException(404, "Contact is no longer in the working draft")
+    if body.profile is not None:
+        replace_draft(db, profile, body.workspace_revision, current_user.user_id)
+    details = {"decision": body.decision, "reason": body.reason.strip(), "assignee": body.assignee.strip(),
+        "next_review_on": body.next_review_on.isoformat() if body.next_review_on else None}
+    values = {"details": details, "resource_digest": resource_digest(resource), "revision": body.revision + 1,
+        "updated_by": current_user.user_id, "updated_at": datetime.utcnow()}
+    try:
+        if body.revision == 0:
+            db.add(DirectoryReviewTaskDB(contact_key=str(contact_key), **values))
+        else:
+            changed = db.query(DirectoryReviewTaskDB).filter(DirectoryReviewTaskDB.contact_key == str(contact_key),
+                DirectoryReviewTaskDB.revision == body.revision).update(values, synchronize_session=False)
+            if changed != 1:
+                db.rollback()
+                raise HTTPException(409, "The internal review task changed; reload before saving")
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "The internal review task changed; reload before saving") from None
     return staff_state(db, current_user.user_id)
 
 

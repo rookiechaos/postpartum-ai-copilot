@@ -7,6 +7,7 @@ import './ExportData.css'
 
 // Backups preserve every supported record field; consultation formatting is intentionally compact.
 const backupFields = ['id', 'record_key', 'revision', 'user_id', 'entry_type', 'timestamp',
+  'end_timestamp', 'subject_id', 'subject_name', 'family_shared',
   'feeding_type', 'duration_minutes', 'amount_ml', 'side', 'diaper_type', 'sleep_duration_minutes',
   'sleep_quality', 'mood_level', 'mood_notes', 'pumped_amount_ml', 'weight_kg', 'breast_condition', 'recovery_notes', 'notes']
 
@@ -31,9 +32,9 @@ export default function ExportData({ userId }) {
       if (format === 'json') {
         content = JSON.stringify({ exportDate: new Date().toISOString(), userId, entries }, null, 2)
       } else {
-        const headers = [t('work.exportDate'), ...backupFields.map(key => `${t(`work.backupFields.${key}`)} (${key})`)]
+        const headers = [t('work.exportDate'), ...backupFields.map(key => `${t(['end_timestamp', 'subject_id', 'subject_name', 'family_shared'].includes(key) ? `continuity.backup.${key}` : `work.backupFields.${key}`)} (${key})`)]
         const rows = entries.map(entry => [entry.timestamp ? japanDateTime(entry.timestamp, language) : '',
-          ...backupFields.map(key => key === 'timestamp' && entry.timestamp ? utcDate(entry.timestamp).toISOString() : entry[key])])
+          ...backupFields.map(key => ['timestamp', 'end_timestamp'].includes(key) && entry[key] ? utcDate(entry[key]).toISOString() : entry[key])])
         content = '\uFEFF' + [headers, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n')
       }
       const url = URL.createObjectURL(new Blob([content], { type: format === 'json' ? 'application/json' : 'text/csv;charset=utf-8' }))

@@ -29,7 +29,7 @@ export default function SupportHub({ userId, visible, refreshKey, navigationRequ
       // preserve both the working sheet and any unapplied, edited question.
       setIncoming({ question, requestKey: navigationRequest.key })
       pendingFocus.current = null
-    } else pendingFocus.current = nextView
+    } else pendingFocus.current = navigationRequest.contactKey ? null : nextView
     setNavigation(value => value + 1)
   }, [navigationRequest])
   useEffect(() => {
@@ -49,7 +49,7 @@ export default function SupportHub({ userId, visible, refreshKey, navigationRequ
     {visited.map(key => <section key={key} id={`support-view-${key}`} className="support-view" hidden={view !== key}
       aria-labelledby={`support-heading-${key}`}>
       <h2 id={`support-heading-${key}`} tabIndex={-1} ref={element => { headings.current[key] = element }}>{t(`ui.support.${key}`)}</h2>
-      {key === 'contacts' ? <SupportDirectory userId={userId} visible={visible && view === key} onPrepareSheet={onPrepareSheet} /> : <>
+      {key === 'contacts' ? <SupportDirectory userId={userId} visible={visible && view === key} onPrepareSheet={onPrepareSheet} navigationRequest={navigationRequest} /> : <>
         <p className="view-intro">{t('ui.support.sheetIntro')}</p>
         <button type="button" className="pilot-button secondary" onClick={() => open('contacts')}>{t('ui.support.backContacts')}</button>
         <ShareSummary userId={userId} visible={visible && view === key} refreshKey={refreshKey}

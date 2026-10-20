@@ -14,6 +14,10 @@ import { useToast } from './Toast'
 import RecordTime, { useRecordClock } from './RecordTime'
 import RecordSaveStatus from './RecordSaveStatus'
 import { revealElement } from '../utils/focusView'
+import { useCareSession, useCareWork } from '../utils/CareSession'
+import { CareSubjectFields, CareRecordIdentity, privateSubject, babyKinds } from './CareSubject'
+import useDuplicateReview from '../utils/useDuplicateReview'
+import DuplicateReview from './DuplicateReview'
 import './TrackingPanel.css'
 
 const types = ['feeding', 'diaper', 'sleep', 'mood', 'pumping', 'recovery']
@@ -23,6 +27,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   const { online, reconnections } = useConnection()
   const now = useRecordClock(visible)
   const toast = useToast()
+  const duplicates = useDuplicateReview()
   const [entries, setEntries] = useState([])
   const [entriesLoading, setEntriesLoading] = useState(true)
   const [summary, setSummary] = useState(null)
@@ -68,6 +73,12 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     setSaveStatus(content.pendingSave ? 'unconfirmed' : '')
   })
   const summaryVersion = useRef(0)
+  useCareWork('record', pendingSave ? { version: `${pendingSave.data.request_key}:${saveStatus}`, title: duplicates.review ? 'continuity.work.duplicateReview'
+    : saveStatus === 'offline' ? 'continuity.work.recordUnsent' : 'continuity.work.recordPending', priority: 0,
+    tab: 'tracking', detail: { action: 'resume' } } : draft.candidate || formDraft ? {
+    version: draft.candidate?.updated_at || String(formRevision), title: 'continuity.work.recordRecovery', priority: 3,
+    tab: 'tracking', detail: { action: 'resume' },
+  } : null)
 
   useEffect(() => {
     if (!visible) return
@@ -92,6 +103,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   useEffect(() => {
     if (consumedRequest.current === requestKey) return
     consumedRequest.current = requestKey
+    if (initialEntryType?.action === 'resume') { pendingFormFocus.current = true; setFormFocus(value => value + 1); return }
     const record = initialEntryType?.action === 'edit' ? initialEntryType.record : null
     const request = record && types.includes(record.entry_type) && Number.isInteger(record.id)
       && typeof record.record_key === 'string' && Number.isInteger(record.revision) ? { record }
@@ -112,6 +124,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   }, [visible, openRequest, pendingSave, loading, formDraft, draft.candidate, draft.status])
   useEffect(() => {
     if (visible && showAddForm && pendingFormFocus.current && revealElement(formHeading.current)) pendingFormFocus.current = false
+    else if (visible && pendingFormFocus.current && initialEntryType?.action === 'resume' && revealElement(document.getElementById('tracking-resume-heading'))) pendingFormFocus.current = false
   }, [visible, showAddForm, formFocus])
 
   useEffect(() => {
@@ -138,6 +151,8 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     writing.current = true
     setPendingSave(operation); setLoading(true); setSaveStatus('saving')
     try {
+      if (!pendingSave && !operation.editing && !(await duplicates.check(operation.data))) { setSaveStatus('unsaved'); return false }
+      duplicates.clear()
       if (operation.editing) await api.updateTrackingEntry(operation.editing.id, {
         ...payload(operation.data), record_key: operation.editing.record_key, revision: operation.editing.revision,
       })
@@ -162,7 +177,8 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     finally { writing.current = false; setLoading(false) }
   }
   const cancelForm = () => {
-    if (pendingSave && !window.confirm(t('polish.abandonWrite'))) return
+    if (pendingSave && !duplicates.review && !window.confirm(t('polish.abandonWrite'))) return
+    duplicates.clear()
     unconfirmedRequest.current = null
     setSaveStatus('')
     setPendingSave(null); setFormDraft(null); setRestoredForm(null); setShowAddForm(false); setEditing(null)
@@ -211,7 +227,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   }
 
   return <div className="tracking-panel">
-    <div className="tracking-header"><h2>{t('tracking.title')}</h2>
+    <div className="tracking-header"><h2 id="tracking-resume-heading" tabIndex={-1}>{t('tracking.title')}</h2>
       <button className="add-button" disabled={loading || (!showAddForm && (Boolean(draft.candidate) || draft.status === 'loading'))} onClick={() => {
         if (showAddForm) cancelForm()
         else openRecord({ entryType })
@@ -229,12 +245,15 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
       </div>
     </section>}
     <RecordSaveStatus status={saveStatus} />
+    <DuplicateReview review={duplicates.review} disabled={loading} onContinue={() => saveEntry()} onCancel={() => {
+      duplicates.clear(); setPendingSave(null); setSaveStatus(''); draft.clear()
+    }} />
     {pendingSave && <button type="button" className="pilot-button secondary" disabled={loading} onClick={() => setAttempt(value => value + 1)}>{t('flows.connection.checkRecords')}</button>}
     {pendingSave && <p>{t('localCare.record.retryHint')} {japanDateTime(pendingSave.data.timestamp, i18n.resolvedLanguage || 'ja')}</p>}
     {showAddForm && <div ref={formHeading} tabIndex={-1} className="record-form-region" role="region" aria-label={t(editing ? 'work.editRecord' : 'tracking.addEntry')}>
       <EntryForm key={`${editing ? `edit:${editing.record_key}:${editing.revision}` : 'new'}:${formRevision}`}
       entryType={entryType} initialEntry={editing} restored={restoredForm} onDraftChange={setFormDraft} locked={Boolean(pendingSave)}
-      onEntryTypeChange={setEntryType} onSubmit={saveEntry} onCancel={cancelForm} loading={loading} saving={saveStatus === 'saving'} /></div>}
+      onEntryTypeChange={setEntryType} onSubmit={saveEntry} onCancel={cancelForm} loading={loading || Boolean(duplicates.review)} saving={saveStatus === 'saving'} /></div>}
     {undoEntry && <div className="pilot-panel undo-notice" role="status"><p>{t('work.lastDeleted')}</p>
       <button className="pilot-button secondary" disabled={loading || Boolean(pendingSave)} onClick={restoreEntry}>{t('work.undoDelete')}</button></div>}
     <section className="entries-list"><h3>{t('tracking.recentEntries')}</h3><p>{t('pilot.japanTime')}</p>
@@ -247,6 +266,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
       {entries.map(entry => <article key={entry.record_key} className="tracking-entry-card">
         <div className="entry-header"><strong>{t(`tracking.${entry.entry_type}`)}</strong><RecordTime value={entry.timestamp} now={now} /></div>
         <div className="entry-details">
+          <CareRecordIdentity record={entry} />
           {entry.feeding_type && <span>{t(`tracking.${entry.feeding_type}`)}</span>}
           {entry.side && <span>{t(`localCare.record.sides.${entry.side}`, { defaultValue: entry.side })}</span>}
           {entry.diaper_type && <span>{t(`tracking.${entry.diaper_type}`)}</span>}
@@ -286,23 +306,32 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
 
 function EntryForm({ entryType, initialEntry, restored, onDraftChange, locked, onEntryTypeChange, onSubmit, onCancel, loading, saving }) {
   const { t } = useTranslation()
-  const [formData, setFormData] = useState(restored?.formData || (initialEntry ? payload(initialEntry) : {}))
+  const care = useCareSession()
+  const [formData, setFormData] = useState(restored?.formData || (initialEntry ? payload(initialEntry) : privateSubject(babyKinds.includes(entryType) ? care.activeId : '')))
+  const [hasEnd, setHasEnd] = useState(Boolean((restored?.formData || initialEntry)?.end_timestamp))
   const [when, setWhen] = useState(restored?.when || (initialEntry ? 'specific' : 'now'))
   const [recordedAt, setRecordedAt] = useState(restored?.recordedAt || japanDateTimeInput(initialEntry?.timestamp || new Date()))
   const [error, setError] = useState('')
   const previousType = useRef(entryType)
   useEffect(() => {
-    const meaningful = when === 'specific' || Object.values(formData).some(value => value !== null && value !== undefined && value !== '')
+    const meaningful = when === 'specific' || Object.entries(formData).some(([key, value]) =>
+      !['subject_id', 'family_shared', 'sharing_revision'].includes(key) && value !== null && value !== undefined && value !== '')
     onDraftChange(meaningful ? { formData, when, recordedAt } : null)
   }, [formData, when, recordedAt, onDraftChange])
   useEffect(() => {
     if (previousType.current === entryType) return
     previousType.current = entryType
     // Keep the same form instance, date/time and common note, including home shortcuts.
-    setFormData(previous => ({ notes: previous.notes || '' }))
+    setFormData(previous => ({ ...privateSubject(babyKinds.includes(entryType) ? previous.subject_id : ''), end_timestamp: null, notes: previous.notes || '' }))
+    setHasEnd(false)
     setError('')
   }, [entryType])
   const feedingMethod = formData.feeding_type
+  const displayStart = initialEntry && when === 'specific' && recordedAt === japanDateTimeInput(initialEntry.timestamp)
+    ? utcDate(initialEntry.timestamp) : when === 'now' ? new Date() : new Date(`${recordedAt}:00+09:00`)
+  const displayEnd = formData.end_timestamp ? utcDate(formData.end_timestamp) : null
+  const displayMinutes = displayEnd && Number.isFinite(displayEnd.getTime()) && Number.isFinite(displayStart.getTime()) && displayEnd >= displayStart
+    ? Math.floor((displayEnd - displayStart) / 60000) : ''
   const breastFields = [['duration_minutes', 'duration', 'number'], ['side', 'side', ['left', 'right', 'both']]]
   const milkFields = [['amount_ml', 'amount', 'number']]
   const mainFeedingFields = feedingMethod === 'breast' ? breastFields : feedingMethod === 'formula' ? milkFields
@@ -328,7 +357,7 @@ function EntryForm({ entryType, initialEntry, restored, onDraftChange, locked, o
         {t(key === 'side' ? `localCare.record.sides.${value}` : `tracking.${value}`)}</button>)}
     </div></fieldset>
     : <label key={key}>{fieldLabel(key, label)}<input type="number" inputMode={key.endsWith('_minutes') ? 'numeric' : 'decimal'}
-      min="0" step={key.endsWith('_minutes') ? '1' : '0.1'} value={formData[key] ?? ''}
+      disabled={hasEnd && key.endsWith('_minutes')} min="0" step={key.endsWith('_minutes') ? '1' : '0.1'} value={hasEnd && key.endsWith('_minutes') ? displayMinutes : formData[key] ?? ''}
       onChange={event => setFormData({ ...formData, [key]: event.target.value === '' ? null : Number(event.target.value) })} /></label>
   return <form className="entry-form" onSubmit={event => {
     event.preventDefault()
@@ -338,8 +367,15 @@ function EntryForm({ entryType, initialEntry, restored, onDraftChange, locked, o
     if (!Number.isFinite(date.getTime()) || date.getTime() > Date.now() + 60000) { setError(t('work.invalidTime')); return }
     if (date < earliestRecordTime()) { setError(t('work.recordTooOld')); return }
     const unchangedTime = initialEntry && when === 'specific' && recordedAt === japanDateTimeInput(initialEntry.timestamp)
+    const timestamp = unchangedTime ? utcDate(initialEntry.timestamp).toISOString() : date.toISOString()
+    const interval = { end_timestamp: hasEnd ? formData.end_timestamp : null }
+    if (hasEnd) {
+      const ended = utcDate(formData.end_timestamp)
+      if (!formData.end_timestamp || !Number.isFinite(ended.getTime()) || ended < utcDate(timestamp) || ended.getTime() > Date.now() + 60000) { setError(t('work.invalidTime')); return }
+      interval[entryType === 'feeding' ? 'duration_minutes' : 'sleep_duration_minutes'] = Math.floor((ended - utcDate(timestamp)) / 60000)
+    }
     setError('')
-    onSubmit({ ...formData, entry_type: entryType, timestamp: unchangedTime ? utcDate(initialEntry.timestamp).toISOString() : date.toISOString() })
+    onSubmit({ ...formData, ...interval, entry_type: entryType, timestamp })
   }}><fieldset disabled={loading || locked}>
     <legend>{t(initialEntry ? 'work.editRecord' : 'tracking.addEntry')}</legend>
     {initialEntry && <p>{t('work.recordTypeChangeNotice')}</p>}
@@ -349,12 +385,23 @@ function EntryForm({ entryType, initialEntry, restored, onDraftChange, locked, o
       {[['babyGroup', ['feeding', 'diaper', 'sleep', 'pumping']], ['selfGroup', ['mood', 'recovery']]].map(([group, options]) =>
         <optgroup key={group} label={t(`localCare.record.${group}`)}>{options.map(type => <option key={type} value={type}>{t(`tracking.${type}`)}</option>)}</optgroup>)}
     </select></label>
+    <CareSubjectFields value={formData} kind={entryType} onChange={scope => setFormData(previous => ({ ...previous, ...scope }))} />
     <label>{t('work.recordTime')}<select value={when} onChange={event => setWhen(event.target.value)}>
       <option value="now">{t('work.now')}</option><option value="specific">{t('work.chooseTime')}</option>
     </select></label>
     {when === 'specific' && <label>{t('pilot.japanTime')}<input type="datetime-local" required value={recordedAt}
       min={japanDateTimeInput(earliestRecordTime())} max={japanDateTimeInput()} onChange={event => setRecordedAt(event.target.value)} /></label>}
     <p>{t('work.recordWindowNotice')}</p>
+    {['feeding', 'sleep'].includes(entryType) && <>
+      <label><input type="checkbox" checked={hasEnd} onChange={event => { setHasEnd(event.target.checked); setFormData(previous => ({ ...previous, end_timestamp: null })) }} />{t('continuity.period.keepEnd')}</label>
+      {hasEnd && <label>{t('interaction.timer.endTime')}<input type="datetime-local" required max={japanDateTimeInput()}
+        value={formData.end_timestamp ? japanDateTimeInput(formData.end_timestamp) : ''} onChange={event => {
+          const value = event.target.value
+          const date = new Date(`${value}:00+09:00`)
+          setFormData(previous => ({ ...previous, end_timestamp: value && Number.isFinite(date.getTime()) ? date.toISOString() : null }))
+        }} /></label>}
+      {hasEnd && <p>{t('continuity.period.deriveDuration')}</p>}
+    </>}
     {fields[entryType].filter(([, , kind]) => kind !== 'textarea').map(renderField)}
     {entryType === 'feeding' && <>
       {!mainFeedingFields.length && <p className="field-hint">{t('localCare.record.chooseFeeding')}</p>}

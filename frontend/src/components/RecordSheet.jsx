@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { buildCareSummary } from '../utils/careSummary'
 import RecordTime from './RecordTime'
 import RecordEditor from './RecordEditor'
+import { CareRecordIdentity } from './CareSubject'
 
 export default function RecordSheet({ record, own, visible, onClose, onSaved, onFullEdit }) {
   const { t, i18n } = useTranslation()
@@ -25,6 +26,7 @@ export default function RecordSheet({ record, own, visible, onClose, onSaved, on
       <button type="button" className="pilot-button secondary" onClick={close}>{t('interaction.close')}</button></header>
       <p>{t(own ? 'polish.recordedByYou' : 'polish.recordedBy', { name: record.recorder_label || t('polish.memberNumber', { number: record.recorder_number || '?' }) })}</p>
       <RecordTime value={record.timestamp} />
+      <CareRecordIdentity record={record} />
       <p className="preserve-lines">{buildCareSummary([record], { includeParent: own, includeNotes: own,
         language: i18n.resolvedLanguage || 'ja', t })}</p>
       {editing ? <RecordEditor ref={editor} record={record} onSaved={onSaved} onCancel={() => setEditing(false)} />

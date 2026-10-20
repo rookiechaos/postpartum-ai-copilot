@@ -7,14 +7,22 @@ import { isRecordOperation, recordOperation, requestKey } from '../utils/recordO
 import useAccountDraft from '../utils/useAccountDraft'
 import { DraftRecoveryNotice } from './DraftRecovery'
 import RecordSaveStatus from './RecordSaveStatus'
+import { useCareSession, useCareWork } from '../utils/CareSession'
+import { CareSubjectFields, privateSubject } from './CareSubject'
+import useDuplicateReview from '../utils/useDuplicateReview'
+import DuplicateReview from './DuplicateReview'
 
 const validTimer = value => value && ['feeding', 'sleep'].includes(value.entry_type)
   && typeof value.started_at === 'string' && Number.isFinite(utcDate(value.started_at).getTime())
   && (value.ended_at === null || (typeof value.ended_at === 'string' && Number.isFinite(utcDate(value.ended_at).getTime())))
   && isRecordOperation({ entry_type: value.entry_type, timestamp: value.started_at, request_key: value.request_key })
 
-export default function CareTimer({ userId, visible, requestedKind, requestVersion, blocked, onRecordsChanged }) {
+export default function CareTimer({ userId, visible, requestedKind, requestVersion, blocked, onRecordsChanged, onLocate }) {
   const { t, i18n } = useTranslation()
+  const care = useCareSession()
+  const duplicates = useDuplicateReview()
+  const [subjectScope, setSubjectScope] = useState(null)
+  const [lastSaved, setLastSaved] = useState(null)
   const [kind, setKind] = useState('feeding')
   const [side, setSide] = useState('')
   const [timer, setTimer] = useState(null)
@@ -31,7 +39,7 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
   const writing = useRef(false)
   const uncertain = useRef(false)
   const hidden = useRef(false)
-  const content = timer ? { timer, start, end, side, pending } : null
+  const content = timer ? { timer, start, end, side, pending, subjectScope } : null
   const draft = useAccountDraft('timer', userId, content, value => {
     if (!validTimer(value.timer) || (value.pending && (!isRecordOperation(value.pending)
       || value.pending.request_key !== value.timer.request_key || value.pending.entry_type !== value.timer.entry_type
@@ -40,9 +48,17 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
     setStart(typeof value.start === 'string' ? value.start : japanDateTimeInput(value.timer.started_at))
     setEnd(typeof value.end === 'string' ? value.end : value.timer.ended_at ? japanDateTimeInput(value.timer.ended_at) : '')
     setSide(['left', 'right', 'both'].includes(value.side) ? value.side : '')
+    setSubjectScope(value.subjectScope || privateSubject(''))
     setPending(value.pending || null); uncertain.current = Boolean(value.pending)
     setStatus(value.pending ? 'unconfirmed' : ''); setReturned(true); setConfirmed(false)
   })
+  useCareWork('timer', timer ? { version: `${timer.request_key}:${timer.ended_at || 'running'}:${status}`,
+    title: duplicates.review ? 'continuity.work.duplicateReview' : pending && status === 'offline' ? 'continuity.work.recordUnsent'
+      : pending ? 'continuity.work.timerPending' : timer.ended_at ? 'continuity.work.timerReview' : 'continuity.work.timerRunning',
+    priority: pending ? 0 : 1, tab: 'dashboard', detail: { section: 'care-timer-heading' } } : draft.candidate ? {
+    version: draft.candidate.updated_at, title: 'continuity.work.timerRecovery', priority: 2,
+    tab: 'dashboard', detail: { section: 'care-timer-heading' },
+  } : null)
   useEffect(() => {
     if (['feeding', 'sleep'].includes(requestedKind)) {
       setExpanded(true)
@@ -71,7 +87,9 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
   const begin = () => {
     if (timer || writing.current || blocked || draft.candidate || draft.status === 'loading') return
     const startedAt = new Date().toISOString()
+    duplicates.clear()
     setTimer({ entry_type: kind, started_at: startedAt, ended_at: null, request_key: requestKey() })
+    setSubjectScope(privateSubject(care.activeId)); setLastSaved(null)
     setStart(japanDateTimeInput(startedAt)); setEnd(''); setClock(Date.now()); setStatus(''); setError('')
     setReturned(false); setConfirmed(false); uncertain.current = false; hidden.current = false
   }
@@ -87,7 +105,8 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
     && endedAt >= startedAt && endedAt.getTime() <= Date.now() + 60000 && startedAt >= earliestRecordTime()
   const elapsed = timer ? Math.max(0, Math.floor((clock - utcDate(timer.started_at).getTime()) / 1000)) : 0
   const busy = ['saving', 'checking', 'clearing'].includes(status)
-  const finish = async () => {
+  const finish = async saved => {
+    setLastSaved(saved)
     uncertain.current = false; setPending(null); setTimer(null); setConfirmed(false); setReturned(false)
     setStart(''); setEnd(''); setSide(''); setError(''); setStatus('saving'); onRecordsChanged()
     await draft.clear(); setStatus('saved')
@@ -97,14 +116,17 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
     if (writing.current || blocked || !timer || !confirmed) return
     if (!pending && !validTimes) { setError('invalidTime'); return }
     const operation = pending || { ...recordOperation({ entry_type: timer.entry_type, timestamp: startedAt.toISOString(),
+      end_timestamp: endedAt.toISOString(), ...(subjectScope || privateSubject('')),
       ...(timer.entry_type === 'feeding' ? { feeding_type: 'breast', duration_minutes: duration, side: side || null }
         : { sleep_duration_minutes: duration }) }), request_key: timer.request_key }
     setPending(operation)
     if (navigator.onLine === false) { setStatus(uncertain.current ? 'unconfirmed' : 'offline'); return }
     writing.current = true; setStatus('saving'); setError('')
     try {
-      await api.addTrackingEntry(operation)
-      await finish()
+      if (!pending && !(await duplicates.check(operation))) { setStatus('unsaved'); return }
+      duplicates.clear()
+      const result = await api.addTrackingEntry(operation)
+      await finish({ ...operation, ...result })
     } catch (failure) {
       if (!(failure.status >= 400 && failure.status < 500)) uncertain.current = true
       setStatus(uncertain.current ? 'unconfirmed' : 'unsaved')
@@ -118,9 +140,11 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
     try {
       const result = await api.get(`/api/tracking/operations/${pending.request_key}`)
       const record = result.record
-      const fields = pending.entry_type === 'feeding' ? ['entry_type', 'feeding_type', 'duration_minutes', 'side'] : ['entry_type', 'sleep_duration_minutes']
-      if (result.state === 'saved' && utcDate(record.timestamp).getTime() === utcDate(pending.timestamp).getTime()
-        && fields.every(key => (record[key] ?? null) === (pending[key] ?? null))) await finish()
+      const fields = [...(pending.entry_type === 'feeding' ? ['entry_type', 'feeding_type', 'duration_minutes', 'side'] : ['entry_type', 'sleep_duration_minutes']),
+        ...['subject_id', 'family_shared'].filter(key => Object.prototype.hasOwnProperty.call(pending, key))]
+      const sameEnd = pending.end_timestamp === undefined || (record?.end_timestamp && utcDate(record.end_timestamp).getTime() === utcDate(pending.end_timestamp).getTime())
+      if (result.state === 'saved' && record.revision === 1 && sameEnd && utcDate(record.timestamp).getTime() === utcDate(pending.timestamp).getTime()
+        && fields.every(key => (record[key] ?? null) === (pending[key] ?? null))) await finish(record)
       else if (result.state === 'saved' || result.state === 'deleted') { setError('conflict'); setStatus('unconfirmed'); onRecordsChanged() }
       else { setError('notFound'); setStatus(uncertain.current ? 'unconfirmed' : 'unsaved'); onRecordsChanged() }
     } catch { setError('checkFailed'); setStatus(uncertain.current ? 'unconfirmed' : 'unsaved') }
@@ -132,6 +156,7 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
     try {
       const cleared = await draft.clear()
       if (!cleared) { setError('draftClear'); setStatus(pending ? 'unconfirmed' : ''); return }
+      duplicates.clear()
       uncertain.current = false; setTimer(null); setPending(null); setStatus(''); setConfirmed(false); setError(''); setSide('')
     } finally { writing.current = false }
   }
@@ -154,6 +179,7 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
       {returned && <p role="status">{t('interaction.timer.returned')}</p>}
       {timer.ended_at && <form onSubmit={save}><fieldset disabled={busy || Boolean(pending)}>
         <legend>{t('interaction.timer.review')}</legend>
+        <CareSubjectFields value={subjectScope || privateSubject('')} kind={timer.entry_type} onChange={value => { setSubjectScope(value); setConfirmed(false) }} />
         <label>{t('interaction.timer.startTime')}<input type="datetime-local" required value={start}
           min={japanDateTimeInput(earliestRecordTime())} max={japanDateTimeInput()} onChange={event => { setStart(event.target.value); setConfirmed(false) }} /></label>
         <label>{t('interaction.timer.endTime')}<input type="datetime-local" required value={end} max={japanDateTimeInput()}
@@ -167,12 +193,16 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
         {pending && <p>{t('interaction.timer.pendingPreview', { time: japanDateTime(pending.timestamp, i18n.resolvedLanguage || 'ja'),
           count: pending.duration_minutes ?? pending.sleep_duration_minutes })}</p>}
         <label><input type="checkbox" disabled={busy} checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />{t('interaction.timer.confirm')}</label>
-        <button type="submit" className="pilot-button" disabled={blocked || busy || !confirmed || (!pending && !validTimes) || error === 'conflict'}>
+        <button type="submit" className="pilot-button" disabled={blocked || busy || Boolean(duplicates.review) || !confirmed || (!pending && !validTimes) || error === 'conflict'}>
         {t(pending ? 'localCare.record.resend' : 'interaction.timer.save')}</button></form>}
+      <DuplicateReview review={duplicates.review} disabled={busy} continueDisabled={blocked || !confirmed || error === 'conflict'} onContinue={() => save({ preventDefault() {} })} onCancel={() => {
+        duplicates.clear(); setPending(null); setStatus(''); setConfirmed(false)
+      }} />
       {pending && <p>{t('localCare.record.retryHint')} <button type="button" className="text-action" disabled={busy} onClick={check}>{t('localCare.record.check')}</button></p>}
       <button type="button" className="pilot-button secondary" disabled={busy} onClick={discard}>{t('interaction.timer.discard')}</button>
     </>}
     {['checking', 'clearing'].includes(status) ? <p role="status">{t('common.loading')}</p> : <RecordSaveStatus status={status} />}
     {error && <p role="alert">{t(`interaction.timer.errors.${error}`)}</p>}
+    {lastSaved && <button type="button" className="pilot-button secondary" onClick={() => onLocate?.(lastSaved)}>{t('continuity.period.findSaved')}</button>}
   </details>
 }

@@ -13,7 +13,8 @@ from models.database import TrackingEntryDB, TrackingWriteDB, UserContextDB
 from models.schemas import TrackingEntry, TrackingEntryUpdate
 from exceptions import DatabaseError, ValidationError, NotFoundError, ConflictError
 from utils.db_helpers import query_in_executor
-from services.tracking_policy import validate_record_time
+from services.tracking_policy import validate_record_time, validate_record_interval
+from services.care_subjects import validate_attribution, owned_record_metadata
 
 
 class TrackingService:
@@ -33,13 +34,22 @@ class TrackingService:
             if record.record_key != str(entry.record_key) or record.revision != entry.revision:
                 db.rollback()
                 return "conflict", None
-            values = entry.model_dump(exclude={"id", "user_id", "record_key", "revision", "timestamp"}, mode="python")
+            values = entry.model_dump(exclude={"id", "user_id", "record_key", "revision", "timestamp", "sharing_revision", "subject_name"}, mode="python")
             values = {key: value.value if hasattr(value, "value") else value for key, value in values.items()}
+            for field in ("subject_id", "family_shared", "end_timestamp"):
+                if field not in entry.model_fields_set and values["entry_type"] == record.entry_type:
+                    values[field] = getattr(record, field)
+            values["subject_id"] = str(values["subject_id"]) if values.get("subject_id") else None
             values.update(timestamp=timestamp or record.timestamp, revision=entry.revision + 1)
+            validate_record_interval(values)
+            validate_attribution(db, user_id, values, entry.sharing_revision)
             # Snapshot before committing; never refetch a possibly reused numeric ID.
             result = self._entry_to_dict(record)
             result.update(values)
             result["timestamp"] = values["timestamp"].isoformat()
+            result["end_timestamp"] = values["end_timestamp"].isoformat() if values.get("end_timestamp") else None
+            metadata = owned_record_metadata(db, user_id).get(values["subject_id"], {})
+            result.update(subject_name=metadata.get("nickname"), sharing_revision=metadata.get("sharing_revision"))
             affected = db.query(TrackingEntryDB).filter(
                 TrackingEntryDB.id == entry_id, TrackingEntryDB.user_id == user_id,
                 TrackingEntryDB.record_key == str(entry.record_key), TrackingEntryDB.revision == entry.revision,
@@ -93,9 +103,17 @@ class TrackingService:
         request_key = str(entry.request_key) if getattr(entry, "request_key", None) else None
         if request_key and entry.timestamp is None:
             raise ValidationError("Retryable writes require an explicit record timestamp")
-        values = entry.model_dump(exclude={"id", "user_id", "record_key", "revision", "request_key"}, mode="json")
-        values["timestamp"] = timestamp.isoformat()
-        fingerprint = sha256(json.dumps(values, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        values = entry.model_dump(exclude={"id", "user_id", "record_key", "revision", "request_key", "sharing_revision", "subject_name"}, mode="python")
+        values = {key: value.value if hasattr(value, "value") else value for key, value in values.items()}
+        values["subject_id"] = str(values["subject_id"]) if values.get("subject_id") else None
+        values["timestamp"] = timestamp
+        validate_record_interval(values)
+        fingerprint_values = {key: value.isoformat() if isinstance(value, datetime) else value for key, value in values.items()}
+        # Keep pre-attribution creation receipts retryable without changing their fingerprint.
+        for key in ("subject_id", "family_shared", "end_timestamp"):
+            if key not in entry.model_fields_set:
+                fingerprint_values.pop(key, None)
+        fingerprint = sha256(json.dumps(fingerprint_values, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
         def _receipt():
             receipt = db.get(TrackingWriteDB, (entry.user_id, request_key))
@@ -114,16 +132,18 @@ class TrackingService:
                 if previous is not None:
                     db.rollback()
                     return previous
+            validate_attribution(db, entry.user_id, values, entry.sharing_revision)
             db_entry = TrackingEntryDB(
                 user_id=entry.user_id,
                 entry_type=entry.entry_type.value,
                 timestamp=timestamp,
+                subject_id=values["subject_id"], family_shared=values["family_shared"], end_timestamp=values["end_timestamp"],
                 feeding_type=entry.feeding_type.value if entry.feeding_type else None,
-                duration_minutes=entry.duration_minutes,
+                duration_minutes=values["duration_minutes"],
                 amount_ml=entry.amount_ml,
                 side=entry.side,
                 diaper_type=entry.diaper_type.value if entry.diaper_type else None,
-                sleep_duration_minutes=entry.sleep_duration_minutes,
+                sleep_duration_minutes=values["sleep_duration_minutes"],
                 sleep_quality=entry.sleep_quality,
                 mood_level=entry.mood_level.value if entry.mood_level else None,
                 mood_notes=entry.mood_notes,
@@ -136,12 +156,16 @@ class TrackingService:
             
             db.add(db_entry)
             db.flush()
+            subject = owned_record_metadata(db, entry.user_id).get(db_entry.subject_id, {})
             result = {
                 "id": db_entry.id,
                 "record_key": db_entry.record_key,
                 "revision": db_entry.revision,
                 "message": "Entry added successfully",
                 "timestamp": db_entry.timestamp.isoformat(),
+                "end_timestamp": db_entry.end_timestamp.isoformat() if db_entry.end_timestamp else None,
+                "subject_id": db_entry.subject_id, "family_shared": db_entry.family_shared,
+                "subject_name": subject.get("nickname"), "sharing_revision": subject.get("sharing_revision"),
             }
             if request_key:
                 db.add(TrackingWriteDB(user_id=entry.user_id, request_key=request_key,
@@ -180,9 +204,9 @@ class TrackingService:
         def _get_entries():
             entries = db.query(TrackingEntryDB).filter(
                 TrackingEntryDB.user_id == user_id,
-                TrackingEntryDB.timestamp >= cutoff_date
+                or_(TrackingEntryDB.timestamp >= cutoff_date, TrackingEntryDB.end_timestamp >= cutoff_date)
             ).order_by(desc(TrackingEntryDB.timestamp)).all()
-            return [self._entry_to_dict(entry) for entry in entries]
+            return self._owned_entries(entries, db, user_id)
         
         return await query_in_executor(
             _get_entries,
@@ -195,7 +219,7 @@ class TrackingService:
             rows = db.query(TrackingEntryDB).filter(TrackingEntryDB.user_id == user_id,
                 TrackingEntryDB.timestamp >= datetime.utcnow() - timedelta(days=365),
             ).order_by(desc(TrackingEntryDB.timestamp), desc(TrackingEntryDB.id)).limit(6).all()
-            return [self._entry_to_dict(row) for row in rows]
+            return self._owned_entries(rows, db, user_id)
         return await query_in_executor(_latest, db, error_message="Failed to load recent records")
 
     async def get_recent_entries(
@@ -340,6 +364,8 @@ class TrackingService:
             "user_id": entry.user_id,
             "entry_type": entry.entry_type,
             "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
+            "end_timestamp": entry.end_timestamp.isoformat() if entry.end_timestamp else None,
+            "subject_id": entry.subject_id, "family_shared": entry.family_shared,
             "feeding_type": entry.feeding_type,
             "duration_minutes": entry.duration_minutes,
             "amount_ml": entry.amount_ml,
@@ -355,6 +381,15 @@ class TrackingService:
             "recovery_notes": entry.recovery_notes,
             "notes": entry.notes
         }
+
+    def _owned_entries(self, entries, db, user_id):
+        subjects = owned_record_metadata(db, user_id)
+        result = []
+        for entry in entries:
+            subject = subjects.get(entry.subject_id, {})
+            result.append({**self._entry_to_dict(entry), "subject_name": subject.get("nickname"),
+                "sharing_revision": subject.get("sharing_revision")})
+        return result
     
     async def get_weight_trends(
         self,

@@ -137,6 +137,8 @@ from api.family_routes import router as family_router
 app.include_router(family_router, prefix="/api/families", tags=["families"])
 from api.care_flow_routes import router as care_flow_router
 app.include_router(care_flow_router)
+from api.care_subject_routes import router as care_subject_router
+app.include_router(care_subject_router)
 
 # Payment routes
 from api.payment_routes import router as payment_router

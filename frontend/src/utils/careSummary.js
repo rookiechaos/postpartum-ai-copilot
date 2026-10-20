@@ -7,6 +7,7 @@ export function buildCareSummary(entries, { includeParent = false, includeNotes 
   return entries.filter(entry => care.has(entry.entry_type) || (includeParent && parent.has(entry.entry_type)))
     .map(entry => {
       const fields = [japanDateTime(entry.timestamp, language), t(`tracking.${entry.entry_type}`)]
+      if (entry.end_timestamp) fields.push(t('continuity.period.ended', { time: japanDateTime(entry.end_timestamp, language) }))
       const measurements = {
         feeding: [['amount_ml', 'mL'], ['duration_minutes', t('pilot.minutes')]],
         pumping: [['pumped_amount_ml', 'mL']],
@@ -31,7 +32,7 @@ export function buildCareSummary(entries, { includeParent = false, includeNotes 
 }
 
 export function buildConsultationSheet(entries, { days = 7, questions = [], includeParent = false,
-  includeNotes = false, includeDetails = false, language = 'ja', t, now = new Date() }) {
+  includeNotes = false, includeDetails = false, language = 'ja', t, now = new Date(), subjectLabel = '' }) {
   const end = japanDay(now)
   const start = japanDay(new Date(now.getTime() - (days - 1) * 86400000))
   const types = ['feeding', 'diaper', 'sleep', 'pumping', ...(includeParent ? ['mood', 'recovery'] : [])]
@@ -44,6 +45,7 @@ export function buildConsultationSheet(entries, { days = 7, questions = [], incl
   if (selected.length === 0 && asked.length === 0) return ''
   const recordedDays = new Set(selected.map(entry => japanDay(entry.timestamp))).size
   const lines = [t('pilot.summaryHeader'), `${t('work.sheetPeriod')}: ${start} — ${end}`, '',
+    ...(subjectLabel ? [subjectLabel, ''] : []),
     t('work.sheetQuestions'), ...asked.map((value, index) => `${index + 1}. ${value}`)]
   if (!asked.length) lines.push(t('work.noQuestions'))
   lines.push('', t('work.recordedFacts'))

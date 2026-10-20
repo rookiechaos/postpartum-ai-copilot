@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 import { japanDateTime } from '../utils/japanTime'
 import FamilyInviteLinks from './FamilyInviteLinks'
+import { subjectsChanged } from '../utils/CareSession'
+import { CareRecordIdentity } from './CareSubject'
 
 const emptyScope = { share_baby: false, share_parent: false, share_notes: false, display_label: '' }
 
@@ -80,7 +82,7 @@ export default function FamilySharing({ userId, visible = true, refreshKey = 0, 
   const run = async (action, sharing = false) => {
     if (actionBusy.current) return
     actionBusy.current = true; setBusy(true); setError('')
-    try { await action(); setAttempt(value => value + 1) }
+    try { await action(); setAttempt(value => value + 1); window.dispatchEvent(new Event(subjectsChanged)) }
     catch (error) {
       if (sharing && error.status === 409) {
         setScopeConflict(true); setError(t('polish.sharingConflict')); setAttempt(value => value + 1)
@@ -127,7 +129,7 @@ export default function FamilySharing({ userId, visible = true, refreshKey = 0, 
         <label>{t('polish.recorderLabel')}<input value={scope.display_label} maxLength={40} onChange={event => editScope('display_label', event.target.value)} /></label>
         {['share_baby', 'share_parent', 'share_notes'].map(key => <label key={key}><input type="checkbox" checked={scope[key]}
           disabled={key === 'share_notes' && !scope.share_baby && !scope.share_parent} onChange={event => editScope(key, event.target.checked)} />{t(`polish.sharingScopes.${key}`)}</label>)}
-        <p>{t('polish.sharingScopeNotice')}</p>{scopeEdited.current && <p role="status">{t('polish.sharingNotSaved')}</p>}
+        <p>{t('polish.sharingScopeNotice')}</p><p>{t('continuity.subject.shareNotice')}</p>{scopeEdited.current && <p role="status">{t('polish.sharingNotSaved')}</p>}
         <button className="pilot-button secondary" type="submit" disabled={!Number.isInteger(scopeRevision.current)}>{t('work.saveChanges')}</button>
       </fieldset></form>
       {scopeConflict && <section className="pilot-panel" role="alert"><p>{t('polish.sharingConflict')}</p>
@@ -155,6 +157,7 @@ export default function FamilySharing({ userId, visible = true, refreshKey = 0, 
       <section><h3>{t('polish.sharedRecentRecords')}</h3><p>{t('polish.familyRecordedByNotice')}</p>
         {records.length === 0 ? <p>{t('polish.noSharedRecords')}</p> : <ol className="recent-records">{records.map(record => <li key={record.record_key}>
           <strong>{t(`tracking.${record.entry_type}`)}</strong><time>{japanDateTime(record.timestamp, i18n.resolvedLanguage || 'ja')}</time>
+          <CareRecordIdentity record={record} />
           <span>{t('polish.recordedBy', { name: record.recorder_label || memberLabel(members.find(member => member.user_id === record.recorded_by) || { permissions: {} }) })}</span>
           {record.diaper_type && <span>{t(`tracking.${record.diaper_type}`)}</span>}{record.feeding_type && <span>{t(`tracking.${record.feeding_type}`)}</span>}
           {['duration_minutes', 'sleep_duration_minutes'].map(key => record[key] != null && <span key={key}>{record[key]} {t('pilot.minutes')}</span>)}

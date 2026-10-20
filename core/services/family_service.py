@@ -9,7 +9,7 @@ from sqlalchemy import and_, or_
 import uuid
 import json
 import asyncio
-from models.database import FamilyDB, FamilyMemberDB, TrackingEntryDB, TaskDB, UserDB
+from models.database import FamilyDB, FamilyMemberDB, TrackingEntryDB, TaskDB, UserDB, CareSubjectDB
 from sqlalchemy.exc import IntegrityError
 from services.logging_service import logger
 from exceptions import NotFoundError, ValidationError, ConflictError
@@ -302,11 +302,12 @@ class FamilyService:
             entries = db.query(TrackingEntryDB).filter(
                 and_(
                     TrackingEntryDB.user_id.in_(member_user_ids),
-                    TrackingEntryDB.timestamp >= cutoff_date
+                    or_(TrackingEntryDB.timestamp >= cutoff_date, TrackingEntryDB.end_timestamp >= cutoff_date)
                 )
             ).order_by(TrackingEntryDB.timestamp.desc()).all()
             
             preferences = {member.user_id: member.permissions or {} for member in members}
+            subject = db.query(CareSubjectDB).filter(CareSubjectDB.family_id == family_id).first()
             result = []
             for entry in entries:
                 scope = preferences[entry.user_id]
@@ -314,10 +315,15 @@ class FamilyService:
                     PARENT_TYPES if scope.get("share_parent") is True else set())
                 if entry.entry_type not in allowed:
                     continue
+                if entry.entry_type in CARE_TYPES and (subject is None or entry.subject_id != subject.subject_id or not entry.family_shared):
+                    continue
                 raw = {column.name: getattr(entry, column.name) for column in TrackingEntryDB.__table__.columns}
                 raw["timestamp"] = entry.timestamp.isoformat() if entry.timestamp else None
                 selected = records_for_ai([raw], scope.get("share_parent"), scope.get("share_notes"))[0]
                 result.append({**selected, "record_key": entry.record_key, "recorded_by": entry.user_id,
+                    "subject_id": entry.subject_id if entry.entry_type in CARE_TYPES else None,
+                    "subject_name": subject.nickname if subject and entry.entry_type in CARE_TYPES else None,
+                    "end_timestamp": entry.end_timestamp.isoformat() if entry.end_timestamp else None,
                     "recorder_label": scope.get("display_label", "")})
             
             return result

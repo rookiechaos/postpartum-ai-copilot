@@ -28,6 +28,7 @@ docs/
 - [Product polish, family handoff and rollout contracts](product/PRODUCT_POLISH.md)
 - [UI architecture, responsive layout and pending acceptance](product/UI_REFINEMENT.md)
 - [Care handovers, human-support progress, account workflow and pending acceptance](product/CARE_FLOWS.md)
+- [Care subjects, overnight records, continuation and private institution tasks](product/CARE_CONTINUITY.md)
 - [Backend docs](backend/README.md)
 - [Testing guide](testing/TESTING.md)
 - [Deployment](deployment/DEPLOYMENT.md)

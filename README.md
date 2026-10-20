@@ -12,6 +12,7 @@ AIに詳しくなくても、授乳を記録する、困りごとを整理する
 最新の[日本語・地域サービス向けの改善と未実施の確認](docs/product/JAPANESE_EXPERIENCE.md)では、案内・入力・運営者表示を整えています。地域案内の追加項目を使うため、対応するバックエンドとフロントエンドを一緒に更新してください。
 [今回のリポジトリレビュー修正と更新時の注意](docs/security/REPO_REVIEW_FIXES_2026-10-16.md)では、外部AIへの送信、通知の受け取り、運営統計の権限、ログと検索資料の扱いを見直しています。起動・ビルド・テストは未実施です。
 [8項目の操作改善と更新事項](docs/product/INTERACTIONS.md)では、その場での記録補足、今日のタイムライン、質問の下書きボタン、ホームの並び替え、確認して保存するタイマー、引き継ぎの版ごとの確認、3段階の相談準備、機関の毎週の確認を追加しています。今回も起動・ビルド・テストは行っていません。
+最新の[継続して使うための7項目と移行事項](docs/product/CARE_CONTINUITY.md)では、赤ちゃんの対象指定、日付をまたぐ記録、ホームの続きからの操作、家族の近い記録の確認、相談の終了、機関内の確認待ちの保存、目的別の初回案内を追加しています。**既存の赤ちゃんの記録は対象未設定・本人だけの記録として残り、本人が対象と共有を選ぶまで新しい家族表示には出ません。** 新しいテーブルと列の移行は未実行です。
 
 ## 家庭・機関の入口と運営者の管理
 
@@ -25,7 +26,7 @@ AIに詳しくなくても、授乳を記録する、困りごとを整理する
 ### ご家庭で使う
 
 1. 家庭用の入口で、ご自身のアカウントを作成します。家族でパスワードを共有しないでください。
-2. 最初の案内の「今すぐ記録を始める」でホームへ進めます。プロフィールの入力は任意の別入口で、後から設定できます。記録・確認・修正の練習はホームからいつでも開けます。
+2. 最初の案内で「記録を始める／家族のお世話に参加する／人に相談する準備」から選べます。プロフィールの入力は任意の別入口で、後から設定できます。記録・確認・修正の練習はホームからいつでも開けます。
 3. ホームで「今」の記録と最近の記録を確認できます。詳しい記録、AI相談、相談先にはメニューから移動できます。
 
 スマートフォンでは画面下の「ホーム／記録／AIに聞く／相談先／設定」から移動します。入口の切り替えとログアウトは「設定」にまとめました。
@@ -35,12 +36,15 @@ AIに詳しくなくても、授乳を記録する、困りごとを整理する
 
 記録の保存・読み込みだけでは、入力を外部AIへ送信しません。相談や分析などのAI機能は、外部サービスでの処理について確認してから送信します。
 場面のボタンは質問の下書きを作るだけで、自動送信しません。日時と「今日」の集計は日本時間（JST）です。
+赤ちゃんの呼び名は本人用に1人、各家族に1人まで登録できます。記録者とは別に対象を選び、対象未設定のまま本人だけで記録することもできます。家族の赤ちゃんを選んでも、その1件の共有と家族設定の共有許可の両方を選ぶまで家族には見せません。氏名・生年月日は不要で、過去の記録を自動で移し替えません。
 
 記録は「今の時刻」または選んだ日本時間で保存し、後から更正・削除できます。補記は日本時間の今日を含む365日間が対象です。
 種類を変えても日時と共通メモは残ります。別の画面で変更・削除された記録は、そのまま上書き・削除できません。
 削除後は8秒間、元の内容と日時で戻せます。元に戻す処理は別の識別子を持つ記録を作ります。削除の取り消しができるのは、この画面に残っている直近1件だけです。
 ホーム、記録、グラフ、相談用の記録は、同じ画面内の記録変更に合わせて更新します。
-ホームで「今の記録」と今日のタイムラインを確認できます。「おしっこ」などのボタンは1回押すと保存し、回数・量・時間を推測しません。保存の控えから「時間を直す／量・時間を補う」を開き、変更を確認して保存できます。今日の記録は種類で絞り、押すとスマートフォンの下から詳細と修正を開きます。「自分の記録」と自分で選んだ「家族の共有記録」は別表示で、共有側は確認専用です。「何分前」と正確な日本時間を併記します。
+ホームで「今の記録」と「最近24時間／今日／昨日」のタイムラインを確認できます。「おしっこ」などのボタンは1回押すと保存し、回数・量・時間を推測しません。保存の控えから「時間を直す／量・時間を補う」を開き、変更を確認して保存できます。種類や対象で絞り、押すとスマートフォンの下から詳細と修正を開きます。「自分の記録」と自分で選んだ「家族の共有記録」は別表示で、共有側は確認専用です。「何分前」と正確な日本時間を併記します。
+授乳・睡眠は確認した終了時刻を残せます。日付をまたぐ記録も重なる期間に表示しますが、時間をその期間だけに切り分けた集計ではありません。以前の終了時刻がない記録から終了を推測しません。保存後の控えやタイマーから、その記録を直接開けます。
+ホームの「続きから」は未確定の保存、入力途中の記録、タイマー、自分で決めた相談の予定を開きます。開くだけでは保存・復元・連絡しません。同じ赤ちゃん・種類の家族の共有記録が5分以内にあると、保存前に確認できます。別の出来事かどうかは本人が判断し、自動で統合・削除しません。この確認の範囲は直近7日間の見える共有記録だけです。
 よく使うボタンを1〜4個選び、順番を変更できます。設定はボタンの識別子だけを端末のアカウント別設定に保存します。授乳・睡眠のタイマーボタンは計測欄を開き、自動では記録しません。「開始 → 終了 → 時刻と時間を確認 → 保存」で記録し、中断後は実際の終了時刻を確認します。下書き復元を有効にして保存できたタイマーは、再度開いた後に本人が選んで復元できます。
 赤ちゃんのお世話とご自身の体調・気持ちは種類を分けて選べます。母乳は時間・左右、ミルクは量を先に表示します。方法を変えても入力済みの値は補足欄に残り、確認・削除できます。保存、削除、元に戻す、直前の記録の取り消しは別の状態として表示します。
 入口・ログインでは公開済みの運営者名を確認でき、問い合わせ方法・受付時間を開けます。未掲載の情報を実在する運営者や専門家の案内として補いません。
@@ -56,6 +60,7 @@ AIに詳しくなくても、授乳を記録する、困りごとを整理する
 AIの重要な注意は回答の前に表示し、全文を残します。冒頭の抜粋・今回伝えた情報・追加質問・出典は補足から確認できます。資料のリンクは実際に検索された資料のURL情報だけを使い、AIが書いたURLから作りません。質問・添付資料・今回送る内容・同意を一か所にまとめ、質問の変更後は同意をやり直します。本人が質問を編集・確認してから相談用紙へ移せます。
 
 相談用の記録は、**3・7・14・30日間**から期間を選び、今回聞きたいことを3つまで添えられます。記録がなくても質問だけで準備できます。
+相談用紙では赤ちゃんの対象、または対象未設定を選び、その対象について自分が記録した内容を使います。別の対象や家族が記録した内容を自動で混ぜません。
 **自分の気分・回復の記録、自由記述のメモ、最新5件の明細は初期状態で除外**します。
 記録した回数・睡眠時間と、記録がある日数を示し、未記録を「何もなかった」と扱いません。
 プレビューを編集してからテキスト保存、印刷、ブラウザーのPDF保存を選べます。短い内容なら1枚を目安としますが、文章量や印刷設定により複数枚になります。
@@ -67,10 +72,10 @@ AIの重要な注意は回答の前に表示し、全文を残します。冒頭
 家庭の設定は「プロフィール」「データとプライバシー」「表示」「ヘルプ」にまとめています。
 表示では文字サイズ・コントラスト・動きを端末ごとに調整できます。通知を許可した場合、家庭画面を開いて接続している間に、保存済みの通知予定を確認します。ブラウザーが通知を受け付けた後に結果を記録しますが、本人が読んだことを示すものではありません。閉じた画面・オフラインでの配信保証や、自動の授乳時刻提案は行いません。
 運営統計は家庭の設定に表示しません。
-ホームの「家族との育児の引き継ぎ」から、各自のアカウントIDで招待・参加できます。参加だけでは共有せず、本人がこの家族に見せる赤ちゃんの記録・自分の気分や回復・自由記入メモを別々に選びます。共有一覧は直近7日間で、記録者を表示します。APIからの取得にも同じ期間制限を適用します。参加状況や共有設定が変わると古い画面からの保存を止め、最新の設定の確認を求めます。招待の取り消し・参加者の権限取り消し・退出に対応し、機関の編集権限には家庭へのアクセスを付けません。
+ホームの「家族との育児の引き継ぎ」から、招待リンク・QRコードまたは各自のアカウントIDで参加できます。参加だけでは共有せず、本人がこの家族に見せる赤ちゃんの記録・自分の気分や回復・自由記入メモを別々に選びます。赤ちゃんの記録には、その家族の対象指定と1件ごとの共有選択も必要です。共有一覧は直近7日間と重なる記録で、記録者を表示します。APIからの取得にも同じ期間制限を適用します。参加状況や共有設定が変わると古い画面からの保存を止め、最新の設定の確認を求めます。招待の取り消し・参加者の権限取り消し・退出に対応し、機関の編集権限には家庭へのアクセスを付けません。
 相談先は用途ごとに絞り、名前・対象地域・受付時間・電話／予約を先に表示します。申し込み・準備の詳細は必要なときに開けます。電話で話す内容を編集・コピーでき、相談用紙へ入れる質問は本人が欄を選んで確認します。窓口への自動送信はありません。
 ログイン後は「相談先を選ぶ → 話すことを準備する → 次の予定を記録する」の3段階で使えます。各段階を直接開いたり、準備を飛ばしたりできます。窓口の公開された準備事項と、本人が編集する電話の説明を一緒に確認できます。
-本人だけが見る「連絡の準備中／返信待ち／予約済み」と次の連絡日時を保存できます。電話や予約リンクを押しても自動で状態を変えません。日時の通知は行いません。窓口の掲載が終わっても、以前の進み具合は別の履歴として確認・消去できます。
+本人だけが見る「連絡の準備中／返信待ち／予約済み／相談を終えた／今はいったん見送る」、窓口から聞いたこと、自分の次の行動を保存できます。終了・見送りは連絡予定日時を外します。電話や予約リンクを押しても自動で状態を変えません。日時の通知は行いません。窓口の掲載が終わっても、以前の進み具合は別の履歴として確認・消去できます。
 家族の招待リンク・QRコードは24時間、1回限りです。ログインして参加を確認するまで加入しません。リンクの発行・取り消しは家族の管理者が行います。共有は参加後も本人が選びます。
 ネット接続が戻っても自動では再送信しません。送信前の未送信と、送信後の保存結果が未確認の状態を区別し、一覧を確認して同じ保存を再試行できます。オフライン保存は未対応です。
 
@@ -84,7 +89,7 @@ AIの重要な注意は回答の前に表示し、全文を残します。冒頭
 - 地域の資料やサービスは最大10件。HTTPSの情報元・予約リンク、対象地域・対象者、費用・利用条件、電話、受付時間、実際に確認した日を登録できます。
 - 利用条件・自己負担・申請と予約の順番・里帰り中の利用案内を、実際に確認して記入できます。未確認の項目は家庭にも未確認と表示します。里帰り案内は任意の公開項目 `visiting_note`（500文字まで）で、住所を収集したり利用資格を自動判定したりしません。
 - 相談先ごとに「要確認／未公開の変更／休止」を表示し、電話だけの変更や受付の休止・再開を小さな編集欄から開けます。編集は共通の下書きに残り、下書き保存・公開前確認・公開を経て家庭向けの表示を更新します。下書きと公開中の休止状態は区別して表示します。
-- 毎週の確認では、担当者の絞り込みに合う情報を一つずつ確認し、「修正／変更なしを確認／あとで」を選べます。変更なしの確認には実際の確認と日付の指定が必要です。最後に下書き保存・変更対照のプレビュー・公開を行います。閲覧だけでは確認日や公開内容を変えません。
+- 毎週の確認では、担当者の絞り込みに合う情報を一つずつ確認し、「修正／変更なしを確認／あとで」を選べます。機関内だけの担当・理由・次回確認日を保存し、別のログインでも続けられます。変更なしの確認には実際の確認と日付の指定が必要です。確認・編集時は機関の下書き全体と内部の引き継ぎを一緒に保存し、変更対照のプレビュー・公開は別に行います。延期は内部の情報だけを保存します。閲覧だけでは確認日や公開内容を変えません。
 - 産後ケア・地域相談・授乳相談のひな形を使い、公開前に家庭からの見え方を確認できます。ひな形は実在する窓口や確認日を自動で埋めません。
 - 窓口を一覧から1件ずつ編集し、公開用の担当名と次の確認日を管理できます。未完成の下書きだけを保存し、後から続けられます。公開履歴の変更点を確認し、以前の版を下書きへ戻してプレビュー後に再公開できます。
 - 申し込み手順・準備するもの・代わりの相談先・一時休止と再開の案内を登録できます。担当で一覧を絞り、公開前に現在の公開内容との差分を確認できます。休止中の窓口には予約ボタンを表示しません。
@@ -115,9 +120,11 @@ AIの重要な注意は回答の前に表示し、全文を残します。冒頭
 | --- | --- |
 | 個人のプロフィール・ケアの記録 | 認証された本人のアカウントに保存。機関用の編集権限でも他人の記録にはアクセスできません |
 | 自分の相談の進み具合 | 本人だけが閲覧・更新。電話や予約リンクから状態を推測しません |
+| 赤ちゃんの呼び名・記録の対象 | 本人用の呼び名は本人だけ、家族用は参加中の家族が確認。記録共有には別の選択が必要です |
 | 家族への引き継ぎメモ・招待 | メモは本人が共有を選択。招待は1回限りで、サーバーにはリンクのハッシュだけを保存 |
 | AIへの入力と選択した資料 | 設定した回答サービスに送信。質問文は、設定に応じてOpenAIの内容確認・資料検索でも処理されます |
 | 機関の連絡先・地域の資料 | 公開情報。ログインなしで取得できます |
+| 機関内の確認待ち・担当・理由 | 権限のある機関職員だけ。公開案内とは別に保存します |
 | 相談用にダウンロードしたファイル | 利用者が共有先と保管方法を判断します |
 | アカウント申請 | 運営者だけが連絡メールと受付時の本人情報を閲覧。受付番号の保持者は状況と公開返信を読めます |
 
@@ -144,7 +151,9 @@ Postpartum AI Copilot supports small Japanese pilots through two public entrance
 
 Home now puts quick records and recent-record correction before optional family handoff. The menu explicitly separates Ask AI from human help; AI warnings precede full answers and supplementary details expand on demand. First-use profile setup is optional, and the practice exercise has one persistent Home entry. Institution shortcuts edit the existing shared draft without bypassing preview or publication. See [UI changes and pending acceptance](docs/product/UI_FRIENDLINESS.md); this revision has not been run, built or tested.
 
-The latest [interaction changes](docs/product/INTERACTIONS.md) add inline receipt correction, a daily timeline with phone detail sheets and explicit family scope, editable answer-action drafts, configurable shortcuts, reviewed care timers, versioned handover acknowledgements, three-step human help and weekly institution reviews. Deploy the matching frontend/backend together; the new acknowledgement table is registered by existing startup initialization. This source revision has not been run, built or tested.
+The [interaction changes](docs/product/INTERACTIONS.md) add inline receipt correction, phone detail sheets, editable answer-action drafts, configurable shortcuts, reviewed timers, versioned handover acknowledgements and guided human help.
+
+The latest [care-continuity improvements and rollout](docs/product/CARE_CONTINUITY.md) add explicit baby attribution and per-record sharing, overnight/24-hour views, Home continuation, soft cross-caregiver duplicate review, private consultation closure, persistent internal institution tasks and task-based onboarding. Historical baby records stay unassigned/private until their owner explicitly chooses attribution and sharing; they no longer appear automatically in family views. Deploy the matching frontend/API together and review the new tables/column migration before use. This source revision has not been run, built, tested or migrated.
 
 The interface supports Japanese and English. Support contacts target **Japan in either language**.
 AI responses are labeled as generated content; rule checks and heuristic scores are not presented as medical certification or clinical confidence.
@@ -222,7 +231,7 @@ Remove an ID and restart the API to revoke directory editing access. All configu
 3. Open `/operator`, handle requests oldest first, verify identity outside the public reply, and perform any approved reset or erasure through your controlled operational process.
 4. Record only the non-sensitive outcome and next steps. Changing request status does not change credentials or erase stored records.
 
-Use the [manual support procedure and data inventory](docs/product/PRODUCT_IMPROVEMENTS.md) and [current workflow/store additions](docs/product/CARE_FLOWS.md) when preparing operations. There is no automated deletion runner in this change.
+Use the [manual support procedure and data inventory](docs/product/PRODUCT_IMPROVEMENTS.md), [workflow/store additions](docs/product/CARE_FLOWS.md) and [care-subject/internal-task inventory](docs/product/CARE_CONTINUITY.md#manual-privacydeletion-inventory) when preparing operations. There is no automated deletion runner in this change.
 
 ### Docker / hosted deployment
 
@@ -268,6 +277,7 @@ The `pilot_profiles` and new `account_requests` tables use the existing startup 
 The latest polish phase additionally registers record-save receipts, account draft preferences/content and institution workspaces/publication history. The migration adds `family_members.revision` and unique family membership enforcement, and fails rather than silently merging any legacy duplicates. Family sharing writes require the member revision from a fresh read; shared-data requests accept only 1–7 days. Institution mutation bodies require a workspace revision. See [rollout and pending acceptance](docs/product/PRODUCT_POLISH.md#database-and-rollout); deploy frontend/backend together after later authorized validation.
 The care-flow revision adds five tables for handovers, invitation hashes, private help progress, operator workflow attestations and status events through existing startup initialization. It adds no columns to existing tables. Deploy the matching API, worker and frontend together; table creation and acceptance have not been executed. See [CARE_FLOWS](docs/product/CARE_FLOWS.md) for API contracts, manual execution boundaries and the expanded erasure inventory.
 The interaction revision adds `family_handover_acknowledgements` and the optional `timer` server-draft kind, without changing existing columns. Add acknowledgement rows for both readers and authors, and timer drafts, to manual account erasure. See [INTERACTIONS](docs/product/INTERACTIONS.md#api-and-rollout) for API details and pending acceptance. No table creation was executed.
+The current continuity revision adds `care_subjects` and private `directory_review_tasks`, plus tracking subject/end/sharing columns and private support-response/next-step columns. Existing baby records keep no assigned subject and `family_shared=false`; an owner must explicitly assign and share a record before it appears in family views. Review [CARE_CONTINUITY](docs/product/CARE_CONTINUITY.md#api-and-storage-rollout) for the coordinated upgrade and expanded manual erasure inventory. These migrations have not been executed.
 The scope flags and legacy API limitations are documented in [the change guide](docs/product/PRODUCT_IMPROVEMENTS.md).
 The [repository review fixes](docs/security/REPO_REVIEW_FIXES_2026-10-16.md) describe the new notification receipt contract, fresh profile reads, bounded authentication refresh, private error diagnostics and the separate curated RAG collection. Existing vector collections are retained but no longer queried; approved public sources need explicit re-ingestion. Deploy the matching frontend/API/worker together. No database migration or source re-indexing was executed during these edits.
 

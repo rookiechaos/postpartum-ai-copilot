@@ -18,6 +18,17 @@ def migrate_tracking_identity(engine):
             connection.execute(text("ALTER TABLE tracking_entries ADD COLUMN record_key VARCHAR(36)"))
         if "revision" not in columns:
             connection.execute(text("ALTER TABLE tracking_entries ADD COLUMN revision INTEGER NOT NULL DEFAULT 1"))
+        if "end_timestamp" not in columns:
+            connection.execute(text("ALTER TABLE tracking_entries ADD COLUMN end_timestamp TIMESTAMP"))
+        if "subject_id" not in columns:
+            connection.execute(text("ALTER TABLE tracking_entries ADD COLUMN subject_id VARCHAR(36)"))
+        if "family_shared" not in columns:
+            connection.execute(text("ALTER TABLE tracking_entries ADD COLUMN family_shared BOOLEAN NOT NULL DEFAULT FALSE"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS idx_tracking_subject_time ON tracking_entries (subject_id, timestamp)"))
+        journey_columns = {column["name"] for column in inspect(connection).get_columns("support_journeys")}
+        for field in ("contact_response", "next_steps"):
+            if field not in journey_columns:
+                connection.execute(text(f"ALTER TABLE support_journeys ADD COLUMN {field} TEXT NOT NULL DEFAULT ''"))
 
         missing = connection.execute(text("SELECT id FROM tracking_entries WHERE record_key IS NULL")).scalars().all()
         for entry_id in missing:

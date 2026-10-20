@@ -6,7 +6,7 @@ import { revealElement } from '../utils/focusView'
 import SupportProgress, { useSupportJourneys } from './SupportProgress'
 
 // National sources remain available when the API or model is unavailable.
-export default function SupportDirectory({ compact = false, previewProfile, visible = true, onPrepareSheet, userId }) {
+export default function SupportDirectory({ compact = false, previewProfile, visible = true, onPrepareSheet, userId, navigationRequest }) {
   const { t } = useTranslation()
   const [profile, setProfile] = useState(null)
   const [unavailable, setUnavailable] = useState(false)
@@ -22,6 +22,7 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
   const [prepared, setPrepared] = useState({})
   const stepHeading = useRef(null)
   const pendingStepFocus = useRef(false)
+  const handledNavigation = useRef(null)
   const scriptHeading = useRef(null)
   const pendingScriptFocus = useRef(false)
   const progress = useSupportJourneys(userId, visible && !compact && !previewProfile)
@@ -49,8 +50,13 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
   const selectedName = selectedContact?.name || progress.rows.find(row => row.contact_key === contactKey)?.contact_name || progress.editors[contactKey]?.contact_name || ''
   const openStep = step => { setJourneyStep(step); pendingScriptFocus.current = false; pendingStepFocus.current = true }
   useEffect(() => {
+    if (!visible || !wizardEnabled || !navigationRequest?.contactKey || handledNavigation.current === navigationRequest.key) return
+    handledNavigation.current = navigationRequest.key
+    setContactKey(navigationRequest.contactKey); setJourneyStep(3); pendingStepFocus.current = true
+  }, [navigationRequest, visible, wizardEnabled])
+  useEffect(() => {
     if (visible && wizardEnabled && pendingStepFocus.current && revealElement(stepHeading.current)) pendingStepFocus.current = false
-  }, [journeyStep, visible])
+  }, [journeyStep, visible, contactKey, navigationRequest?.key])
   const retainedContacts = new Map(progress.rows.filter(row => !row.cleared).map(row => [row.contact_key, row]))
   Object.entries(progress.editors).forEach(([key, editor]) => {
     if (editor.edited || editor.busy) retainedContacts.set(key, { contact_key: key, contact_name: editor.contact_name })

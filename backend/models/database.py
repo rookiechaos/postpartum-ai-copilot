@@ -2,7 +2,7 @@
 Database models and initialization
 """
 
-from sqlalchemy import create_engine, Column, String, Integer, Float, DateTime, Text, JSON, Boolean, Index
+from sqlalchemy import create_engine, Column, String, Integer, Float, DateTime, Text, JSON, Boolean, Index, CheckConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from datetime import datetime
@@ -52,6 +52,9 @@ class TrackingEntryDB(Base):
     user_id = Column(String, index=True)
     entry_type = Column(String)
     timestamp = Column(DateTime, default=datetime.utcnow)
+    end_timestamp = Column(DateTime, nullable=True)
+    subject_id = Column(String(36), nullable=True)
+    family_shared = Column(Boolean, nullable=False, default=False, server_default="false")
     
     # Feeding
     feeding_type = Column(String, nullable=True)
@@ -86,6 +89,32 @@ class TrackingEntryDB(Base):
         Index('idx_tracking_user_timestamp', 'user_id', 'timestamp'),
         Index('uq_tracking_record_key', 'record_key', unique=True),
     )
+
+
+class CareSubjectDB(Base):
+    """One explicitly created care subject per account or family; no inferred identity."""
+    __tablename__ = "care_subjects"
+    subject_id = Column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    personal_owner_id = Column(String, nullable=True, unique=True)
+    family_id = Column(String, nullable=True, unique=True)
+    nickname = Column(String(40), nullable=False)
+    created_by = Column(String, nullable=False)
+    revision = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    __table_args__ = (CheckConstraint(
+        "(personal_owner_id IS NOT NULL AND family_id IS NULL) OR "
+        "(personal_owner_id IS NULL AND family_id IS NOT NULL)", name="ck_care_subject_scope"),)
+
+
+class DirectoryReviewTaskDB(Base):
+    """Staff-only review handoff; never included in the public profile JSON."""
+    __tablename__ = "directory_review_tasks"
+    contact_key = Column(String(36), primary_key=True)
+    revision = Column(Integer, nullable=False, default=1)
+    resource_digest = Column(String(64), nullable=False)
+    details = Column(JSON, nullable=False, default=dict)
+    updated_by = Column(String, nullable=False)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
 
 class PilotProfileDB(Base):
@@ -184,6 +213,8 @@ class SupportJourneyDB(Base):
     contact_name = Column(String, nullable=False)
     state = Column(String, nullable=False, default="preparing")
     next_contact_at = Column(DateTime, nullable=True)
+    contact_response = Column(Text, nullable=False, default="", server_default="")
+    next_steps = Column(Text, nullable=False, default="", server_default="")
     revision = Column(Integer, nullable=False, default=1)
     cleared = Column(Boolean, nullable=False, default=False)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)

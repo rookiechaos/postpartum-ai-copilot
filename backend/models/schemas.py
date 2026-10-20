@@ -102,6 +102,11 @@ class TrackingEntry(BaseModel):
     )
     entry_type: EntryType
     timestamp: Optional[datetime] = None
+    end_timestamp: Optional[datetime] = None
+    subject_id: Optional[UUID] = None
+    family_shared: StrictBool = False
+    sharing_revision: Optional[int] = Field(default=None, ge=1, strict=True)
+    subject_name: Optional[str] = None
     
     # Feeding specific
     feeding_type: Optional[FeedingType] = None

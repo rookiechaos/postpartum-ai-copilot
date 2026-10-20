@@ -29,6 +29,19 @@ dialog.record-sheet.pilot-panel { position: fixed; inset: 0; margin: auto; width
 .weekly-contact-facts dt { font-weight: 600; }
 .weekly-contact-facts dd { margin: .25rem 0 0; }
 .handover-receipts { padding-inline-start: 1.25rem; font-size: .9rem; line-height: 1.8; }
+.care-record-identity { display: block; margin-block: .25rem; }
+.continue-care article { border-top: 1px solid var(--color-border); padding-block: .75rem; }
+.care-subject-fields, .subject-manager, .first-task-guide { line-height: 1.8; }
+.subject-manager li { margin-block: .75rem; overflow-wrap: anywhere; }
+.care-subject-fields label { display: block; margin-block: .75rem; }
+.duplicate-review { border-inline-start: 3px solid var(--color-brand); }
+.duplicate-review li { margin-block: .75rem; }
+.care-timeline [aria-pressed="true"] { background: var(--color-tint); border: 2px solid var(--color-brand); color: var(--color-brand); font-weight: 600; }
+.weekly-directory-review details > ul { padding-inline-start: 1.25rem; line-height: 1.8; }
+.weekly-directory-review details > ul > li { padding-block: .75rem; border-bottom: 1px solid var(--color-border); }
+.weekly-directory-review textarea { box-sizing: border-box; max-width: 100%; width: 100%; min-height: 5rem; padding: .65rem; background: var(--color-surface); color: var(--color-text); border: 1px solid var(--color-border); border-radius: 8px; }
+.first-task-guide .text-action { min-height: 44px; }
+.entry-form input[type="checkbox"] { display: inline-block; width: 20px; min-height: 20px; height: 20px; margin-inline-end: .5rem; }
 .high-contrast dialog.record-sheet.pilot-panel, .high-contrast :is(.timeline-record, .support-steps) { background: #fff; color: #000; border-color: #333; }
 @media (max-width: 700px) {
   dialog.record-sheet.pilot-panel { inset-block-start: auto; inset-block-end: 0; margin: 0; width: 100%; max-height: 88vh; max-height: 88dvh; border-radius: 16px 16px 0 0; padding-bottom: max(1.25rem, env(safe-area-inset-bottom)); }

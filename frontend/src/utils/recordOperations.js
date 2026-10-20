@@ -20,6 +20,6 @@ export function isRecordOperation(value) {
 
 // Updates replace a record on the server. Always carry every existing care field
 // so a compact editor cannot erase notes or measurements it does not display.
-export const recordFields = ['entry_type', 'timestamp', 'feeding_type', 'duration_minutes', 'amount_ml', 'side', 'diaper_type',
+export const recordFields = ['entry_type', 'timestamp', 'end_timestamp', 'subject_id', 'family_shared', 'feeding_type', 'duration_minutes', 'amount_ml', 'side', 'diaper_type',
   'sleep_duration_minutes', 'sleep_quality', 'mood_level', 'mood_notes', 'pumped_amount_ml', 'weight_kg', 'breast_condition', 'recovery_notes', 'notes']
-export const recordPayload = entry => Object.fromEntries(recordFields.filter(key => entry[key] !== undefined).map(key => [key, entry[key]]))
+export const recordPayload = entry => Object.fromEntries([...recordFields, 'sharing_revision'].filter(key => entry[key] !== undefined).map(key => [key, entry[key]]))

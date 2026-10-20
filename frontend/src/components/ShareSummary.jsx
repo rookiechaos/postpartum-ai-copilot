@@ -7,9 +7,13 @@ import { printView } from '../utils/printView'
 import useAccountDraft from '../utils/useAccountDraft'
 import { DraftRecoveryNotice } from './DraftRecovery'
 import { revealElement } from '../utils/focusView'
+import { useCareSession } from '../utils/CareSession'
 
 export default function ShareSummary({ userId, visible = true, refreshKey = 0, initialQuestion = '', requestKey = 0 }) {
   const { t, i18n } = useTranslation()
+  const { subjects } = useCareSession()
+  const [subjectId, setSubjectId] = useState('')
+  const selectedSubject = subjects.find(item => item.subject_id === subjectId)
   const [days, setDays] = useState(7)
   const [questions, setQuestions] = useState(['', '', ''])
   const [includeParent, setIncludeParent] = useState(false)
@@ -29,17 +33,18 @@ export default function ShareSummary({ userId, visible = true, refreshKey = 0, i
   const incomingHeading = useRef(null)
   const sheetHeading = useRef(null)
   const questionInputs = useRef([])
-  const sourceKey = JSON.stringify([days, includeParent, includeNotes, includeDetails, questions, refreshKey, i18n.resolvedLanguage, today])
+  const sourceKey = JSON.stringify([subjectId, selectedSubject?.revision || 0, days, includeParent, includeNotes, includeDetails, questions, refreshKey, i18n.resolvedLanguage, today])
   const preview = draft?.text || ''
   const stale = Boolean(draft && draft.sourceKey !== sourceKey)
   const currentCandidate = candidate?.sourceKey === sourceKey ? candidate : null
   const canExport = Boolean(preview && !stale && !loading && !currentCandidate)
   const recovery = useAccountDraft('sheet', userId, draft || questions.some(question => question.trim())
-    ? { draft, days, questions, includeParent, includeNotes, includeDetails } : null, content => {
+    ? { draft, days, questions, includeParent, includeNotes, includeDetails, subjectId } : null, content => {
     if (!Array.isArray(content.questions)) return false
     setDraft(content.draft && typeof content.draft.text === 'string'
       ? { ...content.draft, text: content.draft.text.slice(0, 8000), sourceKey: 'restored-needs-review' } : null)
     if ([3, 7, 14, 30].includes(content.days)) setDays(content.days)
+    setSubjectId(typeof content.subjectId === 'string' ? content.subjectId : '')
     if (Array.isArray(content.questions)) setQuestions([0, 1, 2].map(index => String(content.questions[index] || '').slice(0, 250)))
     setIncludeParent(content.includeParent === true); setIncludeDetails(content.includeDetails === true)
     setIncludeNotes(content.includeDetails === true && content.includeNotes === true); setCandidate(null)
@@ -77,7 +82,9 @@ export default function ShareSummary({ userId, visible = true, refreshKey = 0, i
       // Include the whole first Japan calendar day before filtering the printable period.
       const entries = await api.getTracking(userId, days + 1)
       if (generation.current !== version) return
-      const sheet = buildConsultationSheet(entries, { days, questions, includeParent, includeNotes, includeDetails,
+      const selected = entries.filter(entry => ['mood', 'recovery'].includes(entry.entry_type) || (entry.subject_id || '') === subjectId)
+      const sheet = buildConsultationSheet(selected, { days, questions, includeParent, includeNotes, includeDetails,
+        subjectLabel: t('continuity.subject.recordLabel', { name: selectedSubject?.nickname || t(subjectId ? 'continuity.subject.unavailable' : 'continuity.subject.unassignedLabel') }),
         language: i18n.resolvedLanguage || 'ja', t })
       if (!sheet) { setError(t('work.noSheetContent')); return }
       const next = { text: sheet, generated: sheet, sourceKey }
@@ -94,6 +101,11 @@ export default function ShareSummary({ userId, visible = true, refreshKey = 0, i
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
   return <section className="pilot-panel share-summary" aria-labelledby="consultation-sheet-heading">
+    <label>{t('continuity.subject.sheetFor')}<select value={subjectId} onChange={event => setSubjectId(event.target.value)}>
+      <option value="">{t('continuity.subject.unknown')}</option>
+      {subjectId && !subjects.some(item => item.subject_id === subjectId) && <option value={subjectId}>{t('continuity.subject.unavailable')}</option>}
+      {subjects.map(item => <option key={item.subject_id} value={item.subject_id}>{item.nickname} · {item.family_name || t('continuity.subject.personal')}</option>)}
+    </select></label><p>{t('continuity.subject.sheetNotice')}</p>
     <h2 id="consultation-sheet-heading" tabIndex={-1} ref={sheetHeading}>{t('pilot.summaryTitle')}</h2><p>{t('work.sheetDescription')}</p>
     <DraftRecoveryNotice draft={recovery} disabled={loading} />
     {incomingActive && <section className="pilot-panel"><h3 tabIndex={-1} ref={incomingHeading}>{t('polish.addCallQuestion')}</h3>

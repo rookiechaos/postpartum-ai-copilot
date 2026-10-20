@@ -4,6 +4,7 @@ import api from '../utils/api'
 import { japanDateTime } from '../utils/japanTime'
 import useConnection from '../utils/useConnection'
 import RecordTime, { useRecordClock } from './RecordTime'
+import { CareRecordIdentity } from './CareSubject'
 
 const categories = ['feeding', 'diaper', 'sleep', 'pumping']
 export default function FamilyCareOverview({ visible, refreshKey, onManage }) {
@@ -114,7 +115,7 @@ export default function FamilyCareOverview({ visible, refreshKey, onManage }) {
       {overview && <dl className="care-overview-grid">{categories.map(kind => {
         const record = overview?.latest[kind]
         return <div key={kind}><dt>{t(`tracking.${kind}`)}</dt><dd>{record ? <>
-          <RecordTime value={record.timestamp} now={now} /><span>{t('polish.recordedBy', { name: label(record) })}</span>
+          <CareRecordIdentity record={record} /><RecordTime value={record.timestamp} now={now} /><span>{t('polish.recordedBy', { name: label(record) })}</span>
           {record.feeding_type && <span>{t(`tracking.${record.feeding_type}`)}</span>}
           {record.diaper_type && <span>{t(`tracking.${record.diaper_type}`)}</span>}
           {['duration_minutes', 'sleep_duration_minutes'].map(key => record[key] != null && <span key={key}>{record[key]} {t('pilot.minutes')}</span>)}

@@ -19,3 +19,21 @@ def validate_record_time(value):
     if timestamp < earliest or timestamp > now + timedelta(seconds=60):
         raise ValidationError("Record time must be within the last 365 Japan calendar days and not in the future")
     return timestamp.replace(tzinfo=None)
+
+
+def validate_record_interval(values):
+    """Keep an explicitly confirmed end time consistent with whole-minute duration."""
+    end = values.get("end_timestamp")
+    if end is None:
+        return
+    if values["entry_type"] not in ("feeding", "sleep"):
+        raise ValidationError("Only feeding and sleep records can have an end time")
+    end = validate_record_time(end)
+    if end < values["timestamp"]:
+        raise ValidationError("The end time must not precede the start time")
+    minutes = int((end - values["timestamp"]).total_seconds() // 60)
+    field = "duration_minutes" if values["entry_type"] == "feeding" else "sleep_duration_minutes"
+    if values.get(field) is not None and values[field] != minutes:
+        raise ValidationError("Review start, end and duration together")
+    values["end_timestamp"] = end
+    values[field] = minutes

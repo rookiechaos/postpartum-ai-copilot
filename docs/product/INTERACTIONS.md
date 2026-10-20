@@ -2,6 +2,8 @@
 
 This revision implements the eight requested interaction changes in source. The application, build, tests, browser flows, database initialization and migrations have **not** been executed. Earlier verification reports do not validate this revision.
 
+The later [care-continuity revision](CARE_CONTINUITY.md) supersedes this file's original today-only timeline, timer-location guidance, session-only weekly review state and original schema rollout. It adds care subjects and explicit per-record baby sharing, confirmed ends and overlapping periods, persistent private review tasks, new tables/columns and corresponding migration requirements. Read that rollout before deploying the current source.
+
 ## Family flows
 
 | Change | Behavior |

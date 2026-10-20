@@ -213,6 +213,8 @@ class DataExportService:
             "id": entry.id,
             "entry_type": entry.entry_type,
             "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
+            "end_timestamp": entry.end_timestamp.isoformat() if entry.end_timestamp else None,
+            "subject_id": entry.subject_id, "family_shared": entry.family_shared,
             "feeding_type": entry.feeding_type,
             "duration_minutes": entry.duration_minutes,
             "amount_ml": entry.amount_ml,

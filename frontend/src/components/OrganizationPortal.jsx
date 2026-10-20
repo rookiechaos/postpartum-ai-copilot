@@ -28,6 +28,8 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
   const [published, setPublished] = useState(null)
   const [revision, setRevision] = useState(0)
   const [history, setHistory] = useState([])
+  const [reviewTasks, setReviewTasks] = useState([])
+  const [reviewDirty, setReviewDirty] = useState(false)
   const [selected, setSelected] = useState('')
   const [editorTask, setEditorTask] = useState('all')
   const [maintainerFilter, setMaintainerFilter] = useState('')
@@ -52,8 +54,8 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
   const unpublished = changes.length > 0
   const canLeave = useCallback(() => {
     if (actionBusy.current) { setError(t('work.saveInProgress')); return false }
-    return !dirty || window.confirm(`${t('work.unsavedTitle')}\n${t('work.unsavedDescription')}`)
-  }, [dirty, t])
+    return !(dirty || reviewDirty) || window.confirm(`${t('work.unsavedTitle')}\n${t('work.unsavedDescription')}`)
+  }, [dirty, reviewDirty, t])
   useLayoutEffect(() => registerLeaveGuard?.(canLeave), [registerLeaveGuard, canLeave])
   const focusField = (id, resourceKey = '', origin = null, task = 'all') => {
     if (resourceKey) {
@@ -81,6 +83,7 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
   const applyResult = result => {
     setProfile(result.workspace.profile); setSavedDraft(result.workspace.profile); setPublished(result.profile)
     setRevision(result.workspace.revision); setHistory(result.history); setPreviewed(false); setIssues([])
+    setReviewTasks(result.review_tasks || [])
     setPublicationComplete(false)
     setSelected(previous => result.workspace.profile.resources.some(resource => resource.resource_key === previous)
       ? previous : result.workspace.profile.resources[0]?.resource_key || '')
@@ -95,11 +98,11 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
     return () => { active = false }
   }, [userId, attempt])
   useEffect(() => {
-    if (!dirty && !busy) return
+    if (!dirty && !reviewDirty && !busy) return
     const warn = event => { event.preventDefault(); event.returnValue = '' }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
-  }, [dirty, busy])
+  }, [dirty, reviewDirty, busy])
   const change = updater => {
     if (actionBusy.current || reloadBusy.current) return
     setProfile(previous => typeof updater === 'function' ? updater(previous) : updater)
@@ -137,6 +140,28 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
     setProfile(next)
     return next
   }
+  const saveReview = async ({ contact_key, ...body }) => {
+    if (actionBusy.current || reloadBusy.current) return false
+    if (body.profile) {
+      body.profile = normalizeDirectory(body.profile)
+      const found = validateDirectory(body.profile, { publication: false })
+      setIssues(found)
+      if (found.length) { focusIssue(found[0]); return false }
+    }
+    actionBusy.current = true; setBusy(true); setError(''); setIssues([])
+    try {
+      const result = await api.post(`/api/pilot/organization/review-tasks/${encodeURIComponent(contact_key)}`, {
+        ...body, workspace_revision: revision,
+      })
+      const keepLocalEdits = !body.profile && dirty
+      applyResult(result)
+      if (keepLocalEdits) setProfile(profile)
+      setStatus('draftSaved'); return true
+    } catch (failure) {
+      setError(t(failure.status === 409 ? 'polish.institutionConflict' : 'pilot.saveFailed'))
+      focusField('directory-errors'); return false
+    } finally { actionBusy.current = false; setBusy(false) }
+  }
   const addResource = category => {
     if (actionBusy.current || reloadBusy.current || profile.resources.length >= 10) return
     const resource = { ...emptyResource(category), name: t(`polish.purposes.${category}`), area: profile.municipality || '' }
@@ -170,7 +195,7 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
   const dueContacts = new Set(due.map(item => item.resource.resource_key))
   const reload = () => {
     if (actionBusy.current || reloadBusy.current) return
-    if (dirty && !window.confirm(t('polish.reloadDraftConfirm'))) return
+    if ((dirty || reviewDirty) && !window.confirm(t('polish.reloadDraftConfirm'))) return
     pendingFocus.current = null
     reloadBusy.current = true; setReloading(true); setAttempt(value => value + 1)
   }
@@ -246,11 +271,10 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
             : ['name', 'url'].includes(key) ? t(`pilot.resource.${key}`) : t(`work.reviewIssues.${key}`)).join(' / ')}</p>
         </li>)}</ul> : <p>{t('work.noReviewDue')}</p>}
         </details>
-        <WeeklyDirectoryReview profile={profile} due={due} maintainerFilter={maintainerFilter} blocked={editingBlocked}
+        <WeeklyDirectoryReview profile={profile} due={due} reviewTasks={reviewTasks} onSaveReview={saveReview} onDraftChange={setReviewDirty} maintainerFilter={maintainerFilter} blocked={editingBlocked}
+          savedContactKeys={(savedDraft?.resources || []).map(item => item.resource_key)}
           hasUnpublishedChanges={unpublished} onSessionChange={setWeeklyActive}
           onEdit={key => focusField('directory-contact-heading', key)}
-          onConfirm={(key, checkedOn, dueOn) => change(previous => ({ ...previous, resources: previous.resources.map(item =>
-            item.resource_key === key ? { ...item, checked_on: checkedOn, review_due_on: dueOn } : item) }))}
           onSaveDraft={() => { const next = validate(false); if (next) perform('/api/pilot/organization/draft', { profile: next, revision }, 'draftSaved') }}
           onPreview={() => { const next = validate(true); if (next) { setPreviewed(true); focusField('directory-preview-heading') } }} />
       </section>
