@@ -13,6 +13,10 @@ def migrate_tracking_identity(engine):
         elif engine.dialect.name == "postgresql":
             connection.execute(text("SELECT pg_advisory_xact_lock(728154291)"))
 
+        user_columns = {column["name"] for column in inspect(connection).get_columns("users")}
+        if "session_revision" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN session_revision INTEGER NOT NULL DEFAULT 1"))
+
         columns = {column["name"] for column in inspect(connection).get_columns("tracking_entries")}
         if "record_key" not in columns:
             connection.execute(text("ALTER TABLE tracking_entries ADD COLUMN record_key VARCHAR(36)"))

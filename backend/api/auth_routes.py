@@ -12,6 +12,7 @@ from middleware.auth import get_current_user
 from dependencies.database import get_db
 from dependencies.container import get_container
 from middleware.rate_limit import rate_limit, RATE_LIMITS
+from services.auth_service import lock_session_account
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 container = get_container()
@@ -105,7 +106,9 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Check if 2FA is enabled
+    # Capture a revision under the same lock as factor transitions. Never adopt
+    # a later revision after verifying an earlier set of factors.
+    session_revision = lock_session_account(db, user.user_id).session_revision
     two_fa_status = two_fa_service.get_2fa_status(user.user_id, db)
     mfa_version = None
     if two_fa_status.get("is_enabled", False):
@@ -143,7 +146,12 @@ async def login(
         db=db
     )
     
-    token_claims = {"sub": user.user_id, "email": user.email, "mfa_version": mfa_version}
+    if session_revision != auth_service.get_session_revision(user.user_id, db):
+        raise HTTPException(status_code=401, detail="Please sign in again")
+    token_claims = {
+        "sub": user.user_id, "email": user.email,
+        "mfa_version": mfa_version, "session_revision": session_revision,
+    }
     # Create access token only after all required factors have passed.
     access_token_expires = timedelta(minutes=auth_service.access_token_expire)
     access_token = auth_service.create_access_token(
@@ -207,7 +215,10 @@ async def refresh_token(
             detail="User not found or inactive"
         )
     
-    token_claims = {"sub": user.user_id, "email": user.email, "mfa_version": token_data.mfa_version}
+    token_claims = {
+        "sub": user.user_id, "email": user.email,
+        "mfa_version": token_data.mfa_version, "session_revision": token_data.session_revision,
+    }
     # Preserve verified factors when refreshing the session.
     access_token_expires = timedelta(minutes=auth_service.access_token_expire)
     access_token = auth_service.create_access_token(

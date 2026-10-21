@@ -414,8 +414,8 @@ export const api = {
   },
 
   // Tracking
-  getTracking(userId, days = 7) {
-    return this.get(`/api/tracking/${userId}?days=${days}`)
+  getTracking(userId, days = 7, scope = {}) {
+    return this.get(`/api/tracking/${userId}?${new URLSearchParams({ days, ...scope })}`)
   },
   getTrackingSummary(userId, days = 7, scope = {}) {
     const params = new URLSearchParams({ days, ...scope })
@@ -438,7 +438,7 @@ export const api = {
     return this.post('/api/pilot/account-help', { email, language })
   },
   getAccountRequestStatus(reference) {
-    return this.get(`/api/pilot/account-help/${encodeURIComponent(reference)}`)
+    return this.post('/api/pilot/account-help/status', { reference })
   },
   getAccountRequests() {
     return this.get('/api/account/requests')

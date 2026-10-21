@@ -14,7 +14,7 @@ from middleware.admin import require_admin
 from models.schemas import User
 from dependencies.database import get_db
 from dependencies.container import get_container
-from exceptions import TaskQueueError, NotFoundError, DatabaseError
+from exceptions import TaskQueueError, NotFoundError, DatabaseError, ValidationError
 from middleware.rate_limit import rate_limit, RATE_LIMITS
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
@@ -54,7 +54,7 @@ async def create_task(
             )
         
         return TaskResponse(**task)
-    except (TaskQueueError, NotFoundError, DatabaseError):
+    except (TaskQueueError, NotFoundError, DatabaseError, ValidationError):
         raise
     except Exception as e:
         raise TaskQueueError(

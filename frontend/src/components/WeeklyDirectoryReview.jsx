@@ -24,14 +24,15 @@ export default function WeeklyDirectoryReview({ profile, due, reviewTasks = [], 
   const snapshot = item ? JSON.stringify(item) : ''
   const attested = Boolean(item && snapshot === attestedSnapshot)
   const form = item ? forms[item.resource_key] || { reason: task?.reason || '', assignee: task?.assignee || item.maintainer || '',
-    next_review_on: task?.next_review_on || (item.review_due_on > japanDay() ? item.review_due_on : '') } : {}
+    next_review_on: task?.next_review_on || (item.review_due_on > japanDay() ? item.review_due_on : ''), baseRevision: task?.revision || 0 } : {}
+  const conflict = Boolean(item && forms[item.resource_key] && form.baseRevision !== (task?.revision || 0))
   const formsDirty = Object.entries(forms).some(([key, value]) => {
     const saved = reviewTasks.find(row => row.contact_key === key)
     const resource = profile.resources.find(row => row.resource_key === key)
-    return value.reason !== (saved?.reason || '') || value.assignee !== (saved?.assignee || resource?.maintainer || '')
+    return value.baseRevision !== (saved?.revision || 0) || value.reason !== (saved?.reason || '') || value.assignee !== (saved?.assignee || resource?.maintainer || '')
       || value.next_review_on !== (saved?.next_review_on || (resource?.review_due_on > japanDay() ? resource.review_due_on : ''))
   })
-  useEffect(() => { onDraftChange?.(formsDirty) }, [formsDirty, onDraftChange])
+  useEffect(() => { onDraftChange?.(formsDirty || editing || Boolean(attestedSnapshot)) }, [formsDirty, editing, attestedSnapshot, onDraftChange])
   useEffect(() => { onSessionChange?.(Boolean(queue)) }, [queue, onSessionChange])
   useEffect(() => { if (!locked && pendingFocus.current && revealElement(heading.current)) pendingFocus.current = false }, [index, queue, locked])
   const dueKeys = new Set(due.map(row => row.resource.resource_key))
@@ -48,13 +49,22 @@ export default function WeeklyDirectoryReview({ profile, due, reviewTasks = [], 
     setForms(previous => ({ ...previous, [item.resource_key]: { ...form, [field]: value } }))
     setAttestedSnapshot(''); setError('')
   }
+  const captureRevision = () => {
+    if (!item) return
+    setForms(previous => previous[item.resource_key] ? previous : { ...previous, [item.resource_key]: { ...form } })
+  }
+  const reloadItem = () => {
+    if (locked || !item || !window.confirm(t('reviewFixes.confirmReloadReview'))) return
+    setForms(previous => { const next = { ...previous }; delete next[item.resource_key]; return next })
+    setEditing(false); setAttestedSnapshot(''); setCheckedOn(japanDay()); setError('')
+  }
   const validDate = value => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false
     const date = new Date(`${value}T00:00:00+09:00`)
     return Number.isFinite(date.getTime()) && japanDay(date) === value
   }
   const process = async decision => {
-    if (saving.current || locked || !item) return
+    if (saving.current || locked || !item || conflict) return
     if (!validDate(form.next_review_on) || form.next_review_on <= japanDay()) { setError('dates'); return }
     if (decision === 'deferred' && !form.reason.trim()) { setError('reason'); return }
     if (decision === 'checked' && (!attested || !validDate(checkedOn) || checkedOn > japanDay())) { setError('dates'); return }
@@ -62,8 +72,9 @@ export default function WeeklyDirectoryReview({ profile, due, reviewTasks = [], 
       resource.resource_key === item.resource_key && decision === 'checked' ? { ...resource, checked_on: checkedOn, review_due_on: form.next_review_on } : resource) }
     saving.current = true; setBusy(true); setError('')
     try {
-      const saved = await onSaveReview({ contact_key: item.resource_key, revision: task?.revision || 0,
-        decision, ...form, profile: draft, confirmed: decision !== 'deferred' })
+      const saved = await onSaveReview({ contact_key: item.resource_key, revision: form.baseRevision,
+        decision, reason: form.reason, assignee: form.assignee, next_review_on: form.next_review_on,
+        profile: draft, confirmed: decision !== 'deferred' })
       if (!saved) { setError('save'); return }
       setForms(previous => { const next = { ...previous }; delete next[item.resource_key]; return next })
       setIndex(value => value + 1); setEditing(false); setAttestedSnapshot(''); setCheckedOn(japanDay()); pendingFocus.current = true
@@ -91,20 +102,26 @@ export default function WeeklyDirectoryReview({ profile, due, reviewTasks = [], 
           <p>{t('flows.directory.service_status')}: {t(`flows.directory.statuses.${item.service_status || 'active'}`)}</p>
           {publicHttps(item.url) && <a href={publicHttps(item.url)} target="_blank" rel="noreferrer">{t('interaction.weekly.source')}</a>}
           {publicHttps(item.booking_url) && <p><a href={publicHttps(item.booking_url)} target="_blank" rel="noreferrer">{t('work.booking')}</a></p>}
-          <fieldset disabled={locked}><legend>{t('continuity.review.internal')}</legend>
+          {conflict && <div role="alert"><p>{t('reviewFixes.reviewConflict')}</p>
+            <h5>{t('reviewFixes.latestReview')}</h5>
+            <p>{task?.assignee || t('polish.noMaintainer')} · {task?.next_review_on || t('polish.noReviewDate')}</p>
+            <p className="preserve-lines">{task?.reason || t('pilot.notProvided')}</p>
+            <button type="button" className="pilot-button secondary" disabled={locked} onClick={reloadItem}>{t('reviewFixes.reloadReview')}</button>
+          </div>}
+          <fieldset disabled={locked || conflict}><legend>{t('continuity.review.internal')}</legend>
             <p>{t('continuity.review.internalNotice')}</p>
             <label>{t('continuity.review.assignee')}<input maxLength={100} value={form.assignee} onChange={event => editForm('assignee', event.target.value)} /></label>
             <label>{t('continuity.review.reason')}<textarea rows={3} maxLength={500} value={form.reason} onChange={event => editForm('reason', event.target.value)} /></label>
             <label>{t('continuity.review.next')}<input type="date" required min={japanDay()} value={form.next_review_on} onChange={event => editForm('next_review_on', event.target.value)} /></label>
           </fieldset>
-          <div className="pilot-actions"><button type="button" className="pilot-button secondary" disabled={locked} onClick={() => { setEditing(true); onEdit(item.resource_key) }}>{t('interaction.weekly.edit')}</button>
-            <button type="button" className="pilot-button secondary" disabled={locked || !savedContactKeys.includes(item.resource_key)} onClick={() => process('deferred')}>{t('continuity.review.defer')}</button></div>
+          <div className="pilot-actions"><button type="button" className="pilot-button secondary" disabled={locked || conflict} onClick={() => { captureRevision(); setEditing(true); onEdit(item.resource_key) }}>{t('interaction.weekly.edit')}</button>
+            <button type="button" className="pilot-button secondary" disabled={locked || conflict || !savedContactKeys.includes(item.resource_key)} onClick={() => process('deferred')}>{t('continuity.review.defer')}</button></div>
           {!savedContactKeys.includes(item.resource_key) && <p>{t('continuity.review.saveNewFirst')}</p>}
-          {editing ? <><p>{t('continuity.review.saveAllDraft')}</p><button type="button" className="pilot-button secondary" disabled={locked} onClick={() => process('edited')}>{t('continuity.review.saveEdited')}</button></>
-            : <fieldset disabled={locked}><legend>{t('interaction.weekly.unchanged')}</legend>
-              <label>{t('pilot.checkedOn')}<input type="date" required value={checkedOn} max={japanDay()} onChange={event => { setCheckedOn(event.target.value); setAttestedSnapshot('') }} /></label>
+          {editing ? <><p>{t('continuity.review.saveAllDraft')}</p><button type="button" className="pilot-button secondary" disabled={locked || conflict} onClick={() => process('edited')}>{t('continuity.review.saveEdited')}</button></>
+            : <fieldset disabled={locked || conflict}><legend>{t('interaction.weekly.unchanged')}</legend>
+              <label>{t('pilot.checkedOn')}<input type="date" required value={checkedOn} max={japanDay()} onChange={event => { captureRevision(); setCheckedOn(event.target.value); setAttestedSnapshot('') }} /></label>
               <p>{t('continuity.review.confirmDates')}</p>
-              <label><input type="checkbox" checked={attested} onChange={event => setAttestedSnapshot(event.target.checked ? snapshot : '')} />{t('interaction.weekly.attest')}</label>
+              <label><input type="checkbox" checked={attested} onChange={event => { captureRevision(); setAttestedSnapshot(event.target.checked ? snapshot : '') }} />{t('interaction.weekly.attest')}</label>
               <button type="button" className="pilot-button secondary" disabled={!attested} onClick={() => process('checked')}>{t('continuity.review.saveChecked')}</button>
             </fieldset>}
           {error && <p role="alert">{t(`continuity.review.errors.${error}`)}</p>}

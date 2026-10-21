@@ -1,6 +1,7 @@
 """Explicit attribution and family sharing checks, without external processing."""
 
 from sqlalchemy import or_
+from uuid import UUID
 from models.database import CareSubjectDB, FamilyDB, FamilyMemberDB
 from exceptions import NotFoundError, ValidationError, ConflictError
 
@@ -60,3 +61,25 @@ def validate_attribution(db, user_id, values, sharing_revision=None):
 
 def owned_record_metadata(db, user_id):
     return {item["subject_id"]: item for item in accessible_subjects(db, user_id)}
+
+
+def analysis_record_scope(db, user_id, subject_id=None, unassigned=None):
+    """Resolve one explicit baby scope before aggregation or AI field selection."""
+    if unassigned is not None and type(unassigned) is not bool:
+        raise ValidationError("Choose one care subject or unassigned records")
+    if subject_id is not None:
+        if not isinstance(subject_id, (str, UUID)):
+            raise ValidationError("Invalid care subject")
+        try:
+            subject_id = str(UUID(str(subject_id)))
+        except ValueError:
+            raise ValidationError("Invalid care subject") from None
+        if unassigned is True:
+            raise ValidationError("Choose one care subject or unassigned records")
+        if not any(item["subject_id"] == subject_id for item in accessible_subjects(db, user_id)):
+            raise NotFoundError("Care subject is no longer accessible")
+        return {"subject_id": subject_id, "unassigned": False}
+    if unassigned is False:
+        raise ValidationError("Choose a care subject before analysis")
+    # Old clients and queued jobs must never implicitly combine multiple babies.
+    return {"subject_id": None, "unassigned": True}

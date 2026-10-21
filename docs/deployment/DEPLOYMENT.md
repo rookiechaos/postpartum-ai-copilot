@@ -4,6 +4,8 @@
 
 This guide covers deploying the Postpartum AI Copilot application in a production environment.
 
+Current source rollout: read the [2026-10-20 review fixes](../security/REPO_REVIEW_FIXES_2026-10-20.md) for session invalidation, body-only support lookup and coordinated frontend/API/worker deployment. These source changes have not been started, built, tested or migrated.
+
 ## Architecture Overview
 
 The application consists of:
@@ -100,8 +102,13 @@ VITE_ASYNC_MODE=true
 
    This will start:
    - PostgreSQL database
-   - API server (port 8000)
-   - Worker processes
+   - A one-shot schema migration, after PostgreSQL is healthy
+   - API server (port 8000), after migration succeeds
+   - Worker processes, after migration succeeds and the API answers its health probe
+
+   Stop existing workers before an upgrade; the dependency graph orders new service starts and does not suspend an already running old worker. Retain the database volume. Migration failure prevents new API/worker startup. Directly started workers also perform a read-only schema check before claiming any tasks; they do not initialize/migrate the database themselves. Existing logins need to sign in again after the `users.session_revision` upgrade.
+
+   Compose explicitly forwards `OPENAI_MODEL`, `OPENAI_EMBEDDING_MODEL`, `CLAUDE_MODEL` and `GEMINI_MODEL` to all backend services. Put overrides in the ignored file used by `--env-file`. That flag supplies interpolation values; it does not mount the file into containers. Omitted values retain the defaults in `backend/config/settings.py`; those defaults are not a statement about provider availability.
 
    PostgreSQL is reachable only on the container network; no database port is published on the host. Build/host the frontend separately. Matching frontend/API/worker versions are required for the reminder acknowledgment flow. The new curated RAG collection excludes older sample collections without deleting them; operator-approved source re-ingestion is a separate, explicit operation. See [review fixes and pending acceptance](../security/REPO_REVIEW_FIXES_2026-10-16.md).
 

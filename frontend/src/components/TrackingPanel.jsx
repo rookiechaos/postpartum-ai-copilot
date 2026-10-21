@@ -24,6 +24,9 @@ const types = ['feeding', 'diaper', 'sleep', 'mood', 'pumping', 'recovery']
 
 export default function TrackingPanel({ userId, initialEntryType, requestKey = 0, onRecordsChanged, visible = true }) {
   const { t, i18n } = useTranslation()
+  const care = useCareSession()
+  const [analysisSubject, setAnalysisSubject] = useState('')
+  const analysisReady = care.ready && (!analysisSubject || care.subjects.some(item => item.subject_id === analysisSubject))
   const { online, reconnections } = useConnection()
   const now = useRecordClock(visible)
   const toast = useToast()
@@ -134,6 +137,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   }, [undoEntry])
 
   useEffect(() => { summaryVersion.current++; setSummary(null) }, [includeProfile, includeParent, includeNotes, i18n.resolvedLanguage])
+  useEffect(() => { summaryVersion.current++; setSummary(null); setAcceptedAI(false) }, [analysisSubject, analysisReady])
   useEffect(() => () => { summaryVersion.current++ }, [])
 
   const refresh = () => {
@@ -212,10 +216,11 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     finally { writing.current = false; setLoading(false) }
   }
   const loadSummary = async () => {
-    if (!acceptedAI || summaryLoading) return
+    if (!acceptedAI || summaryLoading || !analysisReady) return
     setSummaryLoading(true)
     const version = ++summaryVersion.current
     const scope = { include_profile: includeProfile, include_parent: includeParent, include_notes: includeNotes,
+      ...(analysisSubject ? { subject_id: analysisSubject, unassigned: false } : { unassigned: true }),
       language: i18n.resolvedLanguage || 'ja' }
     try {
       const result = import.meta.env.VITE_ASYNC_MODE !== 'false'
@@ -288,13 +293,24 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
       </article>)}
     </section>
     <details className="pilot-panel"><summary>{t('pilot.optionalAnalysis')}</summary>
+      <label>{t('reviewFixes.analysisSubject')}<select value={analysisSubject} disabled={summaryLoading || !care.ready}
+        onChange={event => { setAnalysisSubject(event.target.value); setAcceptedAI(false); setSummary(null); summaryVersion.current++ }}>
+        <option value="">{t('reviewFixes.unassigned')}</option>
+        {analysisSubject && !care.subjects.some(item => item.subject_id === analysisSubject) && <option value={analysisSubject}>{t('reviewFixes.unavailable')}</option>}
+        {care.subjects.map(item => <option key={item.subject_id} value={item.subject_id}>{item.nickname}{item.family_name ? ` · ${item.family_name}` : ''}</option>)}
+      </select></label>
+      <p>{t('reviewFixes.analysisScope')}</p>
+      {!analysisReady && <p role="status">{t('reviewFixes.analysisUnavailable')} <button type="button" className="text-action" onClick={care.reload}>{t('pilot.retry')}</button></p>}
       <button className="pilot-button secondary" onClick={() => setShowCharts(value => !value)}>{t(showCharts ? 'tracking.hideCharts' : 'tracking.showCharts')}</button>
-      {showCharts && <Charts userId={userId} refreshKey={attempt} visible={visible}
+      {showCharts && analysisReady && <Charts key={analysisSubject || 'unassigned'} userId={userId} subjectId={analysisSubject} refreshKey={attempt} visible={visible}
         onRecord={!loading && !pendingSave && !draft.candidate && draft.status !== 'loading' ? () => openRecord({ entryType }) : undefined} />}
-      <AIUseNotice scope="records" accepted={acceptedAI} onChange={setAcceptedAI} disabled={summaryLoading}
+      <AIUseNotice scope="records" accepted={acceptedAI} onChange={setAcceptedAI} disabled={summaryLoading || !analysisReady}
+        profileLabel={t('reviewFixes.analysisProfile')}
         includeProfile={includeProfile} onProfileChange={setIncludeProfile} includeParent={includeParent} onParentChange={setIncludeParent}
         includeNotes={includeNotes} onNotesChange={setIncludeNotes} />
-      <button className="pilot-button secondary" disabled={!acceptedAI || summaryLoading || entriesLoading || entries.length === 0} onClick={loadSummary}>{t(summaryLoading ? 'common.loading' : 'pilot.analyzeRecords')}</button>
+      <p>{t('reviewFixes.analysisProfileNotice')}</p>
+      <button className="pilot-button secondary" disabled={!acceptedAI || !analysisReady || summaryLoading || entriesLoading || !entries.some(entry =>
+        (babyKinds.includes(entry.entry_type) && (entry.subject_id || '') === analysisSubject) || (includeParent && ['mood', 'recovery'].includes(entry.entry_type)))} onClick={loadSummary}>{t(summaryLoading ? 'common.loading' : 'pilot.analyzeRecords')}</button>
       {summary && <div className="ai-summary"><p>{t('pilot.aiLabel')}</p>
         {['patterns', 'insights', 'recommendations'].map(key => summary[key]?.length > 0 && <section key={key}>
           <h3>{t(`tracking.${key}`)}</h3><ul>{summary[key].map((value, index) => <li key={index}>{value}</li>)}</ul>

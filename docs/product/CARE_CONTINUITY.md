@@ -2,6 +2,8 @@
 
 The seven product improvements below are implemented in source. The application, dependency installation, builds, tests, database initialization, migrations and browser flows have **not been executed**. Earlier verification reports do not validate this revision.
 
+The subsequent [repository review fixes](../security/REPO_REVIEW_FIXES_2026-10-20.md) extend this rollout with a session-revision migration, one-baby charts/analysis, timer correction without a new save key, staff forms that retain their original revision, and migration-gated worker startup. Read those upgrade notes before deploying this source revision.
+
 ## Family behavior
 
 | Improvement | Implemented behavior |
@@ -16,6 +18,8 @@ The seven product improvements below are implemented in source. The application,
 | Task-based first use | The first-use screen offers starting a record, joining family care, or preparing human help. Each opens the corresponding existing screen with short, dismissible guidance. Profile setup stays optional; the recording example remains available without creating real data. |
 
 The consultation sheet selects one care subject's **own** baby records, or unassigned records. Adult health and notes remain separate optional inclusions. It does not pull in family members' records or merge different babies by default. Changing the selected subject or its nickname makes the previous generated sheet stale until reviewed again. Record backups include subject identity, the per-record sharing choice and confirmed end times.
+
+Charts and AI analysis now also select one accessible baby or only unassigned records. Their initial selection is unassigned; the Home quick-record selection does not silently change it. Analysis filters the owner's records before removing identity fields or sending any AI context. A worker rechecks subject access when it executes the task. The mood chart is the adult's own mood; AI parent-health and notes still require separate selection. Account-level baby age/feeding preferences are excluded from analysis because they are not linked to a care subject.
 
 The timeline displays overlapping records, not durations clipped to a viewing window. Home totals and consultation-sheet totals still group by the **start day**, and the interface labels this distinction. Missing observations remain unknown.
 

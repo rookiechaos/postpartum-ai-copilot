@@ -29,6 +29,8 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
   const [start, setStart] = useState('')
   const [end, setEnd] = useState('')
   const [pending, setPending] = useState(null)
+  const [correction, setCorrection] = useState(false)
+  const [existingRecord, setExistingRecord] = useState(null)
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [returned, setReturned] = useState(false)
@@ -39,7 +41,7 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
   const writing = useRef(false)
   const uncertain = useRef(false)
   const hidden = useRef(false)
-  const content = timer ? { timer, start, end, side, pending, subjectScope } : null
+  const content = timer ? { timer, start, end, side, pending, subjectScope, correction } : null
   const draft = useAccountDraft('timer', userId, content, value => {
     if (!validTimer(value.timer) || (value.pending && (!isRecordOperation(value.pending)
       || value.pending.request_key !== value.timer.request_key || value.pending.entry_type !== value.timer.entry_type
@@ -49,7 +51,8 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
     setEnd(typeof value.end === 'string' ? value.end : value.timer.ended_at ? japanDateTimeInput(value.timer.ended_at) : '')
     setSide(['left', 'right', 'both'].includes(value.side) ? value.side : '')
     setSubjectScope(value.subjectScope || privateSubject(''))
-    setPending(value.pending || null); uncertain.current = Boolean(value.pending)
+    setPending(value.pending || null); setCorrection(value.correction === true); setExistingRecord(null)
+    uncertain.current = Boolean(value.pending || value.correction)
     setStatus(value.pending ? 'unconfirmed' : ''); setReturned(true); setConfirmed(false)
   })
   useCareWork('timer', timer ? { version: `${timer.request_key}:${timer.ended_at || 'running'}:${status}`,
@@ -88,6 +91,7 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
     if (timer || writing.current || blocked || draft.candidate || draft.status === 'loading') return
     const startedAt = new Date().toISOString()
     duplicates.clear()
+    setCorrection(false); setExistingRecord(null)
     setTimer({ entry_type: kind, started_at: startedAt, ended_at: null, request_key: requestKey() })
     setSubjectScope(privateSubject(care.activeId)); setLastSaved(null)
     setStart(japanDateTimeInput(startedAt)); setEnd(''); setClock(Date.now()); setStatus(''); setError('')
@@ -107,6 +111,7 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
   const busy = ['saving', 'checking', 'clearing'].includes(status)
   const finish = async saved => {
     setLastSaved(saved)
+    setCorrection(false); setExistingRecord(null)
     uncertain.current = false; setPending(null); setTimer(null); setConfirmed(false); setReturned(false)
     setStart(''); setEnd(''); setSide(''); setError(''); setStatus('saving'); onRecordsChanged()
     await draft.clear(); setStatus('saved')
@@ -134,7 +139,7 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
       if (failure.status === 422 && !uncertain.current) { setPending(null); setError('invalidTime') }
     } finally { writing.current = false }
   }
-  const check = async () => {
+  const check = async (forCorrection = false) => {
     if (writing.current || !pending) return
     writing.current = true; setStatus('checking'); setError('')
     try {
@@ -145,8 +150,15 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
       const sameEnd = pending.end_timestamp === undefined || (record?.end_timestamp && utcDate(record.end_timestamp).getTime() === utcDate(pending.end_timestamp).getTime())
       if (result.state === 'saved' && record.revision === 1 && sameEnd && utcDate(record.timestamp).getTime() === utcDate(pending.timestamp).getTime()
         && fields.every(key => (record[key] ?? null) === (pending[key] ?? null))) await finish(record)
-      else if (result.state === 'saved' || result.state === 'deleted') { setError('conflict'); setStatus('unconfirmed'); onRecordsChanged() }
-      else { setError('notFound'); setStatus(uncertain.current ? 'unconfirmed' : 'unsaved'); onRecordsChanged() }
+      else if (result.state === 'saved' || result.state === 'deleted') {
+        setExistingRecord(result.state === 'saved' ? record : null)
+        setError('conflict'); setStatus('unconfirmed'); onRecordsChanged()
+      } else if (result.state === 'not_found' && forCorrection) {
+        // Keep the SAME idempotency key. A delayed original write can still
+        // finish after this read; the corrected request must not create a second row.
+        duplicates.clear(); setPending(null); setExistingRecord(null); setCorrection(true)
+        setConfirmed(false); setError(''); setStatus('unsaved'); onRecordsChanged()
+      } else { setError('notFound'); setStatus(uncertain.current ? 'unconfirmed' : 'unsaved'); onRecordsChanged() }
     } catch { setError('checkFailed'); setStatus(uncertain.current ? 'unconfirmed' : 'unsaved') }
     finally { writing.current = false }
   }
@@ -157,6 +169,7 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
       const cleared = await draft.clear()
       if (!cleared) { setError('draftClear'); setStatus(pending ? 'unconfirmed' : ''); return }
       duplicates.clear()
+      setCorrection(false); setExistingRecord(null)
       uncertain.current = false; setTimer(null); setPending(null); setStatus(''); setConfirmed(false); setError(''); setSide('')
     } finally { writing.current = false }
   }
@@ -198,7 +211,11 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
       <DuplicateReview review={duplicates.review} disabled={busy} continueDisabled={blocked || !confirmed || error === 'conflict'} onContinue={() => save({ preventDefault() {} })} onCancel={() => {
         duplicates.clear(); setPending(null); setStatus(''); setConfirmed(false)
       }} />
-      {pending && <p>{t('localCare.record.retryHint')} <button type="button" className="text-action" disabled={busy} onClick={check}>{t('localCare.record.check')}</button></p>}
+      {correction && <p role="status">{t('reviewFixes.timerCorrection')}</p>}
+      {pending && <p>{t('localCare.record.retryHint')} <button type="button" className="text-action" disabled={busy} onClick={() => check()}>{t('localCare.record.check')}</button></p>}
+      {pending && <button type="button" className="pilot-button secondary" disabled={busy} onClick={() => check(true)}>{t('reviewFixes.correctTimer')}</button>}
+      {existingRecord && <div role="status"><p>{t('reviewFixes.timerExisting')}</p>
+        <button type="button" className="pilot-button secondary" disabled={busy} onClick={() => onLocate?.(existingRecord)}>{t('reviewFixes.openTimerRecord')}</button></div>}
       <button type="button" className="pilot-button secondary" disabled={busy} onClick={discard}>{t('interaction.timer.discard')}</button>
     </>}
     {['checking', 'clearing'].includes(status) ? <p role="status">{t('common.loading')}</p> : <RecordSaveStatus status={status} />}

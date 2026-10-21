@@ -42,6 +42,7 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
   const [previewed, setPreviewed] = useState(false)
   const [publicationComplete, setPublicationComplete] = useState(false)
   const [attempt, setAttempt] = useState(0)
+  const [reviewEpoch, setReviewEpoch] = useState(0)
   const [copied, setCopied] = useState(false)
   const [focusRequest, setFocusRequest] = useState(0)
   const pendingFocus = useRef(null)
@@ -92,7 +93,7 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
     let active = true
     reloadBusy.current = true; setReloading(true); setStatus('loading')
     api.get('/api/pilot/organization').then(result => {
-      if (active) { applyResult(result); setStatus('ready'); setError('') }
+      if (active) { applyResult(result); setReviewEpoch(value => value + 1); setReviewDirty(false); setWeeklyActive(false); setStatus('ready'); setError('') }
     }).catch(err => { if (active) setStatus(err.status === 403 ? 'denied' : 'failed') })
       .finally(() => { if (active) { reloadBusy.current = false; setReloading(false) } })
     return () => { active = false }
@@ -271,7 +272,7 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
             : ['name', 'url'].includes(key) ? t(`pilot.resource.${key}`) : t(`work.reviewIssues.${key}`)).join(' / ')}</p>
         </li>)}</ul> : <p>{t('work.noReviewDue')}</p>}
         </details>
-        <WeeklyDirectoryReview profile={profile} due={due} reviewTasks={reviewTasks} onSaveReview={saveReview} onDraftChange={setReviewDirty} maintainerFilter={maintainerFilter} blocked={editingBlocked}
+        <WeeklyDirectoryReview key={reviewEpoch} profile={profile} due={due} reviewTasks={reviewTasks} onSaveReview={saveReview} onDraftChange={setReviewDirty} maintainerFilter={maintainerFilter} blocked={editingBlocked}
           savedContactKeys={(savedDraft?.resources || []).map(item => item.resource_key)}
           hasUnpublishedChanges={unpublished} onSessionChange={setWeeklyActive}
           onEdit={key => focusField('directory-contact-heading', key)}

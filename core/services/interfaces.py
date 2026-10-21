@@ -23,7 +23,9 @@ class ITrackingService(Protocol):
         self,
         user_id: str,
         db: Session,
-        days: int = 7
+        days: int = 7,
+        subject_id: Optional[str] = None,
+        unassigned: bool = False,
     ) -> List[Dict[str, Any]]:
         """Get tracking entries for a user"""
         ...

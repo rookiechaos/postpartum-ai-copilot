@@ -12,6 +12,7 @@ from typing import Callable
 from functools import wraps
 import time
 from config.settings import get_settings
+from utils.request_metadata import safe_request_route
 
 # Check if Redis is available for distributed rate limiting
 settings = get_settings()
@@ -135,7 +136,7 @@ def rate_limit(limit: str = "100/minute", key_func: Callable = get_remote_addres
                         event_type="rate_limit_exceeded",
                         user_id=user_id,
                         ip_address=get_remote_address(request),
-                        details={"endpoint": request.url.path, "limit": limit}
+                        details={"route": safe_request_route(request), "limit": limit}
                     )
                 
                 limit_parts = limit.split("/")

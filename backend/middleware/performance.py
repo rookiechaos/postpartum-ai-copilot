@@ -10,6 +10,7 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 from services.logging_service import logger
+from utils.request_metadata import safe_request_route
 
 
 class PerformanceMetrics:
@@ -127,7 +128,7 @@ class PerformanceMonitoringMiddleware(BaseHTTPMiddleware):
             
             # Record metrics
             performance_metrics.record_request(
-                endpoint=request.url.path,
+                endpoint=safe_request_route(request),
                 method=request.method,
                 response_time=response_time,
                 status_code=response.status_code
@@ -140,7 +141,7 @@ class PerformanceMonitoringMiddleware(BaseHTTPMiddleware):
                     value=response_time * 1000,
                     unit="ms",
                     context={
-                        "endpoint": request.url.path,
+                        "route": safe_request_route(request),
                         "method": request.method,
                         "status_code": response.status_code
                     }
@@ -152,7 +153,7 @@ class PerformanceMonitoringMiddleware(BaseHTTPMiddleware):
             # Log API request
             user_id = getattr(request.state, "user_id", None)
             logger.log_api_request(
-                endpoint=request.url.path,
+                endpoint=safe_request_route(request),
                 method=request.method,
                 user_id=user_id,
                 status_code=response.status_code,
@@ -166,7 +167,7 @@ class PerformanceMonitoringMiddleware(BaseHTTPMiddleware):
             logger.log_error(
                 error=e,
                 context={
-                    "endpoint": request.url.path,
+                    "route": safe_request_route(request),
                     "method": request.method,
                     "response_time_ms": int(response_time * 1000)
                 },

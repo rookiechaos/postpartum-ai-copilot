@@ -18,6 +18,8 @@ import interactionEnglish from './locales/interaction.en.json'
 import interactionJapanese from './locales/interaction.ja.json'
 import continuityEnglish from './locales/continuity.en.json'
 import continuityJapanese from './locales/continuity.ja.json'
+import reviewFixesEnglish from './locales/reviewFixes.en.json'
+import reviewFixesJapanese from './locales/reviewFixes.ja.json'
 
 i18n
   .use(LanguageDetector)
@@ -25,10 +27,10 @@ i18n
   .init({
     resources: {
       en: {
-        translation: { ...enTranslations, polish: polishEnglish, ui: uiEnglish, flows: flowsEnglish, friendly: friendlyEnglish, localCare: localCareEnglish, interaction: interactionEnglish, continuity: continuityEnglish }
+        translation: { ...enTranslations, polish: polishEnglish, ui: uiEnglish, flows: flowsEnglish, friendly: friendlyEnglish, localCare: localCareEnglish, interaction: interactionEnglish, continuity: continuityEnglish, reviewFixes: reviewFixesEnglish }
       },
       ja: {
-        translation: { ...jaTranslations, polish: polishJapanese, ui: uiJapanese, flows: flowsJapanese, friendly: friendlyJapanese, localCare: localCareJapanese, interaction: interactionJapanese, continuity: continuityJapanese }
+        translation: { ...jaTranslations, polish: polishJapanese, ui: uiJapanese, flows: flowsJapanese, friendly: friendlyJapanese, localCare: localCareJapanese, interaction: interactionJapanese, continuity: continuityJapanese, reviewFixes: reviewFixesJapanese }
       }
     },
     fallbackLng: 'ja',

@@ -80,11 +80,13 @@ async def get_optional_user(
 
 def get_user_id_from_token(token: str) -> Optional[str]:
     """
-    Extract user_id from token without full authentication
+    Resolve a token owner against the active account's current session revision.
     
     Useful for worker processes that need to identify task owners
     """
-    token_data = auth_service.verify_token(token, token_type="access")
-    if token_data:
-        return token_data.user_id
+    from models.database import SessionLocal
+    with SessionLocal() as db:
+        token_data = auth_service.verify_token(token, token_type="access", db=db)
+        if token_data:
+            return token_data.user_id
     return None

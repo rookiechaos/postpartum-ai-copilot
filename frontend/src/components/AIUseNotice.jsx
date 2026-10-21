@@ -5,7 +5,7 @@ import { AIProviders } from './ServicePrivacyInfo'
 
 export default function AIUseNotice({ accepted, onChange, scope = 'message', disabled = false,
   includeProfile = false, onProfileChange, includeParent = false, onParentChange,
-  includeNotes = false, onNotesChange, includeHistory = false, onHistoryChange, children }) {
+  includeNotes = false, onNotesChange, includeHistory = false, onHistoryChange, profileLabel, children }) {
   const { t } = useTranslation()
   const [provider, setProvider] = useState(null)
   useEffect(() => {
@@ -24,7 +24,7 @@ export default function AIUseNotice({ accepted, onChange, scope = 'message', dis
       </details>
       <fieldset disabled={disabled}>
         <legend>{t('work.aiAttachments')}</legend>
-        {onProfileChange && <label><input type="checkbox" checked={includeProfile} onChange={event => { onProfileChange(event.target.checked); onChange(false) }} />{t('work.attachProfile')}</label>}
+        {onProfileChange && <label><input type="checkbox" checked={includeProfile} onChange={event => { onProfileChange(event.target.checked); onChange(false) }} />{profileLabel || t('work.attachProfile')}</label>}
         {onParentChange && <label><input type="checkbox" checked={includeParent} onChange={event => { onParentChange(event.target.checked); onChange(false) }} />{t('pilot.includeParent')}</label>}
         {onNotesChange && <label><input type="checkbox" checked={includeNotes} onChange={event => { onNotesChange(event.target.checked); onChange(false) }} />{t('pilot.includeNotes')}</label>}
         {onHistoryChange && <label><input type="checkbox" checked={includeHistory} onChange={event => { onHistoryChange(event.target.checked); onChange(false) }} />{t('work.attachHistory')}</label>}

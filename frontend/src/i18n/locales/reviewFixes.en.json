@@ -1,0 +1,17 @@
+{
+  "analysisSubject": "Baby for charts and AI review",
+  "unassigned": "Only records with no baby assigned",
+  "unavailable": "This baby is currently unavailable",
+  "analysisScope": "Uses only your own records for the selected baby. Records made by family members are excluded. The mood chart shows your own mood. Select below if you also want to send your mood and recovery records to AI.",
+  "analysisUnavailable": "The selected baby could not be verified. Reload or choose again.",
+  "analysisProfile": "Attach my birth method and average sleep time",
+  "analysisProfileNotice": "Baby age and feeding preferences from your account profile are excluded because they are not linked to the selected baby.",
+  "reviewConflict": "This review task changed after you started entering information. Your input is retained. Check the saved version before continuing.",
+  "latestReview": "Current saved review",
+  "reloadReview": "Discard this internal note's input and use the saved version",
+  "confirmReloadReview": "Discard this internal note's input and confirmation and use the saved version? Public directory edits are kept.",
+  "correctTimer": "Check save result, then correct input",
+  "timerCorrection": "No saved record was found at this moment. You can correct the input while keeping the start and end times. The same save reference is retained in case the original save finishes later. If it has already saved, open that record to make corrections.",
+  "timerExisting": "A record exists for this save reference but differs from the input. Open the saved record to check and correct it.",
+  "openTimerRecord": "Open saved record"
+}

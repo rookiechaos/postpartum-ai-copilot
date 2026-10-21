@@ -3,7 +3,7 @@ Tracking Routes - API endpoints for tracking data management
 """
 
 from fastapi import APIRouter, Depends, Query, Request
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 from uuid import UUID
 from sqlalchemy.orm import Session
@@ -15,8 +15,8 @@ from middleware.rate_limit import rate_limit, RATE_LIMITS
 from models.schemas import User, TrackingEntry, TrackingEntryCreate, TrackingEntryUpdate, TrackingSummary, EmotionalCheckIn
 from models.database import TrackingEntryDB, TrackingWriteDB
 from services.task_queue import TaskPriority
-from services.ai_data_scope import profile_for_ai, records_for_ai
-from services.care_subjects import accessible_subjects
+from services.ai_data_scope import analysis_profile_for_ai, records_for_ai
+from services.care_subjects import accessible_subjects, analysis_record_scope
 from exceptions import (
     PostpartumException,
     DatabaseError,
@@ -148,6 +148,8 @@ async def get_tracking_entries(
     request: Request,
     user_id: str,
     days: int = Query(7, ge=1, le=365),
+    subject_id: Optional[UUID] = None,
+    unassigned: bool = False,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -156,7 +158,8 @@ async def get_tracking_entries(
     tracking_service = container.get("tracking_service")
 
     try:
-        entries = await tracking_service.get_entries(user_id, db, days=days)
+        scope = analysis_record_scope(db, user_id, subject_id, unassigned) if subject_id is not None or unassigned else {}
+        entries = await tracking_service.get_entries(user_id, db, days=days, **scope)
         return entries
     except PostpartumException:
         raise
@@ -176,6 +179,8 @@ async def get_tracking_summary(
     request: Request,
     user_id: str,
     days: int = Query(7, ge=1, le=90),
+    subject_id: Optional[UUID] = None,
+    unassigned: Optional[bool] = None,
     include_parent: bool = False,
     include_notes: bool = False,
     include_profile: bool = False,
@@ -190,6 +195,7 @@ async def get_tracking_summary(
     Returns task_id, client should poll /api/tasks/{task_id}
     """
     check_user_authorization(current_user, user_id, "user's tracking data")
+    scope = analysis_record_scope(db, user_id, subject_id, unassigned)
     tracking_service = container.get("tracking_service")
     ai_service = container.get("ai_service")
     task_queue = container.get("task_queue")
@@ -198,9 +204,9 @@ async def get_tracking_summary(
 
     if not async_mode:
         try:
-            entries = await tracking_service.get_entries(user_id, db, days=days)
+            entries = await tracking_service.get_entries(user_id, db, days=days, **scope)
             entries = records_for_ai(entries, include_parent, include_notes)
-            context = profile_for_ai(await tracking_service.get_user_context(user_id, db), include_profile)
+            context = analysis_profile_for_ai(await tracking_service.get_user_context(user_id, db), include_profile)
 
             summary = await ai_service.analyze_tracking(
                 entries=entries,
@@ -227,6 +233,7 @@ async def get_tracking_summary(
             "user_id": user_id,
             "days": days, "language": language, "include_parent": include_parent,
             "include_notes": include_notes, "include_profile": include_profile,
+            **scope,
         }
 
         task_id = task_queue.create_task(

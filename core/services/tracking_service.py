@@ -15,6 +15,7 @@ from exceptions import DatabaseError, ValidationError, NotFoundError, ConflictEr
 from utils.db_helpers import query_in_executor
 from services.tracking_policy import validate_record_time, validate_record_interval
 from services.care_subjects import validate_attribution, owned_record_metadata
+from services.ai_data_scope import PARENT_TYPES
 
 
 class TrackingService:
@@ -196,16 +197,22 @@ class TrackingService:
         self,
         user_id: str,
         db: Session,
-        days: int = 7
+        days: int = 7,
+        subject_id: Optional[str] = None,
+        unassigned: bool = False,
     ) -> List[Dict[str, Any]]:
         """Get tracking entries for a user"""
         cutoff_date = datetime.utcnow() - timedelta(days=days)
         
         def _get_entries():
-            entries = db.query(TrackingEntryDB).filter(
+            query = db.query(TrackingEntryDB).filter(
                 TrackingEntryDB.user_id == user_id,
                 or_(TrackingEntryDB.timestamp >= cutoff_date, TrackingEntryDB.end_timestamp >= cutoff_date)
-            ).order_by(desc(TrackingEntryDB.timestamp)).all()
+            )
+            if subject_id is not None or unassigned:
+                care_scope = TrackingEntryDB.subject_id == subject_id if subject_id is not None else TrackingEntryDB.subject_id.is_(None)
+                query = query.filter(or_(TrackingEntryDB.entry_type.in_(PARENT_TYPES), care_scope))
+            entries = query.order_by(desc(TrackingEntryDB.timestamp)).all()
             return self._owned_entries(entries, db, user_id)
         
         return await query_in_executor(

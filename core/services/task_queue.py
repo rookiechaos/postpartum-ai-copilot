@@ -97,6 +97,10 @@ class TaskQueue:
         Returns:
             Task ID
         """
+        if task_type == "tracking_analysis":
+            from services.care_subjects import analysis_record_scope
+            scope = analysis_record_scope(db, user_id, task_data.get("subject_id"), task_data.get("unassigned"))
+            task_data = {**task_data, **scope}
         task_id = f"{task_type}_{uuid.uuid4().hex[:12]}"
         timeout = timeout or self.default_timeout
         

@@ -18,13 +18,42 @@ LOG_DIR = resolve_runtime_path(os.getenv("LOG_DIR", "do-not-upload/logs"), "logs
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 _HOME_PATH_PATTERN = re.compile(r"(/Users/|/home/)[^/\s\"']+")
+_ACCOUNT_REFERENCE_PATH = re.compile(
+    r"(/api/(?:pilot/account-help|admin/account-requests)/)[0-9a-fA-F-]{36}(?=[/?\s\"']|$)"
+)
+_QUERY_CREDENTIAL = re.compile(
+    r"([?&](?:access_token|refresh_token|token|reference)=)[^&\s\"']+", re.IGNORECASE
+)
 
 
 def sanitize_log_path(text: str) -> str:
     """Redact OS username segments from paths before writing logs."""
     if not text:
         return text
-    return _HOME_PATH_PATTERN.sub(r"\1<redacted>", text)
+    text = _HOME_PATH_PATTERN.sub(r"\1<redacted>", text)
+    text = _ACCOUNT_REFERENCE_PATH.sub(r"\1<redacted>", text)
+    return _QUERY_CREDENTIAL.sub(r"\1<redacted>", text)
+
+
+class RequestPrivacyFilter(logging.Filter):
+    """Uvicorn logs bypass the application formatter; redact before formatting."""
+
+    def filter(self, record):
+        if record.name == "uvicorn.access" and isinstance(record.args, tuple) and len(record.args) == 5:
+            # Route templates are already recorded by application middleware.
+            _, method, _, version, status = record.args
+            record.args = ("<client>", method, "/<redacted>", version, status)
+        elif isinstance(record.args, tuple):
+            record.args = tuple(sanitize_log_path(arg) if isinstance(arg, str) else arg for arg in record.args)
+        elif isinstance(record.args, dict):
+            record.args = {key: sanitize_log_path(value) if isinstance(value, str) else value for key, value in record.args.items()}
+        if isinstance(record.msg, str):
+            record.msg = sanitize_log_path(record.msg)
+        if record.exc_info:
+            error = record.exc_info[1]
+            record.exc_text = f"{type(error).__name__}\n{safe_error_traceback(error)}"
+            record.exc_info = None
+        return True
 
 
 def safe_error_context(context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -66,6 +95,9 @@ class StructuredLogger:
     def __init__(self, name: str = "postpartum"):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.INFO)
+        for log in (self.logger, logging.getLogger("uvicorn"), logging.getLogger("uvicorn.access"), logging.getLogger("uvicorn.error")):
+            if not any(isinstance(item, RequestPrivacyFilter) for item in log.filters):
+                log.addFilter(RequestPrivacyFilter())
         
         # Remove existing handlers
         self.logger.handlers = []
@@ -73,7 +105,7 @@ class StructuredLogger:
         # Console handler
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(logging.INFO)
-        console_format = logging.Formatter(
+        console_format = SanitizedFormatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
         console_handler.setFormatter(console_format)

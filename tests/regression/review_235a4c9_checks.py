@@ -105,7 +105,7 @@ class ThirdReviewTests(unittest.TestCase):
 
     def socket_auth(self):
         service, decoder = self.auth_service()
-        decoder.decode.return_value = {"sub": "review_viewer", "type": "access"}
+        decoder.decode.return_value = {"sub": "review_viewer", "type": "access", "session_revision": 1}
         self.container.register_singleton("auth_service", service)
         self.container.register_singleton("task_queue", self.queue)
         return service, decoder

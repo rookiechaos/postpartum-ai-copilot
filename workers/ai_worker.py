@@ -22,7 +22,8 @@ from services.personalization_service import PersonalizationService  # noqa: E40
 from services.logging_service import logger  # noqa: E402
 from services.ai_errors import PUBLIC_AI_ERROR  # noqa: E402
 from services.chat_presentation import retrieve_for_chat, chat_presentation  # noqa: E402
-from models.database import SessionLocal  # noqa: E402
+from models.database import SessionLocal, engine  # noqa: E402
+from utils.schema_readiness import worker_schema_ready  # noqa: E402
 
 
 class AIWorker:
@@ -190,10 +191,13 @@ class AIWorker:
         """Process tracking analysis task"""
         days = task_data.get("days", 7)
 
-        entries = await self.tracking_service.get_entries(user_id, db, days=days)
-        from services.ai_data_scope import profile_for_ai, records_for_ai
+        from services.care_subjects import analysis_record_scope
+        from services.ai_data_scope import analysis_profile_for_ai, records_for_ai
+        # Recheck membership at execution time, including tasks queued before an upgrade.
+        scope = analysis_record_scope(db, user_id, task_data.get("subject_id"), task_data.get("unassigned"))
+        entries = await self.tracking_service.get_entries(user_id, db, days=days, **scope)
         entries = records_for_ai(entries, task_data.get("include_parent"), task_data.get("include_notes"))
-        context = profile_for_ai(await self.tracking_service.get_user_context(user_id, db), task_data.get("include_profile"))
+        context = analysis_profile_for_ai(await self.tracking_service.get_user_context(user_id, db), task_data.get("include_profile"))
         language = task_data.get("language") or "ja"
 
         summary = await self.ai_service.analyze_tracking(
@@ -229,6 +233,15 @@ class AIWorker:
             f"Worker {self.worker_id} started",
             context={"worker_id": self.worker_id},
         )
+
+        # Direct/local worker startup also waits safely, outside Compose. A
+        # missing migration must not claim jobs or consume their retry budget.
+        waiting = 0
+        while not await asyncio.to_thread(worker_schema_ready, engine):
+            if waiting % 30 == 0:
+                logger.log_warning("Worker waiting for database schema upgrade")
+            waiting += 1
+            await asyncio.sleep(poll_interval)
 
         await self.initialize()
 

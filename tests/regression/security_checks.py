@@ -334,6 +334,8 @@ class ReviewFixTests(unittest.TestCase):
         return service, decoder
 
     def seed_factor(self):
+        if not self.db.query(database.UserDB).filter_by(user_id="review_subject").first():
+            self.db.add(database.UserDB(user_id="review_subject", email="review@example.com", hashed_password="fixture", is_active=True))
         factor = database.TwoFactorAuthDB(user_id="review_subject", is_enabled=True, secret_key=os.urandom(20).hex())
         self.db.add(factor)
         self.db.commit()
@@ -343,7 +345,7 @@ class ReviewFixTests(unittest.TestCase):
         factor = self.seed_factor()
         service, decoder = self.auth_service()
         for token_type in ("access", "refresh"):
-            decoder.decode.return_value = {"sub": "review_subject", "type": token_type}
+            decoder.decode.return_value = {"sub": "review_subject", "type": token_type, "session_revision": 1}
             self.assertIsNone(service.verify_token("signed-fixture", token_type, db=self.db))
             decoder.decode.return_value["mfa_version"] = service.get_two_factor_version("review_subject", self.db)
             self.assertIsNotNone(service.verify_token("signed-fixture", token_type, db=self.db))
@@ -355,6 +357,7 @@ class ReviewFixTests(unittest.TestCase):
         service = Mock()
         service.authenticate_user.return_value = types.SimpleNamespace(user_id="review_subject", email="review@example.com")
         service.get_two_factor_version.return_value = "verified-factor-version"
+        service.get_session_revision.return_value = 1
         service.access_token_expire = 30
         service.create_access_token.return_value = "signed-access-fixture"
         service.create_refresh_token.return_value = "signed-refresh-fixture"
@@ -367,6 +370,7 @@ class ReviewFixTests(unittest.TestCase):
         login = extract("backend/api/auth_routes.py", "login", {
             "container": self.container, "Token": Token, "timedelta": timedelta,
             "HTTPException": HTTPException, "status": status,
+            "lock_session_account": lambda db, user_id: types.SimpleNamespace(session_revision=1),
         })
         request = types.SimpleNamespace(headers={}, client=None)
         credentials = UserLogin(email="review@example.com", password="review-password")
@@ -393,7 +397,7 @@ class ReviewFixTests(unittest.TestCase):
     def test_refresh_checks_current_factor_and_preserves_verified_claims(self):
         service = Mock()
         service.access_token_expire = 30
-        service.verify_token.return_value = TokenData(user_id="review_subject", email="review@example.com", mfa_version="verified-factor-version")
+        service.verify_token.return_value = TokenData(user_id="review_subject", email="review@example.com", mfa_version="verified-factor-version", session_revision=7)
         service.get_user_by_id.return_value = types.SimpleNamespace(user_id="review_subject", email="review@example.com", is_active=True)
         service.create_access_token.return_value = "signed-access-fixture"
         service.create_refresh_token.return_value = "signed-refresh-fixture"
@@ -405,14 +409,13 @@ class ReviewFixTests(unittest.TestCase):
         response = asyncio.run(refresh(object(), RefreshTokenRequest(refresh_token="signed-refresh-fixture"), None, self.db))
         service.verify_token.assert_called_once_with("signed-refresh-fixture", token_type="refresh", db=self.db)
         self.assertEqual(service.create_access_token.call_args.kwargs["data"]["mfa_version"], "verified-factor-version")
+        self.assertEqual(service.create_access_token.call_args.kwargs["data"]["session_revision"], 7)
         self.assertIsNotNone(response.access_token)
 
     def test_http_authentication_rejects_password_only_token_after_enabling_two_factor(self):
         self.seed_factor()
-        self.db.add(database.UserDB(user_id="review_subject", email="review@example.com", hashed_password="review-hash", is_active=True))
-        self.db.commit()
         service, decoder = self.auth_service()
-        decoder.decode.return_value = {"sub": "review_subject", "type": "access"}
+        decoder.decode.return_value = {"sub": "review_subject", "type": "access", "session_revision": 1}
         authenticate = extract("backend/middleware/auth.py", "get_current_user", {
             "auth_service": service, "HTTPException": HTTPException, "status": status,
         })
@@ -445,7 +448,33 @@ class ReviewFixTests(unittest.TestCase):
                  "TwoFactorAuthDB": database.TwoFactorAuthDB, "logger": logger,
                  "ValidationError": ValidationError, "DatabaseError": DatabaseError, "pyotp": otp,
                  "update": update}
+        scope["lock_session_account"] = extract("core/services/auth_service.py", "lock_session_account", {
+            "UserDB": database.UserDB, "update": update, "ValidationError": ValidationError,
+        })
         return extract("core/services/two_factor_auth_service.py", "TwoFactorAuthService", scope)()
+
+    def test_factor_cycle_never_revives_password_only_access_or_refresh(self):
+        factor = self.seed_factor()
+        factor.is_enabled = False
+        self.db.commit()
+        service, decoder = self.auth_service()
+        factor_service = self.factor_service()
+        factor_service.enable_2fa.__globals__["pyotp"].TOTP = lambda secret: types.SimpleNamespace(verify=lambda *args, **kwargs: True)
+        claims = {"sub": "review_subject", "session_revision": 1}
+        for token_type in ("access", "refresh"):
+            decoder.decode.return_value = {**claims, "type": token_type}
+            self.assertIsNotNone(service.verify_token("signed-fixture", token_type, db=self.db))
+        factor_service.enable_2fa("review_subject", "fixture", self.db)
+        self.assertEqual(service.get_session_revision("review_subject", self.db), 2)
+        factor_service.disable_2fa("review_subject", self.db)
+        self.assertEqual(service.get_session_revision("review_subject", self.db), 3)
+        for token_type in ("access", "refresh"):
+            decoder.decode.return_value = {**claims, "type": token_type}
+            self.assertIsNone(service.verify_token("signed-fixture", token_type, db=self.db))
+            decoder.decode.return_value["session_revision"] = 3
+            self.assertIsNotNone(service.verify_token("signed-fixture", token_type, db=self.db))
+            del decoder.decode.return_value["session_revision"]
+            self.assertIsNone(service.verify_token("signed-fixture", token_type, db=self.db))
 
     def test_backup_code_is_persistently_consumed(self):
         factor = self.seed_factor()

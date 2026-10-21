@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
+from sqlalchemy import update
 from models.database import UserDB, TwoFactorAuthDB
 from models.schemas import User, UserCreate, TokenData
 from config.settings import get_settings
@@ -19,6 +20,17 @@ import secrets
 # Use pbkdf2_sha256 to avoid bcrypt version compatibility issues
 # bcrypt has 72 byte limit and version detection issues in some environments
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+
+def lock_session_account(db: Session, user_id: str) -> UserDB:
+    """Serialize factor changes and login snapshots on PostgreSQL and SQLite."""
+    locked = db.execute(
+        update(UserDB).where(UserDB.user_id == user_id, UserDB.is_active == True)
+        .values(session_revision=UserDB.session_revision, updated_at=UserDB.updated_at)
+        .execution_options(synchronize_session=False)
+    )
+    if locked.rowcount != 1:
+        raise ValidationError("Account is unavailable")
+    return db.query(UserDB).populate_existing().filter(UserDB.user_id == user_id).one()
 
 # JWT Configuration - Now loaded from Settings in AuthService.__init__
 
@@ -171,7 +183,7 @@ class AuthService:
     
     def get_two_factor_version(self, user_id: str, db: Session) -> Optional[str]:
         """Bind second-factor proof to the currently enabled authenticator."""
-        factor = db.query(TwoFactorAuthDB).filter(
+        factor = db.query(TwoFactorAuthDB).populate_existing().filter(
             TwoFactorAuthDB.user_id == user_id,
             TwoFactorAuthDB.is_enabled == True,
         ).first()
@@ -180,6 +192,11 @@ class AuthService:
         if not factor.secret_key:
             raise ValidationError("Two-factor authentication is unavailable")
         return hashlib.sha256(factor.secret_key.encode()).hexdigest()
+
+    def get_session_revision(self, user_id: str, db: Session) -> Optional[int]:
+        return db.query(UserDB.session_revision).filter(
+            UserDB.user_id == user_id, UserDB.is_active == True,
+        ).scalar()
 
     def verify_token(self, token: str, token_type: str = "access", db: Optional[Session] = None) -> Optional[TokenData]:
         """
@@ -202,14 +219,17 @@ class AuthService:
             user_id: str = payload.get("sub")
             email: str = payload.get("email")
             
-            if user_id is None:
+            session_revision = payload.get("session_revision")
+            # Missing claims intentionally invalidate pre-upgrade sessions. A
+            # boolean is not an integer revision, despite Python's type hierarchy.
+            if not isinstance(user_id, str) or type(session_revision) is not int or session_revision < 1 or db is None:
                 return None
             mfa_version = payload.get("mfa_version")
-            if db is not None:
-                expected_version = self.get_two_factor_version(user_id, db)
-                if mfa_version != expected_version:
-                    return None
-            return TokenData(user_id=user_id, email=email, mfa_version=mfa_version)
+            if session_revision != self.get_session_revision(user_id, db):
+                return None
+            if mfa_version != self.get_two_factor_version(user_id, db):
+                return None
+            return TokenData(user_id=user_id, email=email, mfa_version=mfa_version, session_revision=session_revision)
         except JWTError:
             return None
     

@@ -14,6 +14,7 @@ import base64
 from models.database import TwoFactorAuthDB
 from services.logging_service import logger
 from exceptions import DatabaseError, ValidationError
+from services.auth_service import lock_session_account
 
 
 class TwoFactorAuthService:
@@ -36,7 +37,8 @@ class TwoFactorAuthService:
         """
         try:
             # Check if 2FA already exists
-            existing = db.query(TwoFactorAuthDB).filter(
+            lock_session_account(db, user_id)
+            existing = db.query(TwoFactorAuthDB).populate_existing().filter(
                 TwoFactorAuthDB.user_id == user_id
             ).first()
             if existing and existing.is_enabled:
@@ -110,7 +112,8 @@ class TwoFactorAuthService:
             True if token is valid
         """
         try:
-            two_fa = db.query(TwoFactorAuthDB).filter(
+            lock_session_account(db, user_id)
+            two_fa = db.query(TwoFactorAuthDB).populate_existing().filter(
                 TwoFactorAuthDB.user_id == user_id,
                 TwoFactorAuthDB.is_enabled == True
             ).with_for_update().first()
@@ -171,7 +174,8 @@ class TwoFactorAuthService:
             True if enabled successfully
         """
         try:
-            two_fa = db.query(TwoFactorAuthDB).filter(
+            account = lock_session_account(db, user_id)
+            two_fa = db.query(TwoFactorAuthDB).populate_existing().filter(
                 TwoFactorAuthDB.user_id == user_id
             ).first()
             
@@ -183,6 +187,8 @@ class TwoFactorAuthService:
             if not totp.verify(verification_token, valid_window=1):
                 raise ValidationError("Invalid verification token")
             
+            if not two_fa.is_enabled:
+                account.session_revision += 1
             two_fa.is_enabled = True
             two_fa.updated_at = datetime.utcnow()
             db.commit()
@@ -202,11 +208,13 @@ class TwoFactorAuthService:
     ) -> bool:
         """Disable 2FA for a user"""
         try:
-            two_fa = db.query(TwoFactorAuthDB).filter(
+            account = lock_session_account(db, user_id)
+            two_fa = db.query(TwoFactorAuthDB).populate_existing().filter(
                 TwoFactorAuthDB.user_id == user_id
             ).first()
             
-            if two_fa:
+            if two_fa and two_fa.is_enabled:
+                account.session_revision += 1
                 two_fa.is_enabled = False
                 two_fa.updated_at = datetime.utcnow()
                 db.commit()

@@ -3,30 +3,29 @@ import { useTranslation } from 'react-i18next'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import api from '../utils/api'
 import { japanDay, utcDate } from '../utils/japanTime'
-import { useToast } from './Toast'
 import { Calendar } from 'lucide-react'
 import EmptyState from './EmptyState'
 import './Charts.css'
 
-function Charts({ userId, onRecord, refreshKey = 0, visible = true }) {
+function Charts({ userId, subjectId = '', onRecord, refreshKey = 0, visible = true }) {
   const { t, i18n } = useTranslation()
-  const toast = useToast()
   const [chartData, setChartData] = useState([])
   const [loading, setLoading] = useState(true)
   const [timeRange, setTimeRange] = useState(7) // days
+  const [error, setError] = useState(false)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     if (!visible) return
     let active = true
     const loadChartData = async () => {
-      setLoading(true)
+      setLoading(true); setError(false); setChartData([])
       try {
-        const entries = await api.getTracking(userId, timeRange)
+        const entries = await api.getTracking(userId, timeRange, subjectId ? { subject_id: subjectId } : { unassigned: true })
         if (active) setChartData(processDataForCharts(entries))
       } catch (error) {
         if (active) {
-          console.error('Error loading chart data:', error)
-          toast.error(t('pilot.loadFailed'))
+          setChartData([]); setError(true)
         }
       } finally {
         if (active) setLoading(false)
@@ -34,7 +33,7 @@ function Charts({ userId, onRecord, refreshKey = 0, visible = true }) {
     }
     loadChartData()
     return () => { active = false }
-  }, [userId, timeRange, refreshKey, visible])
+  }, [userId, subjectId, timeRange, refreshKey, visible, attempt, i18n.resolvedLanguage])
 
   const processDataForCharts = (entries) => {
     // Enhanced data processing for better visualization
@@ -98,6 +97,9 @@ function Charts({ userId, onRecord, refreshKey = 0, visible = true }) {
       </div>
     )
   }
+
+  if (error) return <div role="alert"><p>{t('pilot.loadFailed')}</p>
+    <button type="button" className="pilot-button secondary" onClick={() => setAttempt(value => value + 1)}>{t('pilot.retry')}</button></div>
 
   if (chartData.length === 0 || chartData.every(day => day.feeds === 0 && day.diapers === 0 && day.sleepMinutes === 0 && day.mood === null)) {
     return (

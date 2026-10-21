@@ -47,6 +47,11 @@ class AccessRequest(BaseModel):
         return value
 
 
+class AccountStatusLookup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reference: UUID
+
+
 class RequestUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     status: RequestStatus
@@ -101,14 +106,20 @@ def request_account_access(request: Request, body: AccessRequest, db: Session = 
     return create_request(db, "access", body.language, body.email)
 
 
-@router.get("/api/pilot/account-help/{reference}")
+@router.post("/api/pilot/account-help/status")
 @rate_limit(RATE_LIMITS["default"])
-def read_request_status(request: Request, reference: UUID, db: Session = Depends(get_db)):
-    record = db.get(AccountRequestDB, str(reference))
+def read_request_status(request: Request, body: AccountStatusLookup, db: Session = Depends(get_db)):
+    record = db.get(AccountRequestDB, str(body.reference))
     if record is None:
         raise HTTPException(status_code=404, detail="Request not found")
     # The unguessable reference returns status and an operator's public reply only.
     return public_status(record, db)
+
+
+@router.get("/api/pilot/account-help/{reference}")
+def retired_status_lookup(reference: str):
+    # Never expose a reply through a URL bearer credential, including old clients.
+    raise HTTPException(status_code=410, detail="Update the app to check request status")
 
 
 @router.post("/api/account/requests", status_code=201)

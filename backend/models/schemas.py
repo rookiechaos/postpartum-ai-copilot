@@ -343,3 +343,4 @@ class TokenData(BaseModel):
     user_id: Optional[str] = None
     email: Optional[str] = None
     mfa_version: Optional[str] = None
+    session_revision: Optional[int] = None

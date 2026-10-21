@@ -27,6 +27,13 @@ def profile_for_ai(context, include_profile=False):
     return {key: value for key, value in context.items() if key in PROFILE_FIELDS and value is not None}
 
 
+def analysis_profile_for_ai(context, include_profile=False):
+    # Account-level baby age/feeding preferences are not bound to a care subject.
+    # They cannot safely describe whichever baby the user selects for analysis.
+    return {key: value for key, value in profile_for_ai(context, include_profile).items()
+            if key in {"birthType", "birth_type", "sleep_hours_avg"}}
+
+
 def records_for_ai(entries, include_parent=False, include_notes=False):
     allowed_types = CARE_TYPES | (PARENT_TYPES if include_parent is True else set())
     selected = []

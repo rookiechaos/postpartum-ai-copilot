@@ -35,6 +35,7 @@ docs/
 - [Setup](deployment/SETUP.md)
 - [Publishing to GitHub](GITHUB.md)
 - [Care-flow publication and privacy review](security/PUBLISH_REVIEW_2026-10-14.md)
+- [Latest repository review fixes, session migration and pending acceptance](security/REPO_REVIEW_FIXES_2026-10-20.md)
 
 ## Subfolders
 

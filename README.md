@@ -135,6 +135,7 @@ AIの重要な注意は回答の前に表示し、全文を残します。冒頭
 自分で入力した文章に個人情報があれば、その文章の一部として送信されます。
 
 ログイン前の「ログインできない」窓口、ログイン後の削除・プライバシー申請で、運営者への依頼と受付番号による進捗確認ができます。
+受付番号は進捗を読むための大切な情報です。進捗確認はURLに番号を含めずに送信します。以前のURLによる照会は終了しました。
 **受付は本人確認・削除・再設定の実行ではありません。** メールの自動通知や再設定リンクの発行はありません。
 運営者は別の安全な手順で本人確認し、実際の処理後に `/operator` で結果を登録します。受付番号と公開返信に、パスワードや健康情報を書かないでください。
 運営者は本人確認・実際に完了した手順・作業の管理番号を記録し、次の操作と回答予定を案内します。完了時は処理結果の控えを発行し、削除の場合は残るコピーと保管期間も説明します。この画面自体は復旧や削除を実行しません。作業番号は運営者だけが閲覧し、本人向けの控えには公開する結果だけを載せます。
@@ -154,6 +155,8 @@ Home now puts quick records and recent-record correction before optional family 
 The [interaction changes](docs/product/INTERACTIONS.md) add inline receipt correction, phone detail sheets, editable answer-action drafts, configurable shortcuts, reviewed timers, versioned handover acknowledgements and guided human help.
 
 The latest [care-continuity improvements and rollout](docs/product/CARE_CONTINUITY.md) add explicit baby attribution and per-record sharing, overnight/24-hour views, Home continuation, soft cross-caregiver duplicate review, private consultation closure, persistent internal institution tasks and task-based onboarding. Historical baby records stay unassigned/private until their owner explicitly chooses attribution and sharing; they no longer appear automatically in family views. Deploy the matching frontend/API together and review the new tables/column migration before use. This source revision has not been run, built, tested or migrated.
+
+The [whole-repository review fixes](docs/security/REPO_REVIEW_FIXES_2026-10-20.md) add permanent session revocation across two-factor changes, body-only account-status lookup, one-baby charts/AI analysis, frozen staff-review revisions, timer correction with the original save key, explicit container model settings and migration-gated worker startup. **Existing sessions must sign in again after the coordinated upgrade.** Source changes and regression fixtures have not been executed.
 
 The interface supports Japanese and English. Support contacts target **Japan in either language**.
 AI responses are labeled as generated content; rule checks and heuristic scores are not presented as medical certification or clinical confidence.
@@ -196,7 +199,7 @@ source .venv/bin/activate
 python workers/worker.py
 ```
 
-The default `ASYNC_MODE=true` uses this worker for chat and tracking analysis. Use the same database and provider configuration for the API and worker.
+The default `ASYNC_MODE=true` uses this worker for chat and tracking analysis. Use the same database and provider configuration for the API and worker. A directly started worker checks schema metadata and waits without claiming jobs until the API/deployment migration has completed; it never performs the migration itself.
 
 ### 3. Frontend
 
@@ -242,7 +245,7 @@ For an existing PostgreSQL volume, changing this variable does not rotate the da
 docker compose --env-file do-not-upload/local/backend.env up -d --build
 ```
 
-Compose starts the API, worker and PostgreSQL; it does **not** serve the frontend. Build and host the frontend separately:
+Compose starts PostgreSQL, runs the one-shot `migrate` service, starts the API after migration succeeds, and starts the worker after the API health check succeeds. API and worker both receive `OPENAI_MODEL`, `OPENAI_EMBEDDING_MODEL`, `CLAUDE_MODEL` and `GEMINI_MODEL` from Compose interpolation. Stop old workers during upgrades and retain the database volume; see [upgrade notes](docs/security/REPO_REVIEW_FIXES_2026-10-20.md#coordinated-upgrade). Compose does **not** serve the frontend. Build and host the frontend separately:
 
 ```bash
 cd frontend
@@ -267,7 +270,8 @@ Background workers process AI tasks through OpenAI, Claude or Gemini.
 | `GET /api/tracking/{user_id}/daily-summary`, `GET /api/tracking/{user_id}/weekly-summary` | Authenticated owner | Current local JST counts; no external AI call |
 | `GET /api/notifications/due`, `POST /api/notifications/{id}/acknowledge` | Authenticated owner | Read due reminder IDs and report browser acceptance; no automatic worker completion |
 | Product/global task/NPS statistics | Admin allowlist | Operational statistics; own user-path and usage statistics remain owner-scoped |
-| `POST /api/pilot/account-help`, `GET /api/pilot/account-help/{reference}` | Public; status requires a random reference | Receive sign-in help and look up a status without account enumeration |
+| `POST /api/pilot/account-help`, `POST /api/pilot/account-help/status` | Public; status requires a random reference in the JSON body | Receive sign-in help and look up a status without account enumeration; legacy GET lookup returns 410 |
+| `GET /api/tracking/{user_id}/summary`, `POST /api/tasks` with `tracking_analysis` | Authenticated owner | Analyze one selected accessible baby, or unassigned records by default; adult health remains a separate opt-in |
 | `GET /api/account/requests`, `POST /api/account/requests` | Authenticated owner | Own account/privacy requests |
 | `GET /api/admin/account-requests`, `POST /api/admin/account-requests/{reference}` | Admin allowlist | Private support queue and public replies |
 | Existing tracking / context / chat APIs | Authenticated owner | Personal data and AI requests |
@@ -278,6 +282,7 @@ The latest polish phase additionally registers record-save receipts, account dra
 The care-flow revision adds five tables for handovers, invitation hashes, private help progress, operator workflow attestations and status events through existing startup initialization. It adds no columns to existing tables. Deploy the matching API, worker and frontend together; table creation and acceptance have not been executed. See [CARE_FLOWS](docs/product/CARE_FLOWS.md) for API contracts, manual execution boundaries and the expanded erasure inventory.
 The interaction revision adds `family_handover_acknowledgements` and the optional `timer` server-draft kind, without changing existing columns. Add acknowledgement rows for both readers and authors, and timer drafts, to manual account erasure. See [INTERACTIONS](docs/product/INTERACTIONS.md#api-and-rollout) for API details and pending acceptance. No table creation was executed.
 The current continuity revision adds `care_subjects` and private `directory_review_tasks`, plus tracking subject/end/sharing columns and private support-response/next-step columns. Existing baby records keep no assigned subject and `family_shared=false`; an owner must explicitly assign and share a record before it appears in family views. Review [CARE_CONTINUITY](docs/product/CARE_CONTINUITY.md#api-and-storage-rollout) for the coordinated upgrade and expanded manual erasure inventory. These migrations have not been executed.
+The latest review adds `users.session_revision`, initially 1, to the same serialized SQLite/PostgreSQL migration. Access and refresh tokens must include the current positive revision. Enabling/disabling two-factor authentication increments it; turning the factor off cannot restore an earlier session. Old tokens without the claim are rejected. Migration, Compose ordering and re-login behavior still require authorized acceptance.
 The scope flags and legacy API limitations are documented in [the change guide](docs/product/PRODUCT_IMPROVEMENTS.md).
 The [repository review fixes](docs/security/REPO_REVIEW_FIXES_2026-10-16.md) describe the new notification receipt contract, fresh profile reads, bounded authentication refresh, private error diagnostics and the separate curated RAG collection. Existing vector collections are retained but no longer queried; approved public sources need explicit re-ingestion. Deploy the matching frontend/API/worker together. No database migration or source re-indexing was executed during these edits.
 
