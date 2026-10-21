@@ -16,6 +16,8 @@ AIに詳しくなくても、授乳を記録する、困りごとを整理する
 
 ## 家庭・機関の入口と運営者の管理
 
+最新の[対象・記録整理・交接・相談材料の改善と移行事項](docs/product/WORKFLOW_CLARITY.md)では、対象と公開範囲の共通表示、対象未設定の記録の整理と取り消し、具体的なホームの続き、前回確認後の共有内容の変化、相談ごとの保存材料、AI送信ボタン、運営者の対応一覧を追加しています。相談材料の明示的な保存は7日間の下書き復元とは別で、自分で削除するまで自動では期限切れになりません。3つの新しいテーブルの作成・動作確認は未実施です。
+
 | 入口 | 対象 | できること |
 | --- | --- | --- |
 | `/` | 初めての方 | 家庭用・機関用の選択、日本の相談先の確認 |
@@ -157,6 +159,8 @@ The [interaction changes](docs/product/INTERACTIONS.md) add inline receipt corre
 The latest [care-continuity improvements and rollout](docs/product/CARE_CONTINUITY.md) add explicit baby attribution and per-record sharing, overnight/24-hour views, Home continuation, soft cross-caregiver duplicate review, private consultation closure, persistent internal institution tasks and task-based onboarding. Historical baby records stay unassigned/private until their owner explicitly chooses attribution and sharing; they no longer appear automatically in family views. Deploy the matching frontend/API together and review the new tables/column migration before use. This source revision has not been run, built, tested or migrated.
 
 The [whole-repository review fixes](docs/security/REPO_REVIEW_FIXES_2026-10-20.md) add permanent session revocation across two-factor changes, body-only account-status lookup, one-baby charts/AI analysis, frozen staff-review revisions, timer correction with the original save key, explicit container model settings and migration-gated worker startup. **Existing sessions must sign in again after the coordinated upgrade.** Source changes and regression fixtures have not been executed.
+
+The [workflow clarity improvements](docs/product/WORKFLOW_CLARITY.md) add visible subject/scope context, explicit organization and atomic undo for old unassigned records, actionable Home items, versioned family-change review, private per-consultation material, explicit AI-send confirmation and an operator action summary. Deploy the matching frontend/API/worker; the three new tables and expanded deletion inventory need authorized acceptance. Explicitly saved consultation material has no seven-day draft expiry. No application/build/test/migration was executed for this revision.
 
 The interface supports Japanese and English. Support contacts target **Japan in either language**.
 AI responses are labeled as generated content; rule checks and heuristic scores are not presented as medical certification or clinical confidence.

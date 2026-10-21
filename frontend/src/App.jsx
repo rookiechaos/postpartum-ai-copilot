@@ -132,7 +132,7 @@ function App() {
   if (!entry) return <EntryScreen onChoose={chooseEntry} />
   if (!userId) return <Auth entry={entry} onBack={() => chooseEntry(null)} onSuccess={completeSignIn} />
   if (entry === 'operator') return <OperatorPortal key={`${sessionKey}:${userId}:operator`}
-    registerLeaveGuard={registerLeaveGuard} onExit={() => chooseEntry(null)} />
+    registerLeaveGuard={registerLeaveGuard} onExit={() => chooseEntry(null)} onOrganization={() => chooseEntry('organization')} />
   if (entry === 'organization') return <OrganizationPortal key={`${sessionKey}:${userId}:organization`}
     userId={userId} registerLeaveGuard={registerLeaveGuard} onFamily={() => chooseEntry('family')} onExit={() => chooseEntry(null)} />
   return <CareSessionProvider key={`${sessionKey}:${userId}:family`} userId={userId}>
@@ -245,6 +245,7 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
     const supportDestination = tab === 'support' && ['contacts', 'sheet'].includes(detail?.view) ? detail : null
     if (supportDestination) setSupportRequest(previous => ({ key: previous.key + 1, view: supportDestination.view,
       contactKey: supportDestination.contactKey || '',
+      contactName: supportDestination.contactName || '',
       question: supportDestination.view === 'sheet' && typeof supportDestination.question === 'string' ? supportDestination.question : '' }))
     // A requested support view or incoming question owns its more specific focus target.
     pendingPanelFocus.current = !supportDestination && !(detail && ['chat', 'tracking', 'dashboard'].includes(tab))
@@ -329,14 +330,14 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
                 onNavigate={navigate} onRecordsChanged={() => setRecordVersion(value => value + 1)} />
             )}
             {tab === 'chat' && <ChatInterface userId={userId} initialDraft={chatDraft} draftVersion={chatRequestKey} visible={activeTab === 'chat' && familyVisible}
-              onPrepareSheet={script => navigate('support', { view: 'sheet', question: script })} />}
+              onPrepareSheet={(script, contact) => navigate('support', { view: 'sheet', question: script, contactKey: contact?.key, contactName: contact?.name })} />}
             {tab === 'tracking' && <TrackingPanel userId={userId} initialEntryType={trackingRequest} requestKey={trackingRequestKey}
               visible={activeTab === 'tracking' && familyVisible}
               onRecordsChanged={() => setRecordVersion(value => value + 1)} />}
             {tab === 'checkin' && <EmotionalCheckIn userId={userId} />}
             {tab === 'support' && <SupportHub userId={userId} visible={activeTab === 'support' && familyVisible}
               refreshKey={recordVersion} navigationRequest={supportRequest}
-              onPrepareSheet={script => navigate('support', { view: 'sheet', question: script })} />}
+              onPrepareSheet={(script, contact) => navigate('support', { view: 'sheet', question: script, contactKey: contact?.key, contactName: contact?.name })} />}
             {tab === 'family' && <FamilySharing userId={userId} refreshKey={recordVersion} visible={activeTab === 'family' && familyVisible}
               initialFamilyId={familyRequest.id} familyRequestKey={familyRequest.key} />}
             {tab === 'settings' && (

@@ -8,11 +8,12 @@ import useConnection from '../utils/useConnection'
 import { inCarePeriod } from '../utils/carePeriods'
 import { CareRecordIdentity } from './CareSubject'
 import { useCareSession } from '../utils/CareSession'
+import CareScope from './CareScope'
 import { japanDateTime } from '../utils/japanTime'
 
 export default function CareTimeline({ entries, userId, visible, refreshKey, error, onReload, onFullEdit, onRecordsChanged, blocked, navigationRecord }) {
   const { t, i18n } = useTranslation()
-  const { subjects } = useCareSession()
+  const { subjects, rememberSubject } = useCareSession()
   const { reconnections } = useConnection()
   const now = useRecordClock(visible)
   const day = japanDay()
@@ -74,6 +75,9 @@ export default function CareTimeline({ entries, userId, visible, refreshKey, err
     ? `${japanDateTime(new Date(now - 86400000), language)} 〜 ${japanDateTime(new Date(now), language)}`
     : japanDay(new Date(period === 'yesterday' ? now - 86400000 : now))
   return <section className="pilot-panel care-timeline"><h3>{t('continuity.period.title')}</h3>
+    <CareScope mode="view" subjectId={subjectFilter === 'unassigned' ? '' : subjectFilter || '*'}
+      familyName={scope ? families.find(family => family.family_id === scope)?.name || t('interaction.timeline.familyNotice') : ''}
+      onUseLast={!scope ? id => { rememberSubject(id); setSubjectFilter(id) } : undefined} />
     <p>{t('pilot.japanTime')} · {periodLabel}</p>
     <div className="pilot-actions" role="group" aria-label={t('continuity.period.choose')}>
       {['last24', 'today', 'yesterday'].map(value => <button type="button" key={value} className="pilot-button secondary"
@@ -85,7 +89,9 @@ export default function CareTimeline({ entries, userId, visible, refreshKey, err
       <option value="">{t('interaction.timeline.mine')}</option>
       {families.map(family => <option value={family.family_id} key={family.family_id}>{t('interaction.timeline.family', { name: family.name })}</option>)}
     </select></label>
-    {!scope && <label>{t('continuity.subject.filter')}<select value={subjectFilter} onChange={event => setSubjectFilter(event.target.value)}>
+    {!scope && <label>{t('continuity.subject.filter')}<select value={subjectFilter} onChange={event => {
+      setSubjectFilter(event.target.value); if (event.target.value && event.target.value !== 'unassigned') rememberSubject(event.target.value)
+    }}>
       <option value="">{t('continuity.subject.all')}</option><option value="unassigned">{t('continuity.subject.unknown')}</option>
       {subjects.map(item => <option key={item.subject_id} value={item.subject_id}>{item.nickname} · {item.family_name || t('continuity.subject.personal')}</option>)}
     </select></label>}

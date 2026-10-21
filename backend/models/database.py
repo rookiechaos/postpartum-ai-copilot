@@ -138,6 +138,43 @@ class TrackingWriteDB(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class RecordOrganizationDB(Base):
+    """Owner-only, idempotent attribution receipt; contains identities, not care text."""
+    __tablename__ = "record_organizations"
+    user_id = Column(String, primary_key=True)
+    request_key = Column(String(36), primary_key=True)
+    fingerprint = Column(String(64), nullable=False)
+    subject_id = Column(String(36), nullable=False)
+    records = Column(JSON, nullable=False)
+    undone = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class FamilyReviewDB(Base):
+    """One reader's last explicit review, without record or handover text."""
+    __tablename__ = "family_reviews"
+    family_id = Column(String, primary_key=True)
+    user_id = Column(String, primary_key=True)
+    membership_revision = Column(Integer, nullable=False)
+    revision = Column(Integer, nullable=False, default=1)
+    snapshot = Column(JSON, nullable=False)
+    confirmed_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class ConsultationDB(Base):
+    """Explicitly saved private consultation material; never shared with a contact."""
+    __tablename__ = "consultations"
+    consultation_id = Column(String(36), primary_key=True)
+    user_id = Column(String, nullable=False, index=True)
+    revision = Column(Integer, nullable=False, default=1)
+    content = Column(JSON, nullable=False)
+    last_write_key = Column(String(36), nullable=False)
+    fingerprint = Column(String(64), nullable=False)
+    cleared = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
 class DraftPreferenceDB(Base):
     __tablename__ = "draft_preferences"
     user_id = Column(String, primary_key=True)

@@ -1,4 +1,15 @@
 .pilot-shell { max-width: var(--content-width); min-height: 100vh; margin: 0 auto; padding: 28px; background: var(--color-bg); color: var(--pilot-ink); }
+.care-scope { display: flex; flex-direction: column; align-items: flex-start; gap: .4rem; padding: .85rem 1rem; margin: .75rem 0; border-inline-start: 4px solid var(--pilot-brand); border-radius: .5rem; background: var(--color-bg); overflow-wrap: anywhere; }
+.care-scope > span { font-size: .9rem; line-height: 1.7; }
+.workflow-records { display: grid; gap: .75rem; padding-inline-start: 1.25rem; }
+.workflow-records li { min-width: 0; overflow-wrap: anywhere; }
+.workflow-records li > span { display: block; line-height: 1.7; }
+.record-organizer fieldset, .consultation-packets, .family-review { min-width: 0; }
+.record-organizer ul, .consultation-packets article { overflow-wrap: anywhere; }
+.consultation-packets article { padding: .75rem 0; border-bottom: 1px solid var(--pilot-border); }
+.workflow-action-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: 1rem; }
+.workflow-action-grid .support-card { min-width: 0; margin: 0; }
+@media print { .care-scope, .consultation-packets { display: none !important; } }
 .pilot-topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
 .entry-intro { max-width: 720px; margin: 42px auto 32px; text-align: center; }
 .entry-intro h1 { margin: 12px 0 20px; font-size: clamp(1.8rem, 4vw, 2.7rem); line-height: 1.45; letter-spacing: .02em; }

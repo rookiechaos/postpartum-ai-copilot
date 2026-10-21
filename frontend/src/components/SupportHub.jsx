@@ -14,6 +14,7 @@ export default function SupportHub({ userId, visible, refreshKey, navigationRequ
     requestKey: initialView === 'sheet' ? navigationRequest?.key || 0 : 0,
   }))
   const [navigation, setNavigation] = useState(0)
+  const [incomingContact, setIncomingContact] = useState(null)
   const handledRequest = useRef(0)
   const pendingFocus = useRef(null)
   const headings = useRef({})
@@ -23,6 +24,7 @@ export default function SupportHub({ userId, visible, refreshKey, navigationRequ
     const nextView = navigationRequest.view === 'sheet' ? 'sheet' : 'contacts'
     setVisited(previous => previous.includes(nextView) ? previous : [...previous, nextView])
     setView(nextView)
+    if (nextView === 'sheet' && navigationRequest.contactKey) setIncomingContact({ key: navigationRequest.contactKey, name: navigationRequest.contactName || '', requestKey: navigationRequest.key })
     const question = nextView === 'sheet' && typeof navigationRequest.question === 'string' ? navigationRequest.question : ''
     if (question) {
       // Only a new sheet handoff may update the incoming question. Contact requests
@@ -53,6 +55,7 @@ export default function SupportHub({ userId, visible, refreshKey, navigationRequ
         <p className="view-intro">{t('ui.support.sheetIntro')}</p>
         <button type="button" className="pilot-button secondary" onClick={() => open('contacts')}>{t('ui.support.backContacts')}</button>
         <ShareSummary userId={userId} visible={visible && view === key} refreshKey={refreshKey}
+          incomingContact={incomingContact} contactRequestKey={incomingContact?.requestKey || 0}
           initialQuestion={incoming.question} requestKey={incoming.requestKey} />
       </>}
     </section>)}

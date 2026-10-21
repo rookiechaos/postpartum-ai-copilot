@@ -9,7 +9,10 @@ const CareContext = createContext(null)
 export function CareSessionProvider({ userId, children }) {
   const { reconnections } = useConnection()
   const [subjects, setSubjects] = useState([])
+  const [adultSharing, setAdultSharing] = useState(null)
   const [activeId, setActiveId] = useState('')
+  const [recentSubjectId, setRecentSubjectId] = useState('')
+  const rememberSubject = useCallback(id => setRecentSubjectId(id || ''), [])
   const [ready, setReady] = useState(false)
   const [error, setError] = useState(false)
   const [attempt, setAttempt] = useState(0)
@@ -17,12 +20,15 @@ export function CareSessionProvider({ userId, children }) {
   const reload = useCallback(() => setAttempt(value => value + 1), [])
   useEffect(() => {
     let active = true
-    setError(false); setReady(false)
-    api.get('/api/care-subjects').then(result => {
+    setError(false); setReady(false); setAdultSharing(null)
+    Promise.allSettled([api.get('/api/care-subjects'), api.get('/api/care-subjects/visibility')]).then(([result, visibility]) => {
       if (!active) return
-      setSubjects(result); setReady(true)
-      setActiveId(previous => result.some(item => item.subject_id === previous) ? previous : '')
-    }).catch(() => { if (active) { setError(true); setReady(false); setSubjects([]) } })
+      if (visibility.status === 'fulfilled') setAdultSharing(visibility.value.adult_shared_with)
+      if (result.status === 'fulfilled') {
+        setSubjects(result.value); setReady(true)
+        setActiveId(previous => result.value.some(item => item.subject_id === previous) ? previous : '')
+      } else { setError(true); setReady(false); setSubjects([]) }
+    })
     return () => { active = false }
   }, [userId, reconnections, attempt])
   useEffect(() => {
@@ -36,7 +42,7 @@ export function CareSessionProvider({ userId, children }) {
     else delete next[key]
     return next
   }), [])
-  return <CareContext.Provider value={{ userId, subjects, activeId, setActiveId, ready, error, reload, work, setWork }}>
+  return <CareContext.Provider value={{ userId, subjects, adultSharing, activeId, setActiveId, recentSubjectId, rememberSubject, ready, error, reload, work, setWork }}>
     {children}
   </CareContext.Provider>
 }

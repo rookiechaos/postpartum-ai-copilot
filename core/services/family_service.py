@@ -320,7 +320,7 @@ class FamilyService:
                 raw = {column.name: getattr(entry, column.name) for column in TrackingEntryDB.__table__.columns}
                 raw["timestamp"] = entry.timestamp.isoformat() if entry.timestamp else None
                 selected = records_for_ai([raw], scope.get("share_parent"), scope.get("share_notes"))[0]
-                result.append({**selected, "record_key": entry.record_key, "recorded_by": entry.user_id,
+                result.append({**selected, "record_key": entry.record_key, "revision": entry.revision, "recorded_by": entry.user_id,
                     "subject_id": entry.subject_id if entry.entry_type in CARE_TYPES else None,
                     "subject_name": subject.nickname if subject and entry.entry_type in CARE_TYPES else None,
                     "end_timestamp": entry.end_timestamp.isoformat() if entry.end_timestamp else None,

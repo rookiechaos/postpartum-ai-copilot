@@ -139,10 +139,15 @@ def own_requests(current_user: User = Depends(get_current_user), db: Session = D
 @router.get("/api/admin/account-requests")
 def operator_requests(status: Optional[RequestStatus] = Query(None), limit: int = Query(50, ge=1, le=100),
                       offset: int = Query(0, ge=0),
+                      overdue_only: bool = False,
                       current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     query = db.query(AccountRequestDB)
     if status:
         query = query.filter(AccountRequestDB.status == status)
+    if overdue_only:
+        query = query.join(AccountWorkflowDB, AccountWorkflowDB.reference == AccountRequestDB.reference).filter(
+            AccountRequestDB.status.in_(("received", "verifying")),
+            AccountWorkflowDB.details["expected_reply_at"].as_string() < datetime.utcnow().isoformat() + "Z")
     records = query.order_by(AccountRequestDB.created_at.asc(), AccountRequestDB.reference.asc()).offset(offset).limit(limit).all()
     result = []
     for record in records:

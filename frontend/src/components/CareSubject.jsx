@@ -2,17 +2,19 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 import { useCareSession } from '../utils/CareSession'
+import CareScope from './CareScope'
 
 export const babyKinds = ['feeding', 'diaper', 'sleep', 'pumping']
 export const privateSubject = subjectId => ({ subject_id: subjectId || null, family_shared: false, sharing_revision: null })
 
 export function CareSubjectFields({ value, onChange, kind = 'feeding' }) {
   const { t } = useTranslation()
-  const { subjects, ready, error, reload } = useCareSession()
-  if (!babyKinds.includes(kind)) return <p>{t('continuity.subject.adult')}</p>
+  const { subjects, ready, error, reload, rememberSubject } = useCareSession()
+  if (!babyKinds.includes(kind)) return <CareScope kind={kind} />
   const selected = subjects.find(item => item.subject_id === value.subject_id)
   return <div className="care-subject-fields">
-    <label>{t('continuity.subject.recordFor')}<select value={value.subject_id || ''} disabled={!ready} onChange={event => onChange(privateSubject(event.target.value))}>
+    <CareScope subjectId={value.subject_id} shared={value.family_shared} onUseLast={id => { rememberSubject(id); onChange(privateSubject(id)) }} />
+    <label>{t('continuity.subject.recordFor')}<select value={value.subject_id || ''} disabled={!ready} onChange={event => { rememberSubject(event.target.value); onChange(privateSubject(event.target.value)) }}>
       <option value="">{t('continuity.subject.unknown')}</option>
       {value.subject_id && !selected && <option value={value.subject_id}>{t('continuity.subject.unavailable')}</option>}
       {subjects.map(item => <option key={item.subject_id} value={item.subject_id}>{item.nickname}{item.family_id ? ` · ${item.family_name}` : ` · ${t('continuity.subject.personal')}`}</option>)}
@@ -63,7 +65,7 @@ export default function CareSubjectManager() {
         nickname: nickname.trim(), family_id: editing ? editing.family_id : scope || null, revision: editing?.revision || 0,
       })
       const selected = editing ? editing.subject_id : result.find(item => (scope ? item.family_id === scope : !item.family_id))?.subject_id
-      care.reload(); care.setActiveId(selected || ''); setEditing(null); setNickname('')
+      care.reload(); care.setActiveId(selected || ''); care.rememberSubject(selected || ''); setEditing(null); setNickname('')
     } catch (failure) { setError(failure.status === 403 ? 'managerOnly' : failure.status === 409 ? 'conflict' : 'saveError'); care.reload() }
     finally { writing.current = false; setBusy(false) }
   }

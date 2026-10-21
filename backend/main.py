@@ -139,6 +139,10 @@ from api.care_flow_routes import router as care_flow_router
 app.include_router(care_flow_router)
 from api.care_subject_routes import router as care_subject_router
 app.include_router(care_subject_router)
+from api.record_organization_routes import router as record_organization_router
+app.include_router(record_organization_router)
+from api.consultation_routes import router as consultation_router
+app.include_router(consultation_router)
 
 # Payment routes
 from api.payment_routes import router as payment_router

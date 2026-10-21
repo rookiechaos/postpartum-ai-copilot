@@ -4,7 +4,8 @@ Monitoring API Routes - System monitoring and metrics endpoints
 
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from services.health_check_service import get_health_check_service
 from middleware.performance import performance_metrics
@@ -12,8 +13,49 @@ from middleware.admin import require_admin
 from models.schemas import User
 from services.logging_service import logger
 from dependencies.database import get_db
+from services.directory_review import resource_digest
+from models.database import AccountRequestDB, AccountWorkflowDB, TaskDB, DirectoryWorkspaceDB, PilotProfileDB, DirectoryReviewTaskDB
 
 router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
+
+
+@router.get("/actions")
+def operator_actions(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """A bounded action summary. No questions, health text, emails or request references."""
+    now = datetime.utcnow()
+    pending = db.query(AccountRequestDB).filter(AccountRequestDB.status.in_(("received", "verifying")))
+    overdue = pending.join(AccountWorkflowDB, AccountWorkflowDB.reference == AccountRequestDB.reference).filter(
+        AccountWorkflowDB.details["expected_reply_at"].as_string() < now.isoformat() + "Z").count()
+    ai = db.query(TaskDB).filter(TaskDB.task_type.in_(("ai_chat", "tracking_analysis", "personalized_chat")))
+    waiting = ai.filter(TaskDB.status.in_(("pending", "retrying")))
+    oldest = waiting.with_entities(func.min(TaskDB.created_at)).scalar()
+    workspace = db.get(DirectoryWorkspaceDB, "local")
+    published = db.get(PilotProfileDB, "local")
+    profile = workspace.profile if workspace else published.profile if published else {}
+    tasks = {row.contact_key: row for row in db.query(DirectoryReviewTaskDB).all()}
+    today = datetime.now(timezone(timedelta(hours=9))).date().isoformat()
+    review_cutoff = (datetime.now(timezone(timedelta(hours=9))).date() - timedelta(days=30)).isoformat()
+    contacts = []
+    for contact in profile.get("resources", []):
+        task = tasks.get(contact.get("resource_key"))
+        details = task.details if task else {}
+        due = details.get("next_review_on") or contact.get("review_due_on")
+        stale = task is not None and task.resource_digest != resource_digest(contact)
+        postponed = task is not None and not stale and details.get("decision") != "pending" and due and due > today
+        if postponed:
+            continue
+        checked = contact.get("checked_on")
+        if stale or details.get("decision") == "pending" or not checked or checked <= review_cutoff or not due or due <= today:
+            contacts.append({"contact_key": contact.get("resource_key"), "name": contact.get("name", ""),
+                "assignee": details.get("assignee") or contact.get("maintainer", ""), "due_on": due})
+    contacts.sort(key=lambda contact: contact["due_on"] or "")
+    return {"checked_at": now.isoformat() + "Z", "requests": {
+        "received": pending.filter(AccountRequestDB.status == "received").count(),
+        "verifying": pending.filter(AccountRequestDB.status == "verifying").count(), "overdue": overdue},
+        "ai": {"waiting": waiting.count(), "waiting_long": waiting.filter(TaskDB.created_at < now - timedelta(minutes=15)).count(),
+            "oldest_at": oldest.isoformat() + "Z" if oldest else None,
+            "failed_last_day": ai.filter(TaskDB.status == "failed", TaskDB.updated_at >= now - timedelta(days=1)).count()},
+        "directory": {"due_count": len(contacts), "contacts": contacts[:10]}}
 
 
 @router.get("/health")

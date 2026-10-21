@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 import { AIProviders } from './ServicePrivacyInfo'
 
-export default function AIUseNotice({ accepted, onChange, scope = 'message', disabled = false,
+export default function AIUseNotice({ accepted, onChange = () => {}, scope = 'message', disabled = false, consentAction = false,
   includeProfile = false, onProfileChange, includeParent = false, onParentChange,
   includeNotes = false, onNotesChange, includeHistory = false, onHistoryChange, profileLabel, children }) {
   const { t } = useTranslation()
@@ -29,10 +29,10 @@ export default function AIUseNotice({ accepted, onChange, scope = 'message', dis
         {onNotesChange && <label><input type="checkbox" checked={includeNotes} onChange={event => { onNotesChange(event.target.checked); onChange(false) }} />{t('pilot.includeNotes')}</label>}
         {onHistoryChange && <label><input type="checkbox" checked={includeHistory} onChange={event => { onHistoryChange(event.target.checked); onChange(false) }} />{t('work.attachHistory')}</label>}
         {children}
-      <label>
+      {!consentAction && <label>
         <input type="checkbox" checked={accepted} onChange={event => onChange(event.target.checked)} />
         {t('pilot.aiConsent')}
-      </label>
+      </label>}
       </fieldset>
     </div>
   )

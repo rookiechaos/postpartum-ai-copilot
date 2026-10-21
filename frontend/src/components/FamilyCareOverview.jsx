@@ -5,6 +5,7 @@ import { japanDateTime } from '../utils/japanTime'
 import useConnection from '../utils/useConnection'
 import RecordTime, { useRecordClock } from './RecordTime'
 import { CareRecordIdentity } from './CareSubject'
+import FamilyReview from './FamilyReview'
 
 const categories = ['feeding', 'diaper', 'sleep', 'pumping']
 export default function FamilyCareOverview({ visible, refreshKey, onManage }) {
@@ -112,6 +113,7 @@ export default function FamilyCareOverview({ visible, refreshKey, onManage }) {
     {error && <p role="alert">{t(`flows.overview.${error}Error`)} <button className="pilot-button secondary" type="button" disabled={busy} onClick={reload}>{t('flows.overview.reload')}</button></p>}
     {loading && <p role="status">{t('common.loading')}</p>}
     {selected && <>
+      <FamilyReview key={selected} familyId={selected} visible={activeView} refreshKey={refreshKey} />
       {overview && <dl className="care-overview-grid">{categories.map(kind => {
         const record = overview?.latest[kind]
         return <div key={kind}><dt>{t(`tracking.${kind}`)}</dt><dd>{record ? <>

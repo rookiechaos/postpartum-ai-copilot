@@ -20,7 +20,6 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
     }
   ])
   const [input, setInput] = useState(initialDraft)
-  const [acceptedAI, setAcceptedAI] = useState(false)
   const [includeProfile, setIncludeProfile] = useState(false)
   const [failed, setFailed] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -38,9 +37,10 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
     const previous = content.followUp
     setFollowUp(previous && typeof previous.previous_question === 'string' && typeof previous.previous_answer === 'string'
       ? { previous_question: [...previous.previous_question].slice(0, 2000).join(''), previous_answer: [...previous.previous_answer].slice(0, 4000).join('') } : null)
-    setIncludePrevious(false); setIncludeProfile(false); setAcceptedAI(false)
+    setIncludePrevious(false); setIncludeProfile(false)
   })
   const threadRef = useRef(null)
+  const sending = useRef(false)
   const lastMessageRef = useRef(null)
   const inputRef = useRef(null)
   const composerRef = useRef(null)
@@ -72,7 +72,7 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
     setFollowUp({ previous_question: [...message.question].slice(0, 2000).join(''),
       previous_answer: [...message.content].slice(0, 4000).join('') })
     if (action) setInput(t(`interaction.chat.drafts.${action}`))
-    setIncludePrevious(false); setIncludeProfile(false); setAcceptedAI(false); setFailed(false); setNextAction(action)
+    setIncludePrevious(false); setIncludeProfile(false); setFailed(false); setNextAction(action)
     revealComposer()
   }
   const scrollToLatest = () => {
@@ -93,7 +93,7 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
     displayedMessageCount.current = messages.length
   }, [messages, visible])
   useEffect(() => {
-    if (initialDraft) { setInput(initialDraft); setAcceptedAI(false); revealComposer() }
+    if (initialDraft) { setInput(initialDraft); revealComposer() }
   }, [draftVersion])
   useEffect(() => {
     if (visible && pendingComposerFocus.current) {
@@ -106,11 +106,13 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
     textarea.style.height = 'auto'
     textarea.style.height = `${Math.min(textarea.scrollHeight, 240)}px`
   }, [input, visible])
-  useEffect(() => { setAcceptedAI(false) }, [includeProfile])
 
   const sendMessage = async (e) => {
     e.preventDefault()
-    if (!input.trim() || loading || !acceptedAI) return
+    // Only the explicitly labelled button calls this function. No persistent
+    // agreement, automatic retry or form submission can send a new payload.
+    if (!input.trim() || loading || sending.current) return
+    sending.current = true
 
     const userMessage = {
       role: 'user',
@@ -200,7 +202,7 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
         setMessages(prev => [...prev, assistantMessage])
         setTaskStatus('completed')
       }
-      setFollowUp(null); setIncludePrevious(false); setIncludeProfile(false); setAcceptedAI(false); setNextAction('')
+      setFollowUp(null); setIncludePrevious(false); setIncludeProfile(false); setNextAction('')
       await draft.clear()
     } catch (error) {
       console.error('Chat error:', error)
@@ -214,6 +216,7 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
       }
       setMessages(prev => [...prev, errorMessage])
     } finally {
+      sending.current = false
       setLoading(false)
       setTaskStatus(null)
     }
@@ -226,7 +229,7 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
         <p>{t('pilot.guidedChatIntro')}</p>
         <details className="chat-scenes"><summary>{t('ui.chat.exampleQuestions')}</summary><div className="pilot-actions">
           {['crying', 'feeding', 'rest', 'appointment'].map(scene => <button key={scene} type="button"
-            className="pilot-button secondary" disabled={loading} onClick={() => { setInput(t(`pilot.questions.${scene}`)); setAcceptedAI(false); revealComposer() }}>{t(`pilot.scenes.${scene}`)}</button>)}
+            className="pilot-button secondary" disabled={loading} onClick={() => { setInput(t(`pilot.questions.${scene}`)); revealComposer() }}>{t(`pilot.scenes.${scene}`)}</button>)}
         </div></details>
         <p>{t('pilot.chatBoundary')}</p>
       </header>
@@ -341,7 +344,7 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
         )}
       </div>
 
-      <form className="chat-composer" onSubmit={sendMessage} aria-labelledby="chat-composer-heading">
+      <form className="chat-composer" onSubmit={event => event.preventDefault()} aria-labelledby="chat-composer-heading">
       <h3 id="chat-composer-heading" ref={composerRef} tabIndex={-1}>{t('ui.chat.writeQuestion')}</h3>
       <DraftRecoveryNotice draft={draft} disabled={loading} compact />
       {loading && <p className="field-hint">{t('work.chatWaiting')}</p>}
@@ -351,7 +354,7 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
       <h4 id="chat-send-review-heading">{t('friendly.chat.sendReview')}</h4>
       <label className="chat-input-label" htmlFor="chat-question">{t('polish.currentQuestion')}</label>
       <textarea id="chat-question" ref={inputRef} rows={3} maxLength={5000} value={input}
-        onChange={event => { setInput(event.target.value); setAcceptedAI(false) }} placeholder={t('chat.placeholder')} disabled={loading}
+        onChange={event => setInput(event.target.value)} placeholder={t('chat.placeholder')} disabled={loading}
         aria-describedby="chat-input-hint" className="chat-input" />
       <p id="chat-input-hint" className="field-hint">{t('ui.chat.inputHint')}</p>
       {followUp && <section className="follow-up-preview"><h4>{t('polish.followUpTitle')}</h4>
@@ -360,11 +363,11 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
           <p>{t('polish.previousAnswer')}</p><pre>{followUp.previous_answer}</pre>
         </details>
         <label><input type="checkbox" disabled={loading} checked={includePrevious} onChange={event => {
-          setIncludePrevious(event.target.checked); setAcceptedAI(false)
+          setIncludePrevious(event.target.checked)
         }} />{t('polish.confirmPrevious')}</label>
-        <button type="button" className="pilot-button secondary" disabled={loading} onClick={() => { setFollowUp(null); setIncludePrevious(false); setAcceptedAI(false) }}>{t('polish.removePrevious')}</button>
+        <button type="button" className="pilot-button secondary" disabled={loading} onClick={() => { setFollowUp(null); setIncludePrevious(false) }}>{t('polish.removePrevious')}</button>
       </section>}
-      <AIUseNotice accepted={acceptedAI} onChange={setAcceptedAI} disabled={loading}
+      <AIUseNotice consentAction disabled={loading}
         includeProfile={includeProfile} onProfileChange={setIncludeProfile}>
       <details className="submission-preview"><summary>{t(loading ? 'ui.chat.sentContent' : 'polish.actualSubmission')}</summary>
         <p>{t('polish.currentQuestion')}</p><pre>{(loading ? submission?.query : input) || t('pilot.notProvided')}</pre>
@@ -376,14 +379,14 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
         <p>{t((loading ? submission?.includeProfile : includeProfile) ? 'ui.chat.profileIncluded' : 'ui.chat.profileExcluded')}</p>
       </details>
       </AIUseNotice>
-      {!acceptedAI && !loading && <p id="chat-consent-hint" className="field-hint">{t('friendly.chat.consentHint')}</p>}
+      <p id="chat-consent-hint" className="field-hint">{t('workflow.ai.sendNotice')}</p>
       <div className="chat-composer-actions">
-        <button type="submit" disabled={loading || !input.trim() || !acceptedAI} className="send-button"
-          aria-describedby={!acceptedAI && !loading ? 'chat-consent-hint' : undefined}>
-          {t(loading ? 'ui.chat.sending' : failed ? 'work.retrySend' : 'chat.send')}
+        <button type="button" disabled={loading || !input.trim()} className="send-button" onClick={sendMessage}
+          aria-describedby="chat-consent-hint">
+          {t(loading ? 'ui.chat.sending' : failed ? 'workflow.ai.retry' : 'workflow.ai.send')}
         </button>
         {(input.trim() || followUp || draft.hasSavedDraft) && <button type="button" className="pilot-button secondary" disabled={loading} onClick={() => {
-          if (window.confirm(t('polish.deleteChatDraftConfirm'))) { setInput(''); setFollowUp(null); setIncludePrevious(false); setAcceptedAI(false); setNextAction(''); draft.clear() }
+          if (window.confirm(t('polish.deleteChatDraftConfirm'))) { setInput(''); setFollowUp(null); setIncludePrevious(false); setNextAction(''); draft.clear() }
         }}>{t('polish.deleteDraft')}</button>}
       </div>
       </section>

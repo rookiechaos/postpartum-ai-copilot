@@ -29,6 +29,7 @@ docs/
 - [UI architecture, responsive layout and pending acceptance](product/UI_REFINEMENT.md)
 - [Care handovers, human-support progress, account workflow and pending acceptance](product/CARE_FLOWS.md)
 - [Care subjects, overnight records, continuation and private institution tasks](product/CARE_CONTINUITY.md)
+- [Clear subjects, old-record organization, handover changes and saved consultation material](product/WORKFLOW_CLARITY.md)
 - [Backend docs](backend/README.md)
 - [Testing guide](testing/TESTING.md)
 - [Deployment](deployment/DEPLOYMENT.md)

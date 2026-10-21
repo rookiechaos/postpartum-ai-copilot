@@ -179,7 +179,7 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
           <div className="pilot-actions"><button type="button" className="pilot-button secondary" onClick={() => {
             if (selectedContact) prepareCall(selectedName, contactKey); else openStep(1)
           }}>{t('interaction.support.backPreparation')}</button>
-            {onPrepareSheet && <button type="button" className="pilot-button secondary" onClick={() => onPrepareSheet('')}>{t('ui.support.sheet')}</button>}
+            {onPrepareSheet && <button type="button" className="pilot-button secondary" onClick={() => onPrepareSheet('', { key: contactKey, name: selectedName })}>{t('ui.support.sheet')}</button>}
           </div>
         </section>}
         {scriptTarget && (!wizardEnabled || journeyStep === 2) && scriptKey === contactKey && <section className="pilot-panel call-script"><h3 ref={scriptHeading} tabIndex={-1}>{t('polish.callScriptTitle', { name: scriptTarget })}</h3>
@@ -208,7 +208,7 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
             try { await navigator.clipboard.writeText(script); setScriptError(t('pilot.copied')) }
             catch { setScriptError(t('pilot.copyFailed')) }
           }}>{t('polish.copyScript')}</button>
-          {onPrepareSheet && <button type="button" className="pilot-button secondary" disabled={!script.trim()} onClick={() => onPrepareSheet(script)}>{t('polish.prepareSheetFromCall')}</button>}
+          {onPrepareSheet && <button type="button" className="pilot-button secondary" disabled={!script.trim()} onClick={() => onPrepareSheet(script, { key: contactKey, name: selectedName || scriptTarget })}>{t('polish.prepareSheetFromCall')}</button>}
           {scriptError && <p role="status">{scriptError}</p>}
           {wizardEnabled && <div className="pilot-actions"><button type="button" className="pilot-button secondary" onClick={() => openStep(1)}>{t('interaction.support.backChoice')}</button>
             <button type="button" className="pilot-button" onClick={() => openStep(3)}>{t('interaction.support.next')}</button></div>}

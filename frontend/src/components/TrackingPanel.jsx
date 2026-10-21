@@ -9,6 +9,8 @@ import useAccountDraft from '../utils/useAccountDraft'
 import { DraftRecoveryNotice } from './DraftRecovery'
 import AIUseNotice from './AIUseNotice'
 import Charts from './Charts'
+import CareScope from './CareScope'
+import RecordOrganizer from './RecordOrganizer'
 import useConnection from '../utils/useConnection'
 import { useToast } from './Toast'
 import RecordTime, { useRecordClock } from './RecordTime'
@@ -78,9 +80,10 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   const summaryVersion = useRef(0)
   useCareWork('record', pendingSave ? { version: `${pendingSave.data.request_key}:${saveStatus}`, title: duplicates.review ? 'continuity.work.duplicateReview'
     : saveStatus === 'offline' ? 'continuity.work.recordUnsent' : 'continuity.work.recordPending', priority: 0,
-    tab: 'tracking', detail: { action: 'resume' } } : draft.candidate || formDraft ? {
+    tab: 'tracking', detail: { action: 'resume' }, critical: true, entryType: pendingSave.data.entry_type,
+    subjectId: pendingSave.data.subject_id, time: pendingSave.data.timestamp, action: 'workflow.work.checkSave' } : draft.candidate || formDraft ? {
     version: draft.candidate?.updated_at || String(formRevision), title: 'continuity.work.recordRecovery', priority: 3,
-    tab: 'tracking', detail: { action: 'resume' },
+    tab: 'tracking', detail: { action: 'resume' }, action: 'workflow.work.continueRecord',
   } : null)
 
   useEffect(() => {
@@ -292,9 +295,14 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
         </div>}
       </article>)}
     </section>
+    <RecordOrganizer visible={visible} blocked={loading || Boolean(pendingSave)} onRecordsChanged={refresh}
+      openRequest={initialEntryType?.action === 'organize' ? requestKey : 0} />
     <details className="pilot-panel"><summary>{t('pilot.optionalAnalysis')}</summary>
+      <CareScope subjectId={analysisSubject} mode="analysis" disabled={summaryLoading} onUseLast={id => {
+        setAnalysisSubject(id); setAcceptedAI(false); setSummary(null); summaryVersion.current++
+      }} />
       <label>{t('reviewFixes.analysisSubject')}<select value={analysisSubject} disabled={summaryLoading || !care.ready}
-        onChange={event => { setAnalysisSubject(event.target.value); setAcceptedAI(false); setSummary(null); summaryVersion.current++ }}>
+        onChange={event => { care.rememberSubject(event.target.value); setAnalysisSubject(event.target.value); setAcceptedAI(false); setSummary(null); summaryVersion.current++ }}>
         <option value="">{t('reviewFixes.unassigned')}</option>
         {analysisSubject && !care.subjects.some(item => item.subject_id === analysisSubject) && <option value={analysisSubject}>{t('reviewFixes.unavailable')}</option>}
         {care.subjects.map(item => <option key={item.subject_id} value={item.subject_id}>{item.nickname}{item.family_name ? ` · ${item.family_name}` : ''}</option>)}

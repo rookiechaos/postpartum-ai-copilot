@@ -11,6 +11,7 @@ import { useCareSession, useCareWork } from '../utils/CareSession'
 import { CareSubjectFields, privateSubject } from './CareSubject'
 import useDuplicateReview from '../utils/useDuplicateReview'
 import DuplicateReview from './DuplicateReview'
+import CareScope from './CareScope'
 
 const validTimer = value => value && ['feeding', 'sleep'].includes(value.entry_type)
   && typeof value.started_at === 'string' && Number.isFinite(utcDate(value.started_at).getTime())
@@ -58,9 +59,11 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
   useCareWork('timer', timer ? { version: `${timer.request_key}:${timer.ended_at || 'running'}:${status}`,
     title: duplicates.review ? 'continuity.work.duplicateReview' : pending && status === 'offline' ? 'continuity.work.recordUnsent'
       : pending ? 'continuity.work.timerPending' : timer.ended_at ? 'continuity.work.timerReview' : 'continuity.work.timerRunning',
-    priority: pending ? 0 : 1, tab: 'dashboard', detail: { section: 'care-timer-heading' } } : draft.candidate ? {
+    priority: pending ? 0 : 1, tab: 'dashboard', detail: { section: 'care-timer-heading' },
+    critical: Boolean(pending), entryType: timer.entry_type, subjectId: subjectScope?.subject_id, time: timer.started_at,
+    action: pending ? 'workflow.work.checkSave' : timer.ended_at ? 'workflow.work.confirmEnd' : 'workflow.work.openTimer' } : draft.candidate ? {
     version: draft.candidate.updated_at, title: 'continuity.work.timerRecovery', priority: 2,
-    tab: 'dashboard', detail: { section: 'care-timer-heading' },
+    tab: 'dashboard', detail: { section: 'care-timer-heading' }, action: 'workflow.work.restore',
   } : null)
   useEffect(() => {
     if (['feeding', 'sleep'].includes(requestedKind)) {
@@ -186,6 +189,7 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
       </div><button type="button" className="pilot-button" disabled={blocked || Boolean(draft.candidate) || draft.status === 'loading' || busy} onClick={begin}>{t('interaction.timer.start')}</button>
     </> : <>
       <h4>{t(timer.entry_type === 'feeding' ? 'interaction.timer.breast' : 'tracking.sleep')}</h4>
+      {!timer.ended_at && <CareScope subjectId={subjectScope?.subject_id} shared={subjectScope?.family_shared} />}
       <p>{t('interaction.timer.started', { time: japanDateTime(timer.started_at, i18n.resolvedLanguage || 'ja') })}</p>
       {!timer.ended_at && <><p className="timer-display" aria-label={t('interaction.timer.elapsed')}>{Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')}</p>
         <button type="button" className="pilot-button" onClick={stop}>{t('interaction.timer.stop')}</button></>}

@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from dependencies.database import get_db
 from middleware.auth import get_current_user
 from models.schemas import User
-from models.database import CareSubjectDB, FamilyMemberDB
+from models.database import CareSubjectDB, FamilyMemberDB, FamilyDB
 from services.care_subjects import accessible_subjects
 
 router = APIRouter(prefix="/api/care-subjects", tags=["care-subjects"])
@@ -62,6 +62,14 @@ def create_subject(body: SubjectWrite, user: User = Depends(get_current_user), d
         db.rollback()
         raise HTTPException(409, "This account or family already has a care subject; select the existing one") from None
     return accessible_subjects(db, user.user_id)
+
+
+@router.get("/visibility")
+def current_visibility(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    rows = db.query(FamilyMemberDB, FamilyDB).join(FamilyDB, FamilyDB.family_id == FamilyMemberDB.family_id).filter(
+        FamilyMemberDB.user_id == user.user_id, FamilyMemberDB.status == "active").order_by(FamilyMemberDB.id).all()
+    return {"adult_shared_with": [{"name": family.name, "includes_notes": (member.permissions or {}).get("share_notes") is True}
+        for member, family in rows if (member.permissions or {}).get("share_parent") is True]}
 
 
 @router.post("/{subject_id}")

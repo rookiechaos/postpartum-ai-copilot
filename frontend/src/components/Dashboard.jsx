@@ -60,9 +60,10 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
     || ['saving', 'undoing', 'checking'].includes(saveStatus) || Boolean(receiptMode) || !care.ready
   useCareWork('quick', pending ? { version: `${pending.request_key}:${saveStatus}`, title: duplicates.review ? 'continuity.work.duplicateReview'
     : saveStatus === 'offline' ? 'continuity.work.recordUnsent' : 'continuity.work.quickPending', priority: 0,
-    tab: 'dashboard', detail: { section: 'quick-record-heading' } } : draft.candidate ? {
+    tab: 'dashboard', detail: { section: 'quick-record-heading' }, critical: true, entryType: pending.entry_type,
+    subjectId: pending.subject_id, time: pending.timestamp, action: 'workflow.work.checkSave' } : draft.candidate ? {
     version: draft.candidate.updated_at, title: 'continuity.work.quickRecovery', priority: 2,
-    tab: 'dashboard', detail: { section: 'quick-record-heading' },
+    tab: 'dashboard', detail: { section: 'quick-record-heading' }, action: 'workflow.work.restore',
   } : null)
   useEffect(() => {
     if (visible && navigationRequest?.section && handledNavigation.current !== navigationRequest.key

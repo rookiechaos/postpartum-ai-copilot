@@ -4,8 +4,6 @@ from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional, Literal
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
-from hashlib import sha256
-import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
@@ -18,6 +16,7 @@ from middleware.auth import get_current_user
 from middleware.rate_limit import RATE_LIMITS, rate_limit
 from models.database import PilotProfileDB, DirectoryWorkspaceDB, DirectoryHistoryDB, DirectoryReviewTaskDB
 from models.schemas import User
+from services.directory_review import resource_digest
 
 router = APIRouter(prefix="/api/pilot", tags=["local-pilot"])
 
@@ -147,10 +146,6 @@ class DirectoryReviewWrite(BaseModel):
     next_review_on: Optional[date] = None
     confirmed: StrictBool = False
     profile: Optional[DraftProfile] = None
-
-
-def resource_digest(resource):
-    return sha256(json.dumps(resource, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
 
 def review_tasks(db, profile):

@@ -6,6 +6,8 @@ This guide covers deploying the Postpartum AI Copilot application in a productio
 
 Current source rollout: read the [2026-10-20 review fixes](../security/REPO_REVIEW_FIXES_2026-10-20.md) for session invalidation, body-only support lookup and coordinated frontend/API/worker deployment. These source changes have not been started, built, tested or migrated.
 
+The subsequent [workflow clarity rollout](../product/WORKFLOW_CLARITY.md#api-and-storage-rollout) adds `record_organizations`, `family_reviews` and `consultations` through existing startup initialization. Use matching frontend/API/worker versions and extend the privacy/deletion inventory to these tables. Explicit consultation saves are private persistent material, separate from seven-day optional drafts. No table creation or acceptance has been executed.
+
 ## Architecture Overview
 
 The application consists of:

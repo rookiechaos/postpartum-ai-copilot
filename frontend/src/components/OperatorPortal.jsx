@@ -5,6 +5,8 @@ import LanguageSelector from './LanguageSelector'
 import ProductAnalytics from './ProductAnalytics'
 import { japanDateTime, japanDateTimeInput } from '../utils/japanTime'
 import ConnectionNotice from './ConnectionNotice'
+import OperatorActions from './OperatorActions'
+import { revealElement } from '../utils/focusView'
 
 const workflowDraft = item => ({ status: item.status, public_response: item.public_response,
   revision: item.revision || 0, identity_verified: item.workflow?.identity_verified === true,
@@ -13,12 +15,13 @@ const workflowDraft = item => ({ status: item.status, public_response: item.publ
   expected_reply_at: item.expected_reply_at ? japanDateTimeInput(item.expected_reply_at) : '',
   outcome: item.workflow?.outcome || '', retained_data_notice: item.workflow?.retained_data_notice || '' })
 
-export default function OperatorPortal({ onExit, registerLeaveGuard }) {
+export default function OperatorPortal({ onExit, onOrganization, registerLeaveGuard }) {
   const { t, i18n } = useTranslation()
   const [requests, setRequests] = useState([])
   const [authorized, setAuthorized] = useState(false)
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState('received')
+  const [overdueOnly, setOverdueOnly] = useState(false)
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -40,13 +43,14 @@ export default function OperatorPortal({ onExit, registerLeaveGuard }) {
   useEffect(() => {
     let active = true
     setLoading(true); setError('')
-    api.get(`/api/admin/account-requests?status=${status}&limit=50&offset=${offset}`).then(data => {
+    const query = new URLSearchParams({ limit: 50, offset, ...(status ? { status } : {}), ...(overdueOnly ? { overdue_only: true } : {}) })
+    api.get(`/api/admin/account-requests?${query}`).then(data => {
       if (active) { setRequests(data); setAuthorized(true) }
     }).catch(err => {
       if (active) { setAuthorized(false); setRequests([]); setError(t(err.status === 403 ? 'work.operatorDenied' : 'pilot.loadFailed')) }
     }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [status, attempt, offset])
+  }, [status, overdueOnly, attempt, offset])
   const save = async (event, item) => {
     event.preventDefault()
     if (writing.current) return
@@ -77,10 +81,16 @@ export default function OperatorPortal({ onExit, registerLeaveGuard }) {
     {error && <p role="alert">{error}</p>}
     <button className="pilot-button secondary" disabled={busy || loading} onClick={() => setAttempt(value => value + 1)}>{t('pilot.retry')}</button>
     {authorized && <>
-      <section className="pilot-panel"><h2>{t('work.accountRequests')}</h2><p>{t('work.operatorVerification')}</p>
-        <label>{t('work.requestStatus')}<select value={status} disabled={busy || loading} onChange={event => { setOffset(0); setStatus(event.target.value) }}>
+      <OperatorActions refreshKey={attempt} blocked={busy || loading} onRequests={value => {
+        setOverdueOnly(value === 'overdue'); setStatus(value === 'overdue' ? '' : value); setOffset(0)
+        revealElement(document.getElementById('operator-request-heading'))
+      }} onOrganization={onOrganization ? () => { if (registerLeaveGuard || canLeave()) onOrganization() } : undefined} />
+      <section className="pilot-panel"><h2 id="operator-request-heading" tabIndex={-1}>{t('work.accountRequests')}</h2><p>{t('work.operatorVerification')}</p>
+        <label>{t('work.requestStatus')}<select value={status} disabled={busy || loading} onChange={event => { setOffset(0); setOverdueOnly(false); setStatus(event.target.value) }}>
+          <option value="">{t('workflow.operator.allRequests')}</option>
           {['received', 'verifying', 'completed', 'declined'].map(value => <option key={value} value={value}>{t(`work.requestStatuses.${value}`)}</option>)}
         </select></label>
+        {overdueOnly && <p>{t('workflow.operator.overdueFilter')} <button type="button" className="text-action" disabled={busy || loading} onClick={() => { setOverdueOnly(false); setOffset(0) }}>{t('workflow.operator.clearFilter')}</button></p>}
         {!loading && requests.length === 0 && <p>{t('work.noRequests')}</p>}
         {requests.map(item => {
           const draft = drafts[item.reference] || workflowDraft(item)

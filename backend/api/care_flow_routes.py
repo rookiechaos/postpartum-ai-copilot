@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 import hashlib
 import secrets
+import json
 from typing import Literal, Optional
 from uuid import UUID
 
@@ -17,7 +18,7 @@ from dependencies.database import get_db
 from middleware.auth import get_current_user
 from middleware.rate_limit import RATE_LIMITS, rate_limit
 from models.database import (FamilyDB, FamilyMemberDB, FamilyHandoverDB, FamilyHandoverAcknowledgementDB, FamilyInviteLinkDB,
-                             SupportJourneyDB, PilotProfileDB)
+                             SupportJourneyDB, PilotProfileDB, FamilyReviewDB)
 from models.schemas import User
 from services.care_periods import period_bounds, in_period
 
@@ -93,6 +94,84 @@ def family_overview(family_id: str, user: User = Depends(get_current_user), db: 
             "text": note.text, "recorder_label": labels.get(note.user_id, ""),
             "recorder_number": numbers.get(note.user_id), "updated_at": stamp(note.updated_at)}
             for note, person in notes if note.text.strip()]}
+
+
+def review_digest(snapshot):
+    return hashlib.sha256(json.dumps(snapshot, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def review_snapshot(db, family_id, user):
+    user_id = user.user_id
+    overview = family_overview(family_id, user=user, db=db)
+    records = get_container().get("family_service").get_shared_tracking_data(family_id, user_id, days=7, db=db)
+    records = [record for record in records if record["entry_type"] in ("feeding", "diaper", "sleep", "pumping")]
+    people = db.query(FamilyMemberDB).filter(FamilyMemberDB.family_id == family_id,
+        FamilyMemberDB.status == "active").all()
+    memberships = {person.user_id: person.revision for person in people}
+    snapshot = {"family_id": family_id, "reader_id": user_id, "membership": overview["membership_revision"],
+        "records": {record["record_key"]: [record["revision"], memberships.get(record["recorded_by"])] for record in records},
+        "notes": {note["author_id"]: [note["revision"], note["membership_revision"]] for note in overview["handovers"]}}
+    return overview, records, snapshot
+
+
+@router.get("/api/families/{family_id}/review")
+def get_family_review(family_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    overview, records, snapshot = review_snapshot(db, family_id, user)
+    saved = db.get(FamilyReviewDB, (family_id, user.user_id))
+    baseline = saved.snapshot if saved and saved.membership_revision == overview["membership_revision"] else None
+    old_records = (baseline or {}).get("records", {})
+    old_notes = (baseline or {}).get("notes", {})
+    fields = ("record_key", "entry_type", "timestamp", "end_timestamp", "subject_id", "subject_name",
+        "feeding_type", "diaper_type", "amount_ml", "duration_minutes", "sleep_duration_minutes", "pumped_amount_ml", "recorder_label")
+    changes = [{**{key: record.get(key) for key in fields},
+        "change": "initial" if baseline is None else "new" if record["record_key"] not in old_records else "updated"}
+        for record in records if old_records.get(record["record_key"]) != snapshot["records"][record["record_key"]]]
+    notes = [{"author_id": note["author_id"], "revision": note["revision"], "recorder_label": note["recorder_label"],
+        "recorder_number": note["recorder_number"], "updated_at": note["updated_at"],
+        "change": "initial" if baseline is None else "new" if note["author_id"] not in old_notes else "updated"}
+        for note in overview["handovers"] if old_notes.get(note["author_id"]) != snapshot["notes"][note["author_id"]]]
+    return {"revision": saved.revision if saved else 0, "digest": review_digest(snapshot),
+        "membership_revision": overview["membership_revision"], "first_review": baseline is None,
+        "confirmed_at": stamp(saved.confirmed_at) if baseline is not None else None,
+        "checked_at": stamp(datetime.utcnow()), "records": changes, "notes": notes,
+        "withdrawn_count": len(set(old_records) - set(snapshot["records"])) + len(set(old_notes) - set(snapshot["notes"]))}
+
+
+class FamilyReviewWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    revision: int = Field(ge=0, strict=True)
+    membership_revision: int = Field(ge=1, strict=True)
+    digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    confirmed: StrictBool
+
+
+@router.post("/api/families/{family_id}/review")
+def confirm_family_review(family_id: str, body: FamilyReviewWrite, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    me = member_of(db, family_id, user.user_id, write=True)
+    if not body.confirmed or me.revision != body.membership_revision:
+        raise HTTPException(409, "Review current family access before confirming")
+    saved = db.query(FamilyReviewDB).populate_existing().filter(FamilyReviewDB.family_id == family_id,
+        FamilyReviewDB.user_id == user.user_id).first()
+    if saved and saved.revision == body.revision + 1 and saved.membership_revision == me.revision and review_digest(saved.snapshot) == body.digest:
+        return {"saved": True, "revision": saved.revision, "confirmed_at": stamp(saved.confirmed_at)}
+    if (saved.revision if saved else 0) != body.revision:
+        raise HTTPException(409, "Review confirmation changed on another screen")
+    _, _, snapshot = review_snapshot(db, family_id, user)
+    if review_digest(snapshot) != body.digest:
+        raise HTTPException(409, "Family records changed; reload and review the new version")
+    now = datetime.utcnow()
+    if saved:
+        saved.snapshot = snapshot; saved.membership_revision = me.revision
+        saved.revision += 1; saved.confirmed_at = now
+    else:
+        db.add(FamilyReviewDB(family_id=family_id, user_id=user.user_id, membership_revision=me.revision,
+            revision=1, snapshot=snapshot, confirmed_at=now))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Review confirmation changed on another screen") from None
+    return {"saved": True, "revision": body.revision + 1, "confirmed_at": stamp(now)}
 
 
 @router.get("/api/families/{family_id}/timeline")
