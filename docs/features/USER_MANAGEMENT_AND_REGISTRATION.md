@@ -9,7 +9,7 @@
 - **校验**:
   - 邮箱格式（Pydantic + InputSanitizer）
   - 密码强度：至少 8 位，需包含大小写字母和数字（PasswordValidator）
-- **逻辑**: `AuthService.create_user` 检查邮箱是否已存在、生成 `user_id`、哈希密码（pbkdf2_sha256）、写入 `UserDB`
+- **逻辑**: `AuthService.create_user` 检查邮箱是否已存在、生成 `user_id`、完整哈希密码（PBKDF2-SHA256，带 `full-v1:` 格式标记）、写入 `UserDB`。旧哈希保留原校验方式，旧版截断长密码需经本人确认后受控重设；[兼容与发布说明](../security/REPO_REVIEW_FIXES_2026-10-22.md)。
 - **响应**: 201，返回用户信息（不含密码）；邮箱重复时由 `ValidationError` 经全局异常处理返回 400
 
 ### 2. 登录 (Login)

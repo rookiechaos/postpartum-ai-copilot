@@ -16,10 +16,10 @@ from config.settings import get_settings
 from exceptions import ValidationError
 import secrets
 
-# Password hashing
-# Use pbkdf2_sha256 to avoid bcrypt version compatibility issues
-# bcrypt has 72 byte limit and version detection issues in some environments
+# PBKDF2 accepts the complete Unicode password. The application marker separates
+# full-password hashes from older hashes made with the legacy truncation rule.
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+FULL_PASSWORD_PREFIX = "full-v1:"
 
 def lock_session_account(db: Session, user_id: str) -> UserDB:
     """Serialize factor changes and login snapshots on PostgreSQL and SQLite."""
@@ -48,8 +48,16 @@ class AuthService:
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         """Verify a password against a hash"""
         try:
-            # Truncate password if too long for bcrypt
-            if len(plain_password.encode('utf-8')) > 72:
+            if hashed_password.startswith(FULL_PASSWORD_PREFIX):
+                return pwd_context.verify(
+                    plain_password, hashed_password[len(FULL_PASSWORD_PREFIX):]
+                )
+            # Read compatibility only: older PBKDF2 hashes used the first 72
+            # characters when the UTF-8 input exceeded 72 bytes. Reproduce that
+            # exact rule, rather than a new byte truncation that locks users out.
+            # Do not silently rebind an ambiguous legacy hash to a supplied tail;
+            # a controlled password reset must use get_password_hash().
+            if len(plain_password.encode("utf-8")) > 72:
                 plain_password = plain_password[:72]
             return pwd_context.verify(plain_password, hashed_password)
         except Exception as e:
@@ -59,11 +67,8 @@ class AuthService:
             return False
     
     def get_password_hash(self, password: str) -> str:
-        """Hash a password"""
-        # Bcrypt has a 72 byte limit, truncate if necessary
-        if len(password.encode('utf-8')) > 72:
-            password = password[:72]
-        return pwd_context.hash(password)
+        """Hash the entire password and mark its verification format."""
+        return FULL_PASSWORD_PREFIX + pwd_context.hash(password)
     
     def create_user(self, user_data: UserCreate, db: Session) -> User:
         """

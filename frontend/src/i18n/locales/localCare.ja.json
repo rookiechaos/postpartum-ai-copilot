@@ -35,6 +35,7 @@
       "unconfirmed": "保存できたか確認できませんでした",
       "unsaved": "記録を保存できませんでした",
       "removing": "記録を削除しています",
+      "removeChecking": "記録の削除結果を確認しています",
       "removed": "記録を削除しました",
       "removeFailed": "削除できたか確認できませんでした",
       "restoring": "削除した記録を戻しています",

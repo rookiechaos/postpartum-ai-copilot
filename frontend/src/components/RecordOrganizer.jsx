@@ -31,6 +31,7 @@ export default function RecordOrganizer({ visible, blocked, onRecordsChanged, op
   const writing = useRef(false)
   const heading = useRef(null)
   const pendingFocus = useRef(false)
+  const pages = useRef(new Map())
   const locked = blocked || busy || Boolean(pending)
   const subject = care.subjects.find(item => item.subject_id === subjectId)
   useCareWork('organization', pending ? { version: pending.request_key, title: 'workflow.work.organizePending',
@@ -41,12 +42,22 @@ export default function RecordOrganizer({ visible, blocked, onRecordsChanged, op
     if (!visible || !open) return
     let active = true
     setLoading(true); setError('')
-    if (!before) { setRows([]); setTotal(0); setNext(null) }
+    if (!before) { pages.current.clear(); setRows([]); setTotal(0); setNext(null) }
     if (from && to && from > to) { setError('dates'); setLoading(false); return }
     const query = new URLSearchParams({ kind, ...(before ? { before_id: before } : {}),
       ...(from ? { from_day: from } : {}), ...(to ? { to_day: to } : {}) })
     api.get(`/api/record-organization/unassigned?${query}`).then(data => {
-      if (active) { setRows(previous => before ? [...previous, ...data.records] : data.records); setTotal(data.total); setNext(data.next_before_id) }
+      if (active) {
+        // Reopening or returning to this tab fetches the same cursor again.
+        // Replace that page, then merge by immutable identity, instead of append.
+        pages.current.set(before ?? 'first', data.records)
+        const records = new Map()
+        for (const page of pages.current.values()) for (const record of page) {
+          const previous = records.get(record.record_key)
+          if (!previous || record.revision >= previous.revision) records.set(record.record_key, record)
+        }
+        setRows([...records.values()]); setTotal(data.total); setNext(data.next_before_id)
+      }
     }).catch(() => { if (active) setError('load') }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [visible, open, kind, from, to, before, attempt])

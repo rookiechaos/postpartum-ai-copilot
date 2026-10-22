@@ -13,5 +13,17 @@
   "correctTimer": "Check save result, then correct input",
   "timerCorrection": "No saved record was found at this moment. You can correct the input while keeping the start and end times. The same save reference is retained in case the original save finishes later. If it has already saved, open that record to make corrections.",
   "timerExisting": "A record exists for this save reference but differs from the input. Open the saved record to check and correct it.",
-  "openTimerRecord": "Open saved record"
+  "openTimerRecord": "Open saved record",
+  "deletion": {
+    "pending": "The record's deletion result is still unconfirmed",
+    "notice": "Checking does not delete or restore anything automatically. If the record is confirmed absent, Undo will be available for 8 seconds from that confirmation. This check is kept only in the current login session.",
+    "check": "Check deletion result",
+    "retry": "Review deleting the same record again",
+    "present": "The same record is present at this moment. The original deletion may still finish later, so its result remains unconfirmed. Check again, or review the deletion before resending it.",
+    "checkFailed": "The record could not be loaded, so deletion remains unconfirmed. Check your connection and try again.",
+    "offline": "No new deletion was sent because you are offline. Reconnect before trying again. If an earlier deletion is unconfirmed, check its result first.",
+    "rejected": "The deletion request was rejected. Check your login and saved records before trying again.",
+    "abandon": "Stop checking this result",
+    "abandonConfirm": "Stop checking while the result is unconfirmed? A deletion already sent will not be cancelled. Check your record list later. This action does not restore the record."
+  }
 }

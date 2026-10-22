@@ -408,7 +408,7 @@
     "editRecord": "Correct this record", "saveChanges": "Save changes", "deleteConfirm": "Delete this record? You can undo for 8 seconds after deletion.",
     "recordTypeChangeNotice": "Changing the record type clears its specific fields and keeps the date, time and general note. The original record stays unchanged until you save.",
     "confirmDelete": "Delete this record", "lastDeleted": "Record deleted. You can undo for 8 seconds.", "undoDelete": "Undo deletion",
-    "deleteFailed": "The record could not be deleted. It is still saved. Please try again.", "restoreFailed": "Could not restore the record. Check your connection and try again while Undo is visible.", "restored": "Restored the original content and time.",
+    "deleteFailed": "The deletion result could not be confirmed. The record may already be deleted. Check the result before taking another action.", "restoreFailed": "Could not restore the record. Check your connection and try again while Undo is visible.", "restored": "Restored the original content and time.",
     "humanHelp": "Talk to a person or find nearby help", "sessionDraftNotice": "Conversations, drafts and progress stay across pages in this login session. Reloading or signing out clears screen memory. If you enable draft recovery, saved input can be reviewed and restored later.",
     "chatWaiting": "Preparing your reply. Processing continues when you switch pages in this login session.", "retryDraft": "The reply could not be received. Your message is in the input box so you can review and resend it.", "retrySend": "Send this message again",
     "aiScope": {

@@ -41,6 +41,9 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   const [entryType, setEntryType] = useState(types.includes(initialEntryType) ? initialEntryType : 'feeding')
   const [editing, setEditing] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [pendingDelete, setPendingDelete] = useState(null)
+  const [deleteObservation, setDeleteObservation] = useState('')
+  const [deleteError, setDeleteError] = useState('')
   const [undoEntry, setUndoEntry] = useState(null)
   const [loading, setLoading] = useState(false)
   const [showCharts, setShowCharts] = useState(false)
@@ -61,6 +64,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   const [formFocus, setFormFocus] = useState(0)
   const consumedRequest = useRef(null)
   const formHeading = useRef(null)
+  const deleteHeading = useRef(null)
   const pendingFormFocus = useRef(false)
   const writing = useRef(false)
   // Keep uncertainty attached to the original operation until success or explicit abandonment.
@@ -86,6 +90,19 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     version: draft.candidate?.updated_at || String(formRevision), title: 'continuity.work.recordRecovery', priority: 3,
     tab: 'tracking', detail: { action: 'resume' }, action: 'workflow.work.continueRecord',
   } : null)
+  useCareWork('record-delete', pendingDelete ? {
+    version: `${pendingDelete.record_key}:${saveStatus}:${deleteObservation}`,
+    title: 'reviewFixes.deletion.pending', priority: 0, critical: true,
+    tab: 'tracking', detail: { action: 'resume' }, entryType: pendingDelete.entry_type,
+    subjectId: pendingDelete.subject_id, time: pendingDelete.timestamp, action: 'reviewFixes.deletion.check',
+  } : null)
+
+  useEffect(() => {
+    if (!pendingDelete) return
+    const warn = event => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [pendingDelete])
 
   useEffect(() => {
     if (!visible) return
@@ -98,7 +115,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   }, [userId, attempt, recordRange, visible, reconnections])
 
   const openRecord = (request, confirm = true) => {
-    if (pendingSave || writing.current || loading || draft.candidate || draft.status === 'loading') return
+    if (pendingSave || pendingDelete || writing.current || loading || draft.candidate || draft.status === 'loading') return
     if (confirm && formDraft && !window.confirm(t('friendly.record.replace'))) return
     // Home passes an owner-read snapshot. The immutable key/revision still guards
     // the update: an intervening edit or deletion is rejected by the API.
@@ -118,21 +135,22 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     if (!request) return
     // Pending writes and recovery drafts must be resolved explicitly, never
     // replaced just because navigation supplied a new target.
-    if (pendingSave || writing.current || loading || formDraft || draft.candidate) setOpenRequest(request)
+    if (pendingSave || pendingDelete || writing.current || loading || formDraft || draft.candidate) setOpenRequest(request)
     else if (draft.status === 'loading') setOpenRequest({ ...request, autoOpen: true })
     else openRecord(request, false)
-  }, [initialEntryType, requestKey, pendingSave, loading, formDraft, draft.candidate, draft.status])
+  }, [initialEntryType, requestKey, pendingSave, pendingDelete, loading, formDraft, draft.candidate, draft.status])
   useEffect(() => {
     if (!visible || !openRequest?.autoOpen || draft.status === 'loading') return
-    if (pendingSave || writing.current || loading || formDraft || draft.candidate) {
+    if (pendingSave || pendingDelete || writing.current || loading || formDraft || draft.candidate) {
       setOpenRequest(previous => ({ ...previous, autoOpen: false })); return
     }
     openRecord(openRequest, false)
-  }, [visible, openRequest, pendingSave, loading, formDraft, draft.candidate, draft.status])
+  }, [visible, openRequest, pendingSave, pendingDelete, loading, formDraft, draft.candidate, draft.status])
   useEffect(() => {
-    if (visible && showAddForm && pendingFormFocus.current && revealElement(formHeading.current)) pendingFormFocus.current = false
+    if (visible && pendingDelete && pendingFormFocus.current && revealElement(deleteHeading.current)) pendingFormFocus.current = false
+    else if (visible && showAddForm && pendingFormFocus.current && revealElement(formHeading.current)) pendingFormFocus.current = false
     else if (visible && pendingFormFocus.current && initialEntryType?.action === 'resume' && revealElement(document.getElementById('tracking-resume-heading'))) pendingFormFocus.current = false
-  }, [visible, showAddForm, formFocus])
+  }, [visible, showAddForm, pendingDelete, formFocus])
 
   useEffect(() => {
     if (!undoEntry) return
@@ -148,7 +166,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     summaryVersion.current++; setSummary(null); setAttempt(value => value + 1); onRecordsChanged?.()
   }
   const saveEntry = async formData => {
-    if (writing.current) return
+    if (writing.current || pendingDelete) return false
     const operation = pendingSave || { data: recordOperation(payload(formData)),
       editing: editing ? { id: editing.id, record_key: editing.record_key, revision: editing.revision } : null }
     if (!online || navigator.onLine === false) {
@@ -185,6 +203,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     finally { writing.current = false; setLoading(false) }
   }
   const cancelForm = () => {
+    if (writing.current || loading || pendingDelete) return
     if (pendingSave && !duplicates.review && !window.confirm(t('polish.abandonWrite'))) return
     duplicates.clear()
     unconfirmedRequest.current = null
@@ -192,25 +211,76 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     setPendingSave(null); setFormDraft(null); setRestoredForm(null); setShowAddForm(false); setEditing(null)
     draft.clear(); setAttempt(value => value + 1)
   }
-  const removeEntry = async entry => {
-    if (!entry || writing.current || loading || pendingSave) return false
-    writing.current = true; setLoading(true); setSaveStatus('removing')
+  const finishRemoval = entry => {
+    setPendingDelete(null); setDeleteObservation(''); setDeleteError(''); setDeleteTarget(null)
+    setUndoEntry({ ...entry, restore_request_key: newRequestKey() })
+    if (editing?.record_key === entry.record_key) {
+      setEditing(null); setShowAddForm(false); setFormDraft(null); setRestoredForm(null); draft.clear()
+    }
+    setSaveStatus('removed'); refresh()
+  }
+  const deletionState = async entry => {
     try {
-      await api.deleteTrackingEntry(entry.id, entry)
-      setUndoEntry({ ...entry, restore_request_key: newRequestKey() }); setDeleteTarget(null)
-      if (editing?.record_key === entry.record_key) {
-        setEditing(null); setShowAddForm(false); setFormDraft(null); setRestoredForm(null); draft.clear()
+      const current = await api.getTrackingEntry(entry)
+      return current.revision === entry.revision ? 'present' : 'changed'
+    } catch (failure) {
+      if (failure.status === 404) return 'missing'
+      throw failure
+    }
+  }
+  const resolveDeletion = (state, entry) => {
+    if (state === 'missing') { finishRemoval(entry); return true }
+    if (state === 'changed') {
+      // The original revision can no longer delete the updated record.
+      setPendingDelete(null); setDeleteObservation(''); setDeleteTarget(null); setSaveStatus('')
+      toast.error(t('work.recordConflict')); refresh(); return true
+    }
+    return false
+  }
+  const checkDeletion = async () => {
+    if (!pendingDelete || writing.current || loading) return
+    const entry = pendingDelete
+    writing.current = true; setLoading(true); setSaveStatus('removeChecking'); setDeleteObservation('')
+    try {
+      const state = await deletionState(entry)
+      if (!resolveDeletion(state, entry)) {
+        // A read cannot prove an earlier timed-out request has finished.
+        setDeleteObservation('present'); setSaveStatus('removeFailed'); refresh()
       }
-      setSaveStatus('removed'); refresh()
+    } catch { setDeleteObservation('checkFailed'); setSaveStatus('removeFailed') }
+    finally { writing.current = false; setLoading(false) }
+  }
+  const removeEntry = async entry => {
+    if (!entry || writing.current || loading || pendingSave
+      || (pendingDelete && pendingDelete.record_key !== entry.record_key)) return false
+    if (!online || navigator.onLine === false) { setDeleteError('offline'); return false }
+    const retrying = Boolean(pendingDelete)
+    const snapshot = pendingDelete || { ...entry }
+    writing.current = true; setLoading(true); setDeleteError(''); setSaveStatus('removing')
+    try {
+      // A retry first reads the original identity, so a committed deletion is
+      // reconciled with Undo instead of reporting a misleading 404 conflict.
+      if (retrying && resolveDeletion(await deletionState(snapshot), snapshot)) return true
+      setPendingDelete(snapshot); setDeleteObservation('')
+      await api.deleteTrackingEntry(snapshot.id, snapshot)
+      finishRemoval(snapshot)
+      return true
     } catch (err) {
+      if (err.status === 404 && retrying) { finishRemoval(snapshot); return true }
       if (err.status === 409 || err.status === 404) {
-        setDeleteTarget(null); setSaveStatus(''); toast.error(t('work.recordConflict')); refresh()
-      } else { setSaveStatus('removeFailed'); toast.error(t('work.deleteFailed')); return false }
+        setPendingDelete(null); setDeleteTarget(null); setSaveStatus(''); toast.error(t('work.recordConflict')); refresh()
+        return true
+      }
+      if (retrying || err.resultUnconfirmed || !err.status || err.status >= 500) {
+        setPendingDelete(snapshot); setDeleteTarget(null); setDeleteObservation(''); setSaveStatus('removeFailed')
+        toast.error(t('work.deleteFailed')); return true
+      }
+      setPendingDelete(null); setSaveStatus(''); setDeleteError('rejected'); return false
     }
     finally { writing.current = false; setLoading(false) }
   }
   const restoreEntry = async () => {
-    if (!undoEntry || writing.current || loading || pendingSave) return
+    if (!undoEntry || writing.current || loading || pendingSave || pendingDelete) return
     const restoring = undoEntry
     writing.current = true; setLoading(true); setSaveStatus('restoring')
     try {
@@ -237,22 +307,36 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
 
   return <div className="tracking-panel">
     <PageHeader titleId="tracking-resume-heading" title={t('tracking.title')} description={t('pilot.noPressure')}
-      actions={<Button variant={showAddForm ? 'secondary' : 'primary'} disabled={loading || (!showAddForm && (Boolean(draft.candidate) || draft.status === 'loading'))} onClick={() => {
+      actions={<Button variant={showAddForm ? 'secondary' : 'primary'} disabled={loading || Boolean(pendingDelete) || (!showAddForm && (Boolean(draft.candidate) || draft.status === 'loading'))} onClick={() => {
         if (showAddForm) cancelForm()
         else openRecord({ entryType })
       }}>{showAddForm ? t('tracking.cancel') : `+ ${t('tracking.addEntry')}`}</Button>} />
-    <DraftRecoveryNotice draft={draft} disabled={loading} />
+    <DraftRecoveryNotice draft={draft} disabled={loading || Boolean(pendingDelete)} />
     {openRequest && <section className="record-open-request" aria-label={t('friendly.record.incoming')}>
       <p>{t('friendly.record.incoming')}</p>
       {openRequest.record && <><strong>{t(`tracking.${openRequest.record.entry_type}`)}</strong><RecordTime value={openRequest.record.timestamp} now={now} /></>}
-      {(pendingSave || draft.candidate || draft.status === 'loading') && <p>{t('friendly.record.resolveDraft')}</p>}
+      {(pendingSave || pendingDelete || draft.candidate || draft.status === 'loading') && <p>{t(pendingDelete ? 'reviewFixes.deletion.pending' : 'friendly.record.resolveDraft')}</p>}
       <div className="pilot-actions">
-        <button type="button" className="pilot-button secondary" disabled={loading || Boolean(pendingSave) || Boolean(draft.candidate) || draft.status === 'loading'}
+        <button type="button" className="pilot-button secondary" disabled={loading || Boolean(pendingSave) || Boolean(pendingDelete) || Boolean(draft.candidate) || draft.status === 'loading'}
           onClick={() => openRecord(openRequest)}>{t('friendly.record.open')}</button>
         <button type="button" className="pilot-button secondary" onClick={() => setOpenRequest(null)}>{t('friendly.record.discardOpen')}</button>
       </div>
     </section>}
     <RecordSaveStatus status={saveStatus} />
+    {pendingDelete && <section className="pilot-panel" aria-labelledby="tracking-delete-pending">
+      <h3 id="tracking-delete-pending" ref={deleteHeading} tabIndex={-1}>{t('reviewFixes.deletion.pending')}</h3>
+      <strong>{t(`tracking.${pendingDelete.entry_type}`)}</strong><CareRecordIdentity record={pendingDelete} />
+      <RecordTime value={pendingDelete.timestamp} now={now} /><p>{t('reviewFixes.deletion.notice')}</p>
+      {deleteObservation && <p role="status">{t(`reviewFixes.deletion.${deleteObservation}`)}</p>}
+      <div className="pilot-actions">
+        <Button variant="secondary" disabled={loading} onClick={checkDeletion}>{t('reviewFixes.deletion.check')}</Button>
+        <Button variant="secondary" disabled={loading} onClick={() => { setDeleteError(''); setDeleteTarget(pendingDelete) }}>{t('reviewFixes.deletion.retry')}</Button>
+        <Button variant="quiet" disabled={loading} onClick={() => {
+          if (!window.confirm(t('reviewFixes.deletion.abandonConfirm'))) return
+          setPendingDelete(null); setDeleteObservation(''); setDeleteTarget(null); setSaveStatus(''); refresh()
+        }}>{t('reviewFixes.deletion.abandon')}</Button>
+      </div>
+    </section>}
     <DuplicateReview review={duplicates.review} disabled={loading} onContinue={() => saveEntry()} onCancel={() => {
       duplicates.clear(); setPendingSave(null); setSaveStatus(''); draft.clear()
     }} />
@@ -261,9 +345,9 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     {showAddForm && <div ref={formHeading} tabIndex={-1} className="record-form-region" role="region" aria-label={t(editing ? 'work.editRecord' : 'tracking.addEntry')}>
       <EntryForm key={`${editing ? `edit:${editing.record_key}:${editing.revision}` : 'new'}:${formRevision}`}
       entryType={entryType} initialEntry={editing} restored={restoredForm} onDraftChange={setFormDraft} locked={Boolean(pendingSave)}
-      onEntryTypeChange={setEntryType} onSubmit={saveEntry} onCancel={cancelForm} loading={loading || Boolean(duplicates.review)} saving={saveStatus === 'saving'} /></div>}
+      onEntryTypeChange={setEntryType} onSubmit={saveEntry} onCancel={cancelForm} loading={loading || Boolean(pendingDelete) || Boolean(duplicates.review)} saving={saveStatus === 'saving'} /></div>}
     {undoEntry && <div className="pilot-panel undo-notice" role="status"><p>{t('work.lastDeleted')}</p>
-      <button className="pilot-button secondary" disabled={loading || Boolean(pendingSave)} onClick={restoreEntry}>{t('work.undoDelete')}</button></div>}
+      <button className="pilot-button secondary" disabled={loading || Boolean(pendingSave) || Boolean(pendingDelete)} onClick={restoreEntry}>{t('work.undoDelete')}</button></div>}
     <section className="entries-list"><h3>{t('tracking.recentEntries')}</h3><p>{t('pilot.japanTime')}</p>
       <FormField as="select" label={t('work.recordPeriod')} value={recordRange} disabled={loading} onChange={event => setRecordRange(Number(event.target.value))}>
         {[7, 30, 90, 365].map(days => <option key={days} value={days}>{t('work.rangeDays', { days })}</option>)}
@@ -286,11 +370,11 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
           {entry.breast_condition && <span>{t(`tracking.${entry.breast_condition}`)}</span>}
         </div>
         {['notes', 'mood_notes', 'recovery_notes'].map(key => entry[key] && <p key={key} className="entry-notes">{entry[key]}</p>)}
-        <div className="pilot-actions"><button className="pilot-button secondary" disabled={loading || Boolean(pendingSave) || Boolean(draft.candidate) || draft.status === 'loading'} onClick={() => {
+        <div className="pilot-actions"><button className="pilot-button secondary" disabled={loading || Boolean(pendingSave) || Boolean(pendingDelete) || Boolean(draft.candidate) || draft.status === 'loading'} onClick={() => {
           openRecord({ record: entry })
         }}>{t('work.editRecord')}</button>
-          <Button variant="secondary" disabled={loading || Boolean(pendingSave)} onClick={() => {
-            setSaveStatus(previous => previous === 'removeFailed' ? '' : previous); setDeleteTarget(entry)
+          <Button variant="secondary" disabled={loading || Boolean(pendingSave) || Boolean(pendingDelete)} onClick={() => {
+            setDeleteError(''); setDeleteTarget(entry)
           }}>{t('common.delete')}</Button></div>
       </article>)}
     </section>
@@ -298,9 +382,9 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
       description={deleteTarget ? <><strong>{t(`tracking.${deleteTarget.entry_type}`)}</strong>
         <CareRecordIdentity record={deleteTarget} /><RecordTime value={deleteTarget.timestamp} now={now} /></> : undefined}
       confirmLabel={t('work.confirmDelete')} busy={loading || Boolean(pendingSave)}
-      error={saveStatus === 'removeFailed' ? t('work.deleteFailed') : undefined}
+      error={deleteError ? t(`reviewFixes.deletion.${deleteError}`) : undefined}
       onConfirm={() => removeEntry(deleteTarget)} onClose={() => setDeleteTarget(null)} />
-    <RecordOrganizer visible={visible} blocked={loading || Boolean(pendingSave)} onRecordsChanged={refresh}
+    <RecordOrganizer visible={visible} blocked={loading || Boolean(pendingSave) || Boolean(pendingDelete)} onRecordsChanged={refresh}
       openRequest={initialEntryType?.action === 'organize' ? requestKey : 0} />
     <details className="pilot-panel"><summary>{t('pilot.optionalAnalysis')}</summary>
       <CareScope subjectId={analysisSubject} mode="analysis" disabled={summaryLoading} onUseLast={id => {
@@ -316,7 +400,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
       {!analysisReady && <p role="status">{t('reviewFixes.analysisUnavailable')} <button type="button" className="text-action" onClick={care.reload}>{t('pilot.retry')}</button></p>}
       <button className="pilot-button secondary" onClick={() => setShowCharts(value => !value)}>{t(showCharts ? 'tracking.hideCharts' : 'tracking.showCharts')}</button>
       {showCharts && analysisReady && <Charts key={analysisSubject || 'unassigned'} userId={userId} subjectId={analysisSubject} refreshKey={attempt} visible={visible}
-        onRecord={!loading && !pendingSave && !draft.candidate && draft.status !== 'loading' ? () => openRecord({ entryType }) : undefined} />}
+        onRecord={!loading && !pendingSave && !pendingDelete && !draft.candidate && draft.status !== 'loading' ? () => openRecord({ entryType }) : undefined} />}
       <AIUseNotice scope="records" accepted={acceptedAI} onChange={setAcceptedAI} disabled={summaryLoading || !analysisReady}
         profileLabel={t('reviewFixes.analysisProfile')}
         includeProfile={includeProfile} onProfileChange={setIncludeProfile} includeParent={includeParent} onParentChange={setIncludeParent}

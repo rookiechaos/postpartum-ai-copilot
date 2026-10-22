@@ -13,6 +13,17 @@ from models.database import TrackingEntryDB, UserContextDB, TaskDB, FeedbackDB, 
 from services.logging_service import logger
 
 
+# One owner-record contract for both JSON and the CSV Value column. Keep nulls
+# and zero values; an export must not drop recovery data or retry identities.
+TRACKING_EXPORT_FIELDS = (
+    "id", "record_key", "revision", "user_id", "entry_type", "timestamp",
+    "end_timestamp", "subject_id", "family_shared", "feeding_type",
+    "duration_minutes", "amount_ml", "side", "diaper_type",
+    "sleep_duration_minutes", "sleep_quality", "mood_level", "mood_notes",
+    "pumped_amount_ml", "weight_kg", "breast_condition", "recovery_notes", "notes",
+)
+
+
 class DataExportService:
     """Service for exporting user data"""
     
@@ -73,28 +84,12 @@ class DataExportService:
             writer.writerow(["Data Type", "Field", "Value", "Timestamp"])
             
             # Export tracking entries
-            entries = db.query(TrackingEntryDB).filter(
-                TrackingEntryDB.user_id == user_id
-            ).all()
-            
-            for entry in entries:
+            for entry in self._export_tracking_entries(user_id, db):
                 writer.writerow([
                     "tracking",
-                    entry.entry_type,
-                    json.dumps({
-                        "feeding_type": entry.feeding_type,
-                        "duration_minutes": entry.duration_minutes,
-                        "amount_ml": entry.amount_ml,
-                        "side": entry.side,
-                        "diaper_type": entry.diaper_type,
-                        "sleep_duration_minutes": entry.sleep_duration_minutes,
-                        "sleep_quality": entry.sleep_quality,
-                        "mood_level": entry.mood_level,
-                        "mood_notes": entry.mood_notes,
-                        "pumped_amount_ml": entry.pumped_amount_ml,
-                        "notes": entry.notes
-                    }),
-                    entry.timestamp.isoformat() if entry.timestamp else ""
+                    entry["entry_type"],
+                    json.dumps(entry, ensure_ascii=False),
+                    entry["timestamp"] or ""
                 ])
             
             # Export tasks
@@ -209,24 +204,15 @@ class DataExportService:
             TrackingEntryDB.user_id == user_id
         ).all()
         
-        return [{
-            "id": entry.id,
-            "entry_type": entry.entry_type,
-            "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
-            "end_timestamp": entry.end_timestamp.isoformat() if entry.end_timestamp else None,
-            "subject_id": entry.subject_id, "family_shared": entry.family_shared,
-            "feeding_type": entry.feeding_type,
-            "duration_minutes": entry.duration_minutes,
-            "amount_ml": entry.amount_ml,
-            "side": entry.side,
-            "diaper_type": entry.diaper_type,
-            "sleep_duration_minutes": entry.sleep_duration_minutes,
-            "sleep_quality": entry.sleep_quality,
-            "mood_level": entry.mood_level,
-            "mood_notes": entry.mood_notes,
-            "pumped_amount_ml": entry.pumped_amount_ml,
-            "notes": entry.notes
-        } for entry in entries]
+        return [self._tracking_entry_to_dict(entry) for entry in entries]
+
+    @staticmethod
+    def _tracking_entry_to_dict(entry: TrackingEntryDB) -> Dict[str, Any]:
+        record = {field: getattr(entry, field) for field in TRACKING_EXPORT_FIELDS}
+        for field in ("timestamp", "end_timestamp"):
+            value = record[field]
+            record[field] = value.isoformat() if value is not None else None
+        return record
     
     def _export_user_context(self, user_id: str, db: Session) -> Optional[Dict[str, Any]]:
         """Export user context"""

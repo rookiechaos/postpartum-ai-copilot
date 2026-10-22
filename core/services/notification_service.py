@@ -3,14 +3,26 @@ Notification Service - Smart reminders and notifications
 """
 
 from typing import Dict, Any, Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 from models.database import NotificationDB, TrackingEntryDB, UserContextDB
 from services.logging_service import logger
+from services.care_periods import JST
 from exceptions import DatabaseError
 from utils.locale_loader import load_locale_file
 import json
+
+
+def _next_japan_time(hour: int, weekday: Optional[int] = None) -> datetime:
+    """Choose a future Japanese wall-clock time, stored as naive UTC in the DB."""
+    now = datetime.now(JST)
+    scheduled = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+    if weekday is not None:
+        scheduled += timedelta(days=(weekday - now.weekday()) % 7)
+    if scheduled <= now:
+        scheduled += timedelta(days=7 if weekday is not None else 1)
+    return scheduled.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 class NotificationService:
@@ -229,20 +241,8 @@ class NotificationService:
     ) -> Optional[Dict[str, Any]]:
         """Create a mood check-in reminder"""
         try:
-            # Schedule for evening by default
-            now = datetime.utcnow()
-            if time_of_day == "evening":
-                scheduled_time = now.replace(hour=20, minute=0, second=0, microsecond=0)
-                if scheduled_time < now:
-                    scheduled_time += timedelta(days=1)
-            elif time_of_day == "morning":
-                scheduled_time = now.replace(hour=9, minute=0, second=0, microsecond=0)
-                if scheduled_time < now:
-                    scheduled_time += timedelta(days=1)
-            else:  # afternoon
-                scheduled_time = now.replace(hour=14, minute=0, second=0, microsecond=0)
-                if scheduled_time < now:
-                    scheduled_time += timedelta(days=1)
+            hour = {"evening": 20, "morning": 9}.get(time_of_day, 14)
+            scheduled_time = _next_japan_time(hour)
             
             encouragement_messages = [
                 "How are you feeling today? Take a moment to check in with yourself. You're doing great! 💚",
@@ -328,11 +328,7 @@ class NotificationService:
         """Create a weight tracking reminder with encouragement"""
         try:
             if not scheduled_time:
-                # Default to daily at 9 AM
-                now = datetime.utcnow()
-                scheduled_time = now.replace(hour=9, minute=0, second=0, microsecond=0)
-                if scheduled_time <= now:
-                    scheduled_time += timedelta(days=1)
+                scheduled_time = _next_japan_time(9)
             
             encouragement_messages = [
                 "Time to track your weight! You're doing great! 💪",
@@ -366,11 +362,7 @@ class NotificationService:
         """Create a recovery tracking reminder with encouragement"""
         try:
             if not scheduled_time:
-                # Default to daily at 8 PM
-                now = datetime.utcnow()
-                scheduled_time = now.replace(hour=20, minute=0, second=0, microsecond=0)
-                if scheduled_time <= now:
-                    scheduled_time += timedelta(days=1)
+                scheduled_time = _next_japan_time(20)
             
             encouragement_messages = [
                 "Time to check in on your recovery! You're doing great! 💚",
@@ -406,19 +398,9 @@ class NotificationService:
         try:
             if not scheduled_time:
                 if period == "daily":
-                    # Daily summary at end of day (9 PM)
-                    now = datetime.utcnow()
-                    scheduled_time = now.replace(hour=21, minute=0, second=0, microsecond=0)
-                    if scheduled_time <= now:
-                        scheduled_time += timedelta(days=1)
+                    scheduled_time = _next_japan_time(21)
                 else:
-                    # Weekly summary on Sunday evening
-                    now = datetime.utcnow()
-                    days_until_sunday = (6 - now.weekday()) % 7
-                    if days_until_sunday == 0 and now.hour >= 21:
-                        days_until_sunday = 7
-                    scheduled_time = now + timedelta(days=days_until_sunday)
-                    scheduled_time = scheduled_time.replace(hour=21, minute=0, second=0, microsecond=0)
+                    scheduled_time = _next_japan_time(21, weekday=6)
             
             encouragement_messages = [
                 f"Time for your {period} summary! You're doing amazing! 🌟",

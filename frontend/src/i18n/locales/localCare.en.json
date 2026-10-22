@@ -35,6 +35,7 @@
       "unconfirmed": "Could not confirm whether the record was saved",
       "unsaved": "The record could not be saved",
       "removing": "Deleting the record",
+      "removeChecking": "Checking whether the record was deleted",
       "removed": "Record deleted",
       "removeFailed": "Could not confirm whether the record was deleted",
       "restoring": "Restoring the deleted record",
