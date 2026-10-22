@@ -7,6 +7,7 @@ import { japanDateTime, japanDateTimeInput } from '../utils/japanTime'
 import ConnectionNotice from './ConnectionNotice'
 import OperatorActions from './OperatorActions'
 import { revealElement } from '../utils/focusView'
+import { ErrorMessage, PageHeader } from './ui'
 
 const workflowDraft = item => ({ status: item.status, public_response: item.public_response,
   revision: item.revision || 0, identity_verified: item.workflow?.identity_verified === true,
@@ -72,13 +73,12 @@ export default function OperatorPortal({ onExit, onOrganization, registerLeaveGu
     finally { writing.current = false; setBusy(false) }
   }
   return <main className="pilot-shell operator-portal">
-    <div className="pilot-topbar"><h1>{t('work.operatorTitle')}</h1><LanguageSelector /></div>
-    <p>{t('work.operatorScope')}</p>
+    <PageHeader headingLevel={1} title={t('work.operatorTitle')} description={t('work.operatorScope')} actions={<LanguageSelector />} />
     <ConnectionNotice />
     <div className="pilot-actions"><button className="pilot-button secondary" disabled={busy} onClick={() => { if (registerLeaveGuard || canLeave()) onExit() }}>{t('pilot.switchEntrance')}</button>
       <button className="pilot-button secondary" disabled={busy} onClick={() => { if (canLeave()) api.logout() }}>{t('settings.logout')}</button></div>
     {loading && <p role="status">{t('common.loading')}</p>}
-    {error && <p role="alert">{error}</p>}
+    {error && <ErrorMessage title={error} />}
     <button className="pilot-button secondary" disabled={busy || loading} onClick={() => setAttempt(value => value + 1)}>{t('pilot.retry')}</button>
     {authorized && <>
       <OperatorActions refreshKey={attempt} blocked={busy || loading} onRequests={value => {

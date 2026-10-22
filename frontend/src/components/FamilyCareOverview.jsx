@@ -98,7 +98,7 @@ export default function FamilyCareOverview({ visible, refreshKey, onManage }) {
       setAckError(failure.status === 409 ? 'conflict' : 'failed'); setAttempt(value => value + 1)
     } finally { acknowledgementBusy.current = false; setAcknowledging('') }
   }
-  return <details className="pilot-panel family-overview" onToggle={event => {
+  return <details className="pilot-panel family-overview ui-disclosure" onToggle={event => {
     if (event.target === event.currentTarget) setExpanded(event.currentTarget.open)
   }}><summary>{t('friendly.home.family')}{edited.current ? ` · ${t('flows.overview.unsaved')}` : ''}</summary>
     {!selected && <p>{t('friendly.home.familyOff')}</p>}

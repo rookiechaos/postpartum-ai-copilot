@@ -22,6 +22,8 @@ import reviewFixesEnglish from './locales/reviewFixes.en.json'
 import reviewFixesJapanese from './locales/reviewFixes.ja.json'
 import workflowEnglish from './locales/workflow.en.json'
 import workflowJapanese from './locales/workflow.ja.json'
+import foundationEnglish from './locales/foundation.en.json'
+import foundationJapanese from './locales/foundation.ja.json'
 
 i18n
   .use(LanguageDetector)
@@ -29,10 +31,10 @@ i18n
   .init({
     resources: {
       en: {
-        translation: { ...enTranslations, polish: polishEnglish, ui: uiEnglish, flows: flowsEnglish, friendly: friendlyEnglish, localCare: localCareEnglish, interaction: interactionEnglish, continuity: continuityEnglish, reviewFixes: reviewFixesEnglish, workflow: workflowEnglish }
+        translation: { ...enTranslations, polish: polishEnglish, ui: uiEnglish, flows: flowsEnglish, friendly: friendlyEnglish, localCare: localCareEnglish, interaction: interactionEnglish, continuity: continuityEnglish, reviewFixes: reviewFixesEnglish, workflow: workflowEnglish, foundation: foundationEnglish }
       },
       ja: {
-        translation: { ...jaTranslations, polish: polishJapanese, ui: uiJapanese, flows: flowsJapanese, friendly: friendlyJapanese, localCare: localCareJapanese, interaction: interactionJapanese, continuity: continuityJapanese, reviewFixes: reviewFixesJapanese, workflow: workflowJapanese }
+        translation: { ...jaTranslations, polish: polishJapanese, ui: uiJapanese, flows: flowsJapanese, friendly: friendlyJapanese, localCare: localCareJapanese, interaction: interactionJapanese, continuity: continuityJapanese, reviewFixes: reviewFixesJapanese, workflow: workflowJapanese, foundation: foundationJapanese }
       }
     },
     fallbackLng: 'ja',

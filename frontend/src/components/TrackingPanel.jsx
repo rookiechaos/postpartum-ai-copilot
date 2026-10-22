@@ -20,6 +20,7 @@ import { useCareSession, useCareWork } from '../utils/CareSession'
 import { CareSubjectFields, CareRecordIdentity, privateSubject, babyKinds } from './CareSubject'
 import useDuplicateReview from '../utils/useDuplicateReview'
 import DuplicateReview from './DuplicateReview'
+import { Button, ConfirmDialog, EmptyState, ErrorMessage, FormField, PageHeader } from './ui'
 import './TrackingPanel.css'
 
 const types = ['feeding', 'diaper', 'sleep', 'mood', 'pumping', 'recovery']
@@ -192,7 +193,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     draft.clear(); setAttempt(value => value + 1)
   }
   const removeEntry = async entry => {
-    if (writing.current || loading || pendingSave) return
+    if (!entry || writing.current || loading || pendingSave) return false
     writing.current = true; setLoading(true); setSaveStatus('removing')
     try {
       await api.deleteTrackingEntry(entry.id, entry)
@@ -204,7 +205,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     } catch (err) {
       if (err.status === 409 || err.status === 404) {
         setDeleteTarget(null); setSaveStatus(''); toast.error(t('work.recordConflict')); refresh()
-      } else { setSaveStatus('removeFailed'); toast.error(t('work.deleteFailed')) }
+      } else { setSaveStatus('removeFailed'); toast.error(t('work.deleteFailed')); return false }
     }
     finally { writing.current = false; setLoading(false) }
   }
@@ -235,12 +236,11 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   }
 
   return <div className="tracking-panel">
-    <div className="tracking-header"><h2 id="tracking-resume-heading" tabIndex={-1}>{t('tracking.title')}</h2>
-      <button className="add-button" disabled={loading || (!showAddForm && (Boolean(draft.candidate) || draft.status === 'loading'))} onClick={() => {
+    <PageHeader titleId="tracking-resume-heading" title={t('tracking.title')} description={t('pilot.noPressure')}
+      actions={<Button variant={showAddForm ? 'secondary' : 'primary'} disabled={loading || (!showAddForm && (Boolean(draft.candidate) || draft.status === 'loading'))} onClick={() => {
         if (showAddForm) cancelForm()
         else openRecord({ entryType })
-      }}>{showAddForm ? t('tracking.cancel') : `+ ${t('tracking.addEntry')}`}</button></div>
-    <p>{t('pilot.noPressure')}</p>
+      }}>{showAddForm ? t('tracking.cancel') : `+ ${t('tracking.addEntry')}`}</Button>} />
     <DraftRecoveryNotice draft={draft} disabled={loading} />
     {openRequest && <section className="record-open-request" aria-label={t('friendly.record.incoming')}>
       <p>{t('friendly.record.incoming')}</p>
@@ -265,12 +265,13 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     {undoEntry && <div className="pilot-panel undo-notice" role="status"><p>{t('work.lastDeleted')}</p>
       <button className="pilot-button secondary" disabled={loading || Boolean(pendingSave)} onClick={restoreEntry}>{t('work.undoDelete')}</button></div>}
     <section className="entries-list"><h3>{t('tracking.recentEntries')}</h3><p>{t('pilot.japanTime')}</p>
-      <label>{t('work.recordPeriod')}<select value={recordRange} disabled={loading} onChange={event => setRecordRange(Number(event.target.value))}>
+      <FormField as="select" label={t('work.recordPeriod')} value={recordRange} disabled={loading} onChange={event => setRecordRange(Number(event.target.value))}>
         {[7, 30, 90, 365].map(days => <option key={days} value={days}>{t('work.rangeDays', { days })}</option>)}
-      </select></label>
-      {error && <p role="alert">{error}<button className="pilot-button secondary" onClick={() => setAttempt(value => value + 1)}>{t('pilot.retry')}</button></p>}
+      </FormField>
+      {error && <ErrorMessage title={error} onRetry={() => setAttempt(value => value + 1)} />}
       {entriesLoading && <p role="status">{t('common.loading')}</p>}
-      {!error && !entriesLoading && entries.length === 0 && <p>{t('tracking.noEntries')}</p>}
+      {!error && !entriesLoading && entries.length === 0 && <EmptyState compact icon={false} suggestions={[]}
+        title={t('tracking.noEntries')} description="" />}
       {entries.map(entry => <article key={entry.record_key} className="tracking-entry-card">
         <div className="entry-header"><strong>{t(`tracking.${entry.entry_type}`)}</strong><RecordTime value={entry.timestamp} now={now} /></div>
         <div className="entry-details">
@@ -288,13 +289,17 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
         <div className="pilot-actions"><button className="pilot-button secondary" disabled={loading || Boolean(pendingSave) || Boolean(draft.candidate) || draft.status === 'loading'} onClick={() => {
           openRecord({ record: entry })
         }}>{t('work.editRecord')}</button>
-          <button className="pilot-button secondary" disabled={loading || Boolean(pendingSave)} onClick={() => setDeleteTarget(entry)}>{t('common.delete')}</button></div>
-        {deleteTarget?.record_key === entry.record_key && <div role="alertdialog" aria-label={t('work.deleteConfirm')}>
-          <p>{t('work.deleteConfirm')}</p><button disabled={loading || Boolean(pendingSave)} onClick={() => removeEntry(deleteTarget)}>{t('work.confirmDelete')}</button>
-          <button disabled={loading} onClick={() => setDeleteTarget(null)}>{t('tracking.cancel')}</button>
-        </div>}
+          <Button variant="secondary" disabled={loading || Boolean(pendingSave)} onClick={() => {
+            setSaveStatus(previous => previous === 'removeFailed' ? '' : previous); setDeleteTarget(entry)
+          }}>{t('common.delete')}</Button></div>
       </article>)}
     </section>
+    <ConfirmDialog open={visible && Boolean(deleteTarget)} danger title={t('work.deleteConfirm')}
+      description={deleteTarget ? <><strong>{t(`tracking.${deleteTarget.entry_type}`)}</strong>
+        <CareRecordIdentity record={deleteTarget} /><RecordTime value={deleteTarget.timestamp} now={now} /></> : undefined}
+      confirmLabel={t('work.confirmDelete')} busy={loading || Boolean(pendingSave)}
+      error={saveStatus === 'removeFailed' ? t('work.deleteFailed') : undefined}
+      onConfirm={() => removeEntry(deleteTarget)} onClose={() => setDeleteTarget(null)} />
     <RecordOrganizer visible={visible} blocked={loading || Boolean(pendingSave)} onRecordsChanged={refresh}
       openRequest={initialEntryType?.action === 'organize' ? requestKey : 0} />
     <details className="pilot-panel"><summary>{t('pilot.optionalAnalysis')}</summary>

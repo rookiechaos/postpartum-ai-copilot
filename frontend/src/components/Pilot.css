@@ -25,12 +25,12 @@
 .entrance-card > svg { color: var(--pilot-brand); }
 .entrance-card h2 { font-size: 1.4rem; }
 .entrance-card ul { padding-left: 22px; line-height: 2; flex: 1; }
-.pilot-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 10px 18px; background: var(--pilot-brand); color: #fff; border: 1px solid var(--pilot-brand); border-radius: 12px; font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; line-height: 1.5; }
+.pilot-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: var(--control-height); padding: var(--control-padding-block) var(--control-padding-inline); background: var(--pilot-brand); color: #fff; border: 1px solid var(--pilot-brand); border-radius: var(--radius-control); font: inherit; font-weight: var(--font-weight-label); cursor: pointer; text-decoration: none; line-height: var(--line-height-heading); }
 .pilot-button.secondary { color: var(--color-brand); background: var(--color-tint); border-color: var(--color-border); }
 .pilot-button:hover:not(:disabled) { background: var(--color-brand-hover); color: #fff; }
 .pilot-button.secondary:hover:not(:disabled) { background: var(--color-tint); color: var(--color-brand-hover); border-color: var(--color-brand); }
 .pilot-button:disabled { opacity: .55; cursor: not-allowed; }
-button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 3px solid var(--color-brand); outline-offset: 3px; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
 .pilot-note { color: var(--pilot-muted); font-size: .9rem; line-height: 1.8; margin: 24px 0; }
 .support-directory { margin: 28px 0; padding: 24px; border: 1px solid var(--pilot-border); border-radius: 16px; background: var(--color-surface); color: var(--color-text); }
 .support-directory h2, .support-directory > h3 { margin-bottom: 12px; }
@@ -44,11 +44,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .support-card a.pilot-button.secondary { color: var(--color-brand); }
 .support-directory.compact { padding: 18px; }
 .support-directory.compact h2 { font-size: 1.1rem; }
-.pilot-panel { padding: 24px; margin: 20px 0; background: var(--color-surface); color: var(--color-text); border: 1px solid var(--pilot-border); border-radius: 16px; }
-.pilot-panel h2, .pilot-panel h3 { margin-bottom: 12px; }
-.pilot-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
-.pilot-panel label, .form-content label, .entry-form label { display: block; margin: 16px 0; line-height: 1.8; font-weight: 500; }
-.pilot-panel input, .pilot-panel textarea, .form-content input, .form-content select, .entry-form input, .entry-form select, .entry-form textarea { display: block; width: 100%; min-height: 46px; margin-top: 6px; border: 1px solid var(--color-border); border-radius: 8px; padding: 10px 12px; background: var(--color-surface); color: var(--color-text); font: inherit; }
+.pilot-panel { padding: var(--panel-padding); margin: var(--space-5) 0; background: var(--color-surface); color: var(--color-text); border: 1px solid var(--pilot-border); border-radius: var(--radius-panel); }
+.pilot-panel h2, .pilot-panel h3 { margin-bottom: var(--space-3); font-size: var(--font-size-xl); line-height: var(--line-height-heading); }
+.pilot-panel h3 { font-size: var(--font-size-lg); }
+.pilot-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: var(--space-4) 0; }
+.pilot-panel label, .form-content label, .entry-form label { display: block; margin: var(--space-4) 0; line-height: var(--line-height-body); font-weight: var(--font-weight-label); }
+.pilot-panel input, .pilot-panel textarea, .form-content input, .form-content select, .entry-form input, .entry-form select, .entry-form textarea { display: block; width: 100%; min-height: var(--control-height); margin-top: var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-small); padding: var(--control-padding-block) var(--space-3); background: var(--color-surface); color: var(--color-text); font: inherit; }
 .pilot-panel textarea { resize: vertical; }
 .pilot-form fieldset { padding: 18px; border: 1px solid var(--pilot-border); border-radius: 12px; margin: 20px 0; }
 .pilot-form > .pilot-button { margin: 8px 8px 8px 0; }

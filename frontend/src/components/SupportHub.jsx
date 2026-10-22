@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import SupportDirectory from './SupportDirectory'
 import ShareSummary from './ShareSummary'
 import { revealElement } from '../utils/focusView'
+import { Button, PageHeader } from './ui'
 
 export default function SupportHub({ userId, visible, refreshKey, navigationRequest, onPrepareSheet }) {
   const { t } = useTranslation()
@@ -45,15 +46,15 @@ export default function SupportHub({ userId, visible, refreshKey, navigationRequ
   }
   return <div className="support-hub">
     <div className="view-switch" role="group" aria-label={t('ui.support.chooseView')}>
-      {['contacts', 'sheet'].map(key => <button key={key} type="button" className="pilot-button secondary"
-        aria-pressed={view === key} aria-controls={visited.includes(key) ? `support-view-${key}` : undefined} onClick={() => open(key)}>{t(`ui.support.${key}`)}</button>)}
+      {['contacts', 'sheet'].map(key => <Button key={key} variant="secondary"
+        aria-pressed={view === key} aria-controls={visited.includes(key) ? `support-view-${key}` : undefined} onClick={() => open(key)}>{t(`ui.support.${key}`)}</Button>)}
     </div>
     {visited.map(key => <section key={key} id={`support-view-${key}`} className="support-view" hidden={view !== key}
       aria-labelledby={`support-heading-${key}`}>
-      <h2 id={`support-heading-${key}`} tabIndex={-1} ref={element => { headings.current[key] = element }}>{t(`ui.support.${key}`)}</h2>
+      <PageHeader titleId={`support-heading-${key}`} ref={element => { headings.current[key] = element }} title={t(`ui.support.${key}`)} />
       {key === 'contacts' ? <SupportDirectory userId={userId} visible={visible && view === key} onPrepareSheet={onPrepareSheet} navigationRequest={navigationRequest} /> : <>
         <p className="view-intro">{t('ui.support.sheetIntro')}</p>
-        <button type="button" className="pilot-button secondary" onClick={() => open('contacts')}>{t('ui.support.backContacts')}</button>
+        <Button variant="secondary" onClick={() => open('contacts')}>{t('ui.support.backContacts')}</Button>
         <ShareSummary userId={userId} visible={visible && view === key} refreshKey={refreshKey}
           incomingContact={incomingContact} contactRequestKey={incomingContact?.requestKey || 0}
           initialQuestion={incoming.question} requestKey={incoming.requestKey} />

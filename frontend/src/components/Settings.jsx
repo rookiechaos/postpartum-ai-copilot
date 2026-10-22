@@ -11,6 +11,7 @@ import AccessibilitySettings from './AccessibilitySettings'
 import SecuritySettings from './SecuritySettings'
 import LanguageSelector from './LanguageSelector'
 import { InstallInstructions } from './InstallPrompt'
+import { Button, ErrorMessage, FormField, PageHeader } from './ui'
 import './Settings.css'
 
 function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntrance }) {
@@ -86,10 +87,7 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
 
   return (
     <div className="settings">
-      <div className="settings-header">
-        <h2>{t('settings.title')}</h2>
-        <p>{t('settings.subtitle')}</p>
-      </div>
+      <PageHeader title={t('settings.title')} description={t('settings.subtitle')} />
 
       <div className="settings-tabs">
         <button
@@ -125,9 +123,7 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
       {activeSubTab === 'profile' && (
       <>
       {loadState === 'loading' && <p role="status">{t('common.loading')}</p>}
-      {loadState === 'error' && <div role="alert"><p>{t('pilot.loadFailed')}</p>
-        <button className="pilot-button secondary" onClick={() => setLoadAttempt(value => value + 1)}>{t('pilot.retry')}</button>
-      </div>}
+      {loadState === 'error' && <ErrorMessage title={t('pilot.loadFailed')} onRetry={() => setLoadAttempt(value => value + 1)} />}
       <fieldset className="settings-sections" disabled={loadState !== 'ready' || saving}>
         <motion.div
           className="settings-section"
@@ -139,15 +135,12 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
             <h3>{t('settings.profile')}</h3>
           </div>
           <div className="section-content">
-            <div className="form-group">
-              <label htmlFor="settings-baby-name">{t('settings.babyName')}</label>
-              <input
-                id="settings-baby-name"
-                type="text"
-                value={settings.babyName}
-                onChange={(e) => setSettings({ ...settings, babyName: e.target.value })}
-                placeholder={t('settings.babyNamePlaceholder')} />
-            </div>
+            <FormField label={t('settings.babyName')} optional
+              id="settings-baby-name"
+              type="text"
+              value={settings.babyName}
+              onChange={(e) => setSettings({ ...settings, babyName: e.target.value })}
+              placeholder={t('settings.babyNamePlaceholder')} />
             <div className="form-group">
               <label htmlFor="settings-language">{t('settings.language')}</label>
               <LanguageSelector id="settings-language" />
@@ -167,40 +160,31 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
             <h3>{t('settings.babyInfo')}</h3>
           </div>
           <div className="section-content">
-            <div className="form-group">
-              <label htmlFor="settings-baby-age">{t('settings.babyAge')}</label>
-              <select
-                id="settings-baby-age"
-                value={settings.babyAge}
-                onChange={(e) => setSettings({ ...settings, babyAge: e.target.value })}
-              >
-                <option value="">{t('common.select')}</option>
-                {['0-7', '1-2', '2-4', '1-2m', '2-3m', '3+'].map(value => <option key={value} value={value}>{t(`pilot.ages.${value}`)}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label htmlFor="settings-birth-type">{t('settings.birthType')}</label>
-              <select
-                id="settings-birth-type"
-                value={settings.birthType}
-                onChange={(e) => setSettings({ ...settings, birthType: e.target.value })}
-              >
-                <option value="">{t('common.select')}</option>
-                <option value="vaginal">{t('pilot.vaginal')}</option>
-                <option value="c-section">{t('pilot.csection')}</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label htmlFor="settings-feeding-type">{t('settings.feedingType')}</label>
-              <select
-                id="settings-feeding-type"
-                value={settings.feedingType}
-                onChange={(e) => setSettings({ ...settings, feedingType: e.target.value })}
-              >
-                <option value="">{t('common.select')}</option>
-                {['breast', 'formula', 'mixed'].map(value => <option key={value} value={value}>{t(`tracking.${value}`)}</option>)}
-              </select>
-            </div>
+            <FormField as="select" label={t('settings.babyAge')} optional
+              id="settings-baby-age"
+              value={settings.babyAge}
+              onChange={(e) => setSettings({ ...settings, babyAge: e.target.value })}
+            >
+              <option value="">{t('common.select')}</option>
+              {['0-7', '1-2', '2-4', '1-2m', '2-3m', '3+'].map(value => <option key={value} value={value}>{t(`pilot.ages.${value}`)}</option>)}
+            </FormField>
+            <FormField as="select" label={t('settings.birthType')} optional
+              id="settings-birth-type"
+              value={settings.birthType}
+              onChange={(e) => setSettings({ ...settings, birthType: e.target.value })}
+            >
+              <option value="">{t('common.select')}</option>
+              <option value="vaginal">{t('pilot.vaginal')}</option>
+              <option value="c-section">{t('pilot.csection')}</option>
+            </FormField>
+            <FormField as="select" label={t('settings.feedingType')} optional
+              id="settings-feeding-type"
+              value={settings.feedingType}
+              onChange={(e) => setSettings({ ...settings, feedingType: e.target.value })}
+            >
+              <option value="">{t('common.select')}</option>
+              {['breast', 'formula', 'mixed'].map(value => <option key={value} value={value}>{t(`tracking.${value}`)}</option>)}
+            </FormField>
           </div>
         </motion.div>
 
@@ -223,16 +207,14 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
       </fieldset>
 
       <div className="settings-footer">
-        <motion.button
-          className="save-button"
+        <Button
+          busy={saving} busyLabel={t('settings.saving')}
           onClick={handleSave}
           disabled={loadState !== 'ready' || saving}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
         >
           <Save size={20} />
           {saving ? t('settings.saving') : saved ? t('settings.saved') : t('settings.save')}
-        </motion.button>
+        </Button>
       </div>
       </>
       )}

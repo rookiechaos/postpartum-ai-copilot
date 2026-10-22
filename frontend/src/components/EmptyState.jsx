@@ -1,6 +1,7 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { Inbox, Plus, BookOpen, TrendingUp } from 'lucide-react'
+import { Inbox, Plus, TrendingUp } from 'lucide-react'
+import Button from './ui/Button'
 import './EmptyState.css'
 
 /**
@@ -13,7 +14,9 @@ function EmptyState({
   actionLabel,
   onAction,
   icon,
-  suggestions = []
+  suggestions,
+  compact = false,
+  headingLevel = 3
 }) {
   const { t } = useTranslation()
 
@@ -83,19 +86,20 @@ function EmptyState({
   }
 
   const config = configs[type] || configs.default
-  const displayIcon = icon || config.icon
-  const displayTitle = title || config.title
-  const displayDescription = description || config.description
-  const displayActionLabel = actionLabel || config.actionLabel
-  const displaySuggestions = suggestions.length > 0 ? suggestions : (config.suggestions || [])
+  const displayIcon = icon === undefined ? config.icon : icon
+  const displayTitle = title ?? config.title
+  const displayDescription = description ?? config.description
+  const displayActionLabel = actionLabel ?? config.actionLabel
+  const displaySuggestions = suggestions ?? config.suggestions ?? []
+  const Heading = `h${headingLevel}`
 
   return (
-    <div className="empty-state">
-      <div className="empty-state-icon">
+    <div className={`empty-state${compact ? ' empty-state--compact' : ''}`}>
+      {displayIcon && <div className="empty-state-icon" aria-hidden="true">
         {displayIcon}
-      </div>
-      <h3 className="empty-state-title">{displayTitle}</h3>
-      <p className="empty-state-description">{displayDescription}</p>
+      </div>}
+      <Heading className="empty-state-title">{displayTitle}</Heading>
+      {displayDescription && <p className="empty-state-description">{displayDescription}</p>}
       
       {displaySuggestions.length > 0 && (
         <div className="empty-state-suggestions">
@@ -109,12 +113,12 @@ function EmptyState({
       )}
 
       {onAction && (
-        <button 
-          className="empty-state-action btn-primary"
+        <Button
+          className="empty-state-action"
           onClick={onAction}
         >
           {displayActionLabel}
-        </button>
+        </Button>
       )}
     </div>
   )

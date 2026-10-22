@@ -12,6 +12,7 @@ import { CareSubjectFields, privateSubject } from './CareSubject'
 import useDuplicateReview from '../utils/useDuplicateReview'
 import DuplicateReview from './DuplicateReview'
 import CareScope from './CareScope'
+import { Button, ConfirmDialog, ErrorMessage } from './ui'
 
 const validTimer = value => value && ['feeding', 'sleep'].includes(value.entry_type)
   && typeof value.started_at === 'string' && Number.isFinite(utcDate(value.started_at).getTime())
@@ -38,6 +39,7 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
   const [confirmed, setConfirmed] = useState(false)
   const [clock, setClock] = useState(Date.now)
   const [expanded, setExpanded] = useState(false)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
   const activeView = visible && expanded
   const writing = useRef(false)
   const uncertain = useRef(false)
@@ -166,17 +168,17 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
     finally { writing.current = false }
   }
   const discard = async () => {
-    if (writing.current || !window.confirm(t(pending ? 'polish.abandonWrite' : 'interaction.timer.discardConfirm'))) return
+    if (writing.current) return false
     writing.current = true; setStatus('clearing')
     try {
       const cleared = await draft.clear()
-      if (!cleared) { setError('draftClear'); setStatus(pending ? 'unconfirmed' : ''); return }
+      if (!cleared) { setError('draftClear'); setStatus(pending ? 'unconfirmed' : ''); return false }
       duplicates.clear()
       setCorrection(false); setExistingRecord(null)
       uncertain.current = false; setTimer(null); setPending(null); setStatus(''); setConfirmed(false); setError(''); setSide('')
     } finally { writing.current = false }
   }
-  return <details className="pilot-panel care-timer" id="care-timer" open={expanded} onToggle={event => {
+  return <details className="pilot-panel care-timer ui-disclosure" id="care-timer" open={expanded} onToggle={event => {
     if (event.target === event.currentTarget) setExpanded(event.currentTarget.open)
   }}><summary id="care-timer-heading">{t('interaction.timer.title')}
     {timer ? ` · ${t(timer.ended_at ? 'interaction.timer.awaiting' : 'interaction.timer.running')}` : draft.candidate ? ` · ${t('polish.draftFound')}` : ''}</summary>
@@ -220,10 +222,14 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
       {pending && <button type="button" className="pilot-button secondary" disabled={busy} onClick={() => check(true)}>{t('reviewFixes.correctTimer')}</button>}
       {existingRecord && <div role="status"><p>{t('reviewFixes.timerExisting')}</p>
         <button type="button" className="pilot-button secondary" disabled={busy} onClick={() => onLocate?.(existingRecord)}>{t('reviewFixes.openTimerRecord')}</button></div>}
-      <button type="button" className="pilot-button secondary" disabled={busy} onClick={discard}>{t('interaction.timer.discard')}</button>
+      <Button variant="secondary" disabled={busy} onClick={() => setConfirmDiscard(true)}>{t('interaction.timer.discard')}</Button>
     </>}
     {['checking', 'clearing'].includes(status) ? <p role="status">{t('common.loading')}</p> : <RecordSaveStatus status={status} />}
-    {error && <p role="alert">{t(`interaction.timer.errors.${error}`)}</p>}
+    {error && <ErrorMessage title={t(`interaction.timer.errors.${error}`)} />}
     {lastSaved && <button type="button" className="pilot-button secondary" onClick={() => onLocate?.(lastSaved)}>{t('continuity.period.findSaved')}</button>}
+    <ConfirmDialog open={visible && confirmDiscard && Boolean(timer)} danger title={t('interaction.timer.discard')}
+      description={t(pending ? 'polish.abandonWrite' : 'interaction.timer.discardConfirm')} confirmLabel={t('interaction.timer.discard')}
+      busy={busy} error={error === 'draftClear' ? t('interaction.timer.errors.draftClear') : undefined}
+      onConfirm={discard} onClose={() => setConfirmDiscard(false)} />
   </details>
 }

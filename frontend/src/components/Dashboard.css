@@ -1,22 +1,38 @@
 .dashboard { max-width: 60rem; margin: 0 auto; }
-.dashboard-header { margin-bottom: 1rem; }
-.dashboard-header h2 { font-size: 1.5rem; line-height: 1.5; margin-bottom: .5rem; }
-.dashboard-header p { color: var(--color-muted); line-height: 1.8; }
-.family-dashboard .pilot-panel { margin-block: 1rem; }
+.family-dashboard .pilot-panel { margin-block: var(--space-4); }
 .family-dashboard .quick-record-panel { margin-top: 0; }
-.quick-record-panel .record-choices .pilot-button { background: var(--color-brand); color: #fff; border-color: var(--color-brand); font-weight: 600; }
-.quick-record-panel .record-choices .pilot-button:hover:not(:disabled) { background: var(--color-brand-hover); }
-.quick-record-panel .record-choices .pilot-button:disabled { opacity: .55; }
-.quick-record-panel .record-choices .pilot-button { flex-direction: column; min-height: 80px; gap: .25rem; }
-.quick-record-name { font-size: 1.15rem; }
-.quick-record-panel .record-choices small { font-size: .85rem; font-weight: 400; line-height: 1.6; }
-.family-secondary-actions { margin-block: 1rem; }
-.quick-save-receipt { padding: .75rem 1rem; margin-block: 1rem; border-inline-start: 3px solid var(--color-brand); background: var(--color-tint); line-height: 1.8; }
-.quick-save-receipt .pilot-actions { margin-block: .5rem; }
+.home-current-baby { min-width: 0; border: 0; padding: 0 0 var(--space-4); margin: 0 0 var(--space-4); border-bottom: 1px solid var(--color-border); }
+.home-current-baby legend { font-size: var(--font-size-sm); font-weight: var(--font-weight-label); color: var(--color-muted); }
+.care-subject-fields--compact .ui-field { margin-block: var(--space-2); }
+.care-subject-fields--compact .ui-field-label { margin-block: 0 var(--space-1); font-size: var(--font-size-sm); }
+.care-scope--compact { margin-block: var(--space-2) 0; padding: 0; border: 0; background: transparent; }
+.care-scope--compact > span { font-size: var(--font-size-sm); }
+.quick-record-panel .record-choices .ui-button { background: var(--color-brand); color: #fff; border-color: var(--color-brand); font-weight: var(--font-weight-label); flex-direction: column; min-height: 5rem; gap: var(--space-1); }
+.quick-record-panel .record-choices .ui-button:hover:not(:disabled) { background: var(--color-brand-hover); }
+.quick-record-panel .record-choices .ui-button:disabled { opacity: .55; }
+.quick-record-name { font-size: var(--font-size-lg); }
+.quick-record-panel .record-choices small { font-size: var(--font-size-sm); font-weight: var(--font-weight-body); line-height: var(--line-height-heading); }
+.home-record-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); }
+.home-record-links .ui-button { padding-inline: var(--space-1); font-size: var(--font-size-sm); }
+.home-record-footer { display: flex; justify-content: flex-end; margin-block: var(--space-3); }
+.family-secondary-actions { margin-block: var(--space-4); }
+.family-secondary-actions > .ui-button { flex: 1 1 10rem; }
+.home-tools { margin-block-start: var(--space-8); }
+.home-tools > .ui-page-header p { font-size: var(--font-size-sm); }
+.home-tools > details.pilot-panel { padding-block: var(--space-2); }
+.home-tools > details.pilot-panel[open] { padding-block-end: var(--space-5); }
+.home-tools > details > summary { min-height: var(--control-height); padding-block: var(--space-3); font-weight: var(--font-weight-label); cursor: pointer; }
+.quick-save-receipt { padding: var(--space-3) var(--space-4); margin-block: var(--space-4); border-inline-start: 3px solid var(--color-success); border-radius: var(--radius-small); background: var(--color-success-tint); line-height: var(--line-height-body); }
+.quick-save-receipt .pilot-actions { margin-block: var(--space-2); }
 .quick-save-receipt small { display: block; color: var(--color-muted); }
-.family-dashboard .recent-records li { align-items: center; justify-content: space-between; gap: .75rem; }
-.recent-record-content { display: flex; flex: 1 1 12rem; flex-direction: column; gap: .25rem; min-width: 0; }
+.care-timeline--compact > .care-scope { padding: var(--space-2) var(--space-3); margin-block: var(--space-2); }
+.care-timeline--compact .timeline-options { margin-block: var(--space-3); border-block: 1px solid var(--color-border); }
+.care-timeline--compact .timeline-options > summary { color: var(--color-link); font-size: var(--font-size-sm); }
+.care-timeline--compact .timeline-record { gap: var(--space-1); padding: var(--space-3); }
+.care-timeline--compact .timeline-record > .text-action { display: inline; min-height: 0; min-width: 0; padding: 0; font-size: var(--font-size-sm); }
+.care-timeline--compact .timeline-record > .care-record-identity { margin: 0; }
+.timeline-active-filter { display: inline-block; margin-block: var(--space-2); padding: var(--space-1) var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-small); background: var(--color-tint); font-size: var(--font-size-sm); }
 .family-overview > summary { font-weight: 600; }
 .family-overview .handover-editor { margin-block: 1rem; border-top: 1px solid var(--color-border); }
 .family-overview .handover-editor fieldset { padding-inline: 0; border: 0; }
-@media (max-width: 700px) { .dashboard-header h2 { font-size: 1.25rem; } .family-dashboard .pilot-panel { padding: 1rem; } }
+@media (max-width: 700px) { .family-dashboard .pilot-panel { padding-inline: var(--space-4); } .home-record-footer > .ui-button { width: 100%; } }

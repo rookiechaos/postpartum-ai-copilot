@@ -11,6 +11,7 @@ import { japanDay, japanDateTime } from '../utils/japanTime'
 import { requestKey } from '../utils/recordOperations'
 import { revealElement } from '../utils/focusView'
 import { businessLimits, resourceLimits, directoryFieldId, normalizeDirectory, validateDirectory, directoryServerIssues, publicationChanges } from '../utils/directoryValidation'
+import { ErrorMessage, PageHeader } from './ui'
 
 const emptyResource = category => ({ resource_key: requestKey(), category, name: '', url: '', description: '', hours: '', area: '',
   audience: '', phone: '', booking_url: null, cost_note: '', checked_on: null, maintainer: '', review_due_on: null,
@@ -242,7 +243,7 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
 
   return <main className="pilot-shell organization-portal">
     <div className="pilot-topbar"><strong>{t('pilot.organizationTitle')}</strong><LanguageSelector /></div>
-    <h1>{t('pilot.organizationHeading')}</h1><p>{t('pilot.organizationScope')}</p>
+    <PageHeader headingLevel={1} title={t('pilot.organizationHeading')} description={t('pilot.organizationScope')} />
     <ConnectionNotice />
     <div className="pilot-actions">
       <button className="pilot-button secondary" disabled={busy} onClick={() => { if (registerLeaveGuard || canLeave()) onFamily() }}>{t('pilot.openFamily')}</button>
@@ -252,7 +253,7 @@ export default function OrganizationPortal({ userId, onFamily, onExit, registerL
     {status === 'loading' && <p role="status">{t('common.loading')}</p>}
     {status === 'denied' && <section className="pilot-panel"><h2>{t('pilot.accessNeeded')}</h2><p>{t('pilot.accessInstructions')}</p>
       <label>{t('pilot.accountId')}<input readOnly value={userId} /></label></section>}
-    {status === 'failed' && <p role="alert">{t('pilot.loadFailed')} <button disabled={editingBlocked} onClick={reload}>{t('pilot.retry')}</button></p>}
+    {status === 'failed' && <ErrorMessage title={t('pilot.loadFailed')} onRetry={reload} retryDisabled={editingBlocked} />}
     {profile && <>
       <section className="pilot-panel review-queue"><h2>{t('friendly.organization.tasks')}</h2>
         <label>{t('flows.directory.filterMaintainer')}<select value={maintainerFilter} disabled={editingBlocked} onChange={event => setMaintainerFilter(event.target.value)}>

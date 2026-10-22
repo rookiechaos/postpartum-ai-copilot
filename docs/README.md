@@ -27,6 +27,7 @@ docs/
 - [Current product improvements and pending acceptance](product/PRODUCT_IMPROVEMENTS.md)
 - [Product polish, family handoff and rollout contracts](product/PRODUCT_POLISH.md)
 - [UI architecture, responsive layout and pending acceptance](product/UI_REFINEMENT.md)
+- [Shared UI components, design tokens and a quieter Home](product/UI_FOUNDATION.md)
 - [Care handovers, human-support progress, account workflow and pending acceptance](product/CARE_FLOWS.md)
 - [Care subjects, overnight records, continuation and private institution tasks](product/CARE_CONTINUITY.md)
 - [Clear subjects, old-record organization, handover changes and saved consultation material](product/WORKFLOW_CLARITY.md)

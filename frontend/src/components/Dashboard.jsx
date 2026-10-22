@@ -21,6 +21,7 @@ import CareSubjectManager, { CareSubjectFields, CareRecordIdentity, privateSubje
 import ContinueCare from './ContinueCare'
 import useDuplicateReview from '../utils/useDuplicateReview'
 import DuplicateReview from './DuplicateReview'
+import { Button, ConfirmDialog, PageHeader } from './ui'
 import './Dashboard.css'
 
 export default function Dashboard({ userId, userContext, onNavigate, onRecordsChanged, refreshKey = 0, visible = true, navigationRequest }) {
@@ -43,6 +44,7 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
   const [customizing, setCustomizing] = useState(false)
   const [timerRequest, setTimerRequest] = useState({ kind: '', version: 0 })
   const [timelineRequest, setTimelineRequest] = useState(null)
+  const [confirmAbandon, setConfirmAbandon] = useState(false)
   const handledNavigation = useRef(null)
   const writing = useRef(false)
   // A later offline/rejected retry cannot disprove an earlier dispatched save.
@@ -131,35 +133,41 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
   }
 
   return <div className="dashboard family-dashboard">
-    <header className="dashboard-header"><div><h2>{t('friendly.home.title')}</h2>
-      <p>{t('pilot.todayIntro')}</p></div></header>
-    <ContinueCare visible={visible} refreshKey={refreshKey + attempt} onNavigate={onNavigate} />
-    <section className="pilot-panel quick-record-panel"><h3 id="quick-record-heading" tabIndex={-1}>{t('polish.recordNow')}</h3><p>{t('friendly.home.intro')}</p>
-      <fieldset disabled={Boolean(pending) || Boolean(receiptMode)}><legend>{t('continuity.subject.current')}</legend>
-        <CareSubjectFields value={selectedScope} onChange={value => { care.setActiveId(value.subject_id || ''); setQuickScope(value) }} />
+    <PageHeader title={t('friendly.home.title')} description={t('pilot.todayIntro')} />
+    <section className="pilot-panel quick-record-panel">
+      <fieldset className="home-current-baby" disabled={Boolean(pending) || Boolean(receiptMode)}><legend>{t('continuity.subject.current')}</legend>
+        <CareSubjectFields compact value={selectedScope} onChange={value => { care.setActiveId(value.subject_id || ''); setQuickScope(value) }} />
       </fieldset>
-      <div className="record-choices">{shortcutKeys.map(key => quickChoices.find(choice => choice.key === key)).map(choice => <button type="button" key={choice.key}
-        className="pilot-button" disabled={quickBlocked}
+      {care.ready && !care.subjects.length && <Button variant="quiet" onClick={() => revealElement(document.getElementById('care-subject-heading'))}>
+        {t('foundation.home.manageBaby')}</Button>}
+      <PageHeader headingLevel={3} titleId="quick-record-heading" title={t('polish.recordNow')} />
+      <div className="record-choices">{shortcutKeys.map(key => quickChoices.find(choice => choice.key === key)).map(choice => <Button key={choice.key}
+        disabled={quickBlocked}
         onClick={() => {
           if (choice.timer) {
             setTimerRequest(previous => ({ kind: choice.timer, version: previous.version + 1 }))
             revealElement(document.getElementById('care-timer-heading'))
           } else saveQuick(recordOperation({ ...choice.data, ...selectedScope }))
         }}><span className="quick-record-name">{t(choice.timer ? `interaction.shortcuts.${choice.key}` : `polish.quick.${choice.key}`)}</span>
-          <small>{t(choice.timer ? 'interaction.shortcuts.timerHint' : 'localCare.record.nowHint')}</small></button>)}</div>
-      <button type="button" className="text-action" disabled={quickBlocked} aria-expanded={customizing} onClick={() => setCustomizing(value => !value)}>{t('interaction.shortcuts.title')}</button>
-      {customizing && <QuickActionSettings userId={userId} value={shortcutKeys} onSaved={keys => { setShortcutKeys(keys); setCustomizing(false) }} onClose={() => setCustomizing(false)} />}
+          <small>{t(choice.timer ? 'interaction.shortcuts.timerHint' : 'localCare.record.nowHint')}</small></Button>)}</div>
+      <div className="home-record-links">
+        <Button variant="quiet" disabled={quickBlocked} aria-expanded={customizing} aria-controls="home-shortcut-settings"
+          onClick={() => setCustomizing(value => !value)}>{t('interaction.shortcuts.title')}</Button>
+        <Button variant="quiet" onClick={() => onNavigate('tracking', 'feeding')}>{t('friendly.home.details')}</Button>
+      </div>
+      <div id="home-shortcut-settings" hidden={!customizing}>{customizing && <QuickActionSettings userId={userId} value={shortcutKeys}
+        onSaved={keys => { setShortcutKeys(keys); setCustomizing(false) }} onClose={() => setCustomizing(false)} />}</div>
       {saveStatus && !(receipt && saveStatus === 'saved') && <RecordSaveStatus status={saveStatus} />}
       {receipt && !pending && ['saved', 'undoFailed'].includes(saveStatus) && <section className="quick-save-receipt" aria-label={t('friendly.home.saved')}>
         <p role="status"><strong>{t('friendly.home.saved')}</strong> · <time dateTime={utcDate(receipt.timestamp).toISOString()}>{new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(utcDate(receipt.timestamp))}</time></p>
         <p>{recordName(receipt)}</p><RecordTime value={receipt.timestamp} now={now} />
         <CareRecordIdentity record={receipt} />
         <div className="pilot-actions">
-          <button type="button" className="pilot-button secondary" disabled={Boolean(receiptMode)} aria-expanded={receiptMode === 'time'} onClick={() => setReceiptMode('time')}>{t('interaction.record.time')}</button>
-          {['feeding', 'sleep', 'pumping'].includes(receipt.entry_type) && <button type="button" className="pilot-button secondary" disabled={Boolean(receiptMode)} aria-expanded={receiptMode === 'quantity'} onClick={() => setReceiptMode('quantity')}>{t('interaction.record.quantity')}</button>}
-          {undo && <button type="button" className="pilot-button secondary" disabled={Boolean(receiptMode)} onClick={undoQuick}>{t('friendly.home.undo')}</button>}
+          <Button variant="secondary" disabled={Boolean(receiptMode)} aria-expanded={receiptMode === 'time'} onClick={() => setReceiptMode('time')}>{t('interaction.record.time')}</Button>
+          {['feeding', 'sleep', 'pumping'].includes(receipt.entry_type) && <Button variant="secondary" disabled={Boolean(receiptMode)} aria-expanded={receiptMode === 'quantity'} onClick={() => setReceiptMode('quantity')}>{t('interaction.record.quantity')}</Button>}
+          {undo && <Button variant="secondary" disabled={Boolean(receiptMode)} onClick={undoQuick}>{t('friendly.home.undo')}</Button>}
         </div>{undo && <small>{t('friendly.home.undoHint')}</small>}
-        <button type="button" className="text-action" onClick={() => setTimelineRequest({ ...receipt, focusVersion: Date.now() })}>{t('continuity.period.findSaved')}</button>
+        <Button variant="quiet" onClick={() => setTimelineRequest({ ...receipt, focusVersion: Date.now() })}>{t('continuity.period.findSaved')}</Button>
         {receiptMode && <RecordEditor key={receipt.record_key} record={receipt} mode={receiptMode} onSaved={result => {
           setReceipt(result); setUndo(null); refresh()
         }} onCancel={() => setReceiptMode(null)} />}
@@ -169,34 +177,39 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
         duplicates.clear(); setPending(null); setSaveStatus(''); draft.clear()
       }} />
       {pending && saveStatus !== 'saving' && !duplicates.review && <div className="pilot-actions"><p>{t('localCare.record.retryHint')}</p>
-        <button className="pilot-button secondary" onClick={() => setAttempt(value => value + 1)}>{t('localCare.record.check')}</button>
-        <button className="pilot-button secondary" onClick={() => saveQuick(pending)}>{t('localCare.record.resend')}</button>
-        <button className="pilot-button secondary" onClick={() => {
-          if (window.confirm(t('polish.abandonWrite'))) { unconfirmedRequest.current = null; setPending(null); draft.clear(); setSaveStatus(''); refresh() }
-        }}>{t('localCare.record.stopRetry')}</button></div>}
-      <button className="pilot-button secondary" onClick={() => onNavigate('tracking', 'feeding')}>{t('friendly.home.details')}</button>
-      <p>{t('pilot.noPressure')}</p>
+        <Button variant="secondary" onClick={() => setAttempt(value => value + 1)}>{t('localCare.record.check')}</Button>
+        <Button variant="secondary" onClick={() => saveQuick(pending)}>{t('localCare.record.resend')}</Button>
+        <Button variant="secondary" onClick={() => setConfirmAbandon(true)}>{t('localCare.record.stopRetry')}</Button></div>}
     </section>
-    <CareTimeline entries={entries} userId={userId} visible={visible} refreshKey={refreshKey + attempt} error={error}
+    <CareTimeline compact subjectId={care.activeId} entries={entries} userId={userId} visible={visible} refreshKey={refreshKey + attempt} error={error}
       navigationRecord={timelineRequest} onReload={() => setAttempt(value => value + 1)} onFullEdit={editRecord} onRecordsChanged={refresh} blocked={quickBlocked} />
-    <section className="pilot-panel">
-      <button className="pilot-button secondary" onClick={() => onNavigate('tracking')}>{t('polish.allRecords')}</button>
-      {entries && <details><summary>{t('continuity.period.startedToday')}</summary><p>{t('polish.recordedCountsOnly')}</p><p>{t('continuity.period.totalsNotice')}</p>
+    <div className="home-record-footer"><Button variant="secondary" onClick={() => onNavigate('tracking')}>{t('polish.allRecords')}</Button></div>
+    <ContinueCare visible={visible} refreshKey={refreshKey + attempt} onNavigate={onNavigate} />
+    <div className="pilot-actions family-secondary-actions">
+      <Button variant="secondary" onClick={() => onNavigate('chat')}>{t('friendly.chat.title')}</Button>
+      <Button variant="secondary" onClick={() => onNavigate('support', { view: 'contacts' })}>{t('pilot.supportTitle')}</Button>
+    </div>
+    <section className="home-tools" aria-labelledby="home-tools-heading">
+      <PageHeader headingLevel={3} titleId="home-tools-heading" title={t('foundation.home.moreTools')} description={t('foundation.home.moreToolsHint')} />
+      <CareTimer userId={userId} visible={visible} requestedKind={timerRequest.kind} requestVersion={timerRequest.version}
+        blocked={quickBlocked} onRecordsChanged={refresh} onLocate={record => setTimelineRequest({ ...record, focusVersion: Date.now() })} />
+      <CareSubjectManager visible={visible} />
+      <FamilyCareOverview visible={visible} refreshKey={refreshKey} onManage={() => onNavigate('family')} />
+      {entries && <details className="pilot-panel ui-disclosure"><summary>{t('continuity.period.startedToday')}</summary><p>{t('polish.recordedCountsOnly')}</p><p>{t('continuity.period.totalsNotice')}</p>
         <p>{t('dashboard.todayFeeds')}: {entries.filter(entry => japanDay(entry.timestamp) === japanDay() && entry.entry_type === 'feeding').length} · {t('dashboard.diaperChanges')}: {entries.filter(entry => japanDay(entry.timestamp) === japanDay() && entry.entry_type === 'diaper').length}</p>
         <p>{t('pilot.totalSleep')}: {entries.reduce((total, entry) => total + (japanDay(entry.timestamp) === japanDay() && entry.entry_type === 'sleep' ? entry.sleep_duration_minutes || 0 : 0), 0)}</p>
       </details>}
+      <details className="pilot-panel ui-disclosure"><summary>{t('polish.selfCare')}</summary>
+        <Button variant="secondary" onClick={() => onNavigate('checkin')}>{t('checkin.title')}</Button>
+      </details>
+      <RecordingExample />
     </section>
-    <CareTimer userId={userId} visible={visible} requestedKind={timerRequest.kind} requestVersion={timerRequest.version}
-      blocked={quickBlocked} onRecordsChanged={refresh} onLocate={record => setTimelineRequest({ ...record, focusVersion: Date.now() })} />
-    <CareSubjectManager />
-    <FamilyCareOverview visible={visible} refreshKey={refreshKey} onManage={() => onNavigate('family')} />
-    <div className="pilot-actions family-secondary-actions">
-      <button className="pilot-button secondary" onClick={() => onNavigate('chat')}>{t('friendly.chat.title')}</button>
-      <button className="pilot-button secondary" onClick={() => onNavigate('support', { view: 'contacts' })}>{t('pilot.supportTitle')}</button>
-    </div>
-    <details className="pilot-panel"><summary>{t('polish.selfCare')}</summary>
-      <button className="pilot-button secondary" onClick={() => onNavigate('checkin')}>{t('checkin.title')}</button>
-    </details>
-    <RecordingExample />
+    <ConfirmDialog open={visible && confirmAbandon && Boolean(pending)} danger title={t('foundation.home.stopRetryTitle')}
+      description={t('polish.abandonWrite')} confirmLabel={t('localCare.record.stopRetry')} onClose={() => setConfirmAbandon(false)}
+      onConfirm={async () => {
+        if (writing.current) return false
+        if (!(await draft.clear())) throw new Error('Draft could not be cleared')
+        unconfirmedRequest.current = null; setPending(null); setSaveStatus(''); refresh()
+      }} />
   </div>
 }

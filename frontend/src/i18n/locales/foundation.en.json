@@ -1,0 +1,20 @@
+{
+  "field": { "required": "Required", "optional": "Optional" },
+  "common": {
+    "confirm": "Confirm and continue",
+    "actionError": "This action could not be completed. Check the details and try again."
+  },
+  "home": {
+    "recent": "Recent records",
+    "filters": "Choose dates, record types and whose records to view",
+    "showMore": "Show all matching records ({{count}})",
+    "showLess": "Back to the 3 most recent",
+    "moreTools": "Tools for when you need them",
+    "moreToolsHint": "Open a section to use timers, manage babies or review family handovers.",
+    "manageBaby": "Add or manage babies",
+    "noBaby": "No babies added yet",
+    "noBabyHint": "You can record without adding a baby and organize the records later.",
+    "stopRetryTitle": "Stop retrying this record?",
+    "filterNotice": "Use the date, type and owner options above to change which records are shown."
+  }
+}

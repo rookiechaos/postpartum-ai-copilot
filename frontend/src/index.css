@@ -14,8 +14,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background: var(--color-bg);
   color: var(--color-text);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-body);
   min-height: 100vh;
-  line-height: 1.75;
+  line-height: var(--line-height-body);
 }
 
 html:lang(ja) :is(h1, h2, h3, h4, p, label, legend, summary, li, dt, dd) {
@@ -23,7 +25,7 @@ html:lang(ja) :is(h1, h2, h3, h4, p, label, legend, summary, li, dt, dd) {
   word-break: normal;
 }
 
-html:lang(ja) :is(h1, h2, h3, h4) { line-height: 1.5; }
+html:lang(ja) :is(h1, h2, h3, h4) { line-height: var(--line-height-heading); }
 
 #root {
   min-height: 100vh;

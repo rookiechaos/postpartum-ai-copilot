@@ -1,5 +1,4 @@
 .tracking-panel { max-width: 55rem; margin: 0 auto; }
-.tracking-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; }
 .tracking-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
 .add-button, .charts-button { min-height: 48px; padding: .75rem 1.25rem; border: 1px solid var(--color-border); border-radius: .75rem; background: var(--color-tint); color: var(--color-brand); cursor: pointer; font-weight: 600; }
 .add-button { background: var(--color-brand); color: #fff; border-color: var(--color-brand); }
@@ -18,7 +17,6 @@
 .summary-section strong { display: block; margin-bottom: .5rem; color: var(--color-brand); }
 .summary-section ul { padding-left: 1.25rem; }
 .summary-section li { padding-block: .5rem; }
-.empty-state { padding: 2rem 1rem; text-align: center; color: var(--color-muted); line-height: 1.8; }
 .tracking-entry-card { display: block; padding: 1rem; margin-bottom: 1rem; border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-surface); box-shadow: var(--shadow-panel); }
 .entry-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .5rem; margin-bottom: .5rem; }
 .entry-type { font-weight: 600; color: var(--color-brand); }
