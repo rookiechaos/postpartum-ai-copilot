@@ -20,7 +20,9 @@ from middleware.rate_limit import RATE_LIMITS, rate_limit
 from models.database import (FamilyDB, FamilyMemberDB, FamilyHandoverDB, FamilyHandoverAcknowledgementDB, FamilyInviteLinkDB,
                              SupportJourneyDB, PilotProfileDB, FamilyReviewDB)
 from models.schemas import User
+from exceptions import NotFoundError
 from services.care_periods import period_bounds, in_period
+from services.family_service import lock_family_membership_changes
 
 router = APIRouter(tags=["care-flows"])
 
@@ -291,6 +293,8 @@ def invite_manager(db, family_id, user_id):
 @rate_limit(RATE_LIMITS["auth"])
 def create_invite_link(request: Request, family_id: str, user: User = Depends(get_current_user),
                        db: Session = Depends(get_db)):
+    # All invitation writers acquire family -> members -> invitation rows.
+    lock_family_membership_changes(db, family_id)
     me = invite_manager(db, family_id, user.user_id)
     # Limit unused links; never retain recoverable invite secrets.
     db.query(FamilyInviteLinkDB).filter(FamilyInviteLinkDB.family_id == family_id,
@@ -321,6 +325,7 @@ def list_invite_links(family_id: str, user: User = Depends(get_current_user), db
 @router.post("/api/families/{family_id}/invite-links/{link_id}/revoke")
 def revoke_invite_link(family_id: str, link_id: UUID, user: User = Depends(get_current_user),
                        db: Session = Depends(get_db)):
+    lock_family_membership_changes(db, family_id)
     invite_manager(db, family_id, user.user_id)
     db.query(FamilyInviteLinkDB).filter(FamilyInviteLinkDB.family_id == family_id,
         FamilyInviteLinkDB.id == str(link_id)).update({"revoked": True}, synchronize_session=False)
@@ -334,11 +339,11 @@ class InviteToken(BaseModel):
 
 
 def valid_invite(db, token):
-    row = db.query(FamilyInviteLinkDB).filter(
+    row = db.query(FamilyInviteLinkDB).populate_existing().filter(
         FamilyInviteLinkDB.token_hash == hashlib.sha256(token.encode()).hexdigest()).first()
     if row is None or row.revoked or row.expires_at <= datetime.utcnow():
         raise HTTPException(410, "Invitation is unavailable")
-    inviter = db.query(FamilyMemberDB).filter(FamilyMemberDB.family_id == row.family_id,
+    inviter = db.query(FamilyMemberDB).populate_existing().filter(FamilyMemberDB.family_id == row.family_id,
         FamilyMemberDB.user_id == row.created_by, FamilyMemberDB.status == "active",
         FamilyMemberDB.revision == row.membership_revision, FamilyMemberDB.role.in_(("owner", "admin"))).first()
     if inviter is None:
@@ -362,9 +367,26 @@ def preview_invitation(request: Request, body: InviteToken, user: User = Depends
 @router.post("/api/family-invitations/accept")
 @rate_limit(RATE_LIMITS["auth"])
 def accept_link(request: Request, body: InviteToken, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Locate without a write lock or cached ORM token. The invitation can change
+    # while waiting for the family lock and must be validated again afterwards.
+    located = db.query(FamilyInviteLinkDB.family_id).filter(
+        FamilyInviteLinkDB.token_hash == hashlib.sha256(body.token.encode()).hexdigest()).first()
+    if located is None:
+        raise HTTPException(410, "Invitation is unavailable")
+    family_id = located[0]
+    try:
+        lock_family_membership_changes(db, family_id)
+    except NotFoundError:
+        raise HTTPException(410, "Invitation is unavailable") from None
     row = valid_invite(db, body.token)
-    existing = db.query(FamilyMemberDB).filter(FamilyMemberDB.family_id == row.family_id,
-        FamilyMemberDB.user_id == user.user_id).first()
+    if row.family_id != family_id:
+        raise HTTPException(410, "Invitation is unavailable")
+    members = get_container().get("family_service")._lock_members_in_order(
+        db, family_id, (row.created_by, user.user_id))
+    # Sharing changes use the issuer's membership row without a family lock;
+    # refresh the token and issuer after the ordered member locks as well.
+    row = valid_invite(db, body.token)
+    existing = members.get(user.user_id)
     if row.used_at:
         if row.used_by == user.user_id and existing and existing.status == "active":
             return {"family_id": row.family_id, "accepted": True}

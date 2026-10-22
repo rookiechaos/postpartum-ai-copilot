@@ -39,6 +39,10 @@
       "removed": "Record deleted",
       "removeFailed": "Could not confirm whether the record was deleted",
       "restoring": "Restoring the deleted record",
+      "restoreChecking": "Checking the restore result",
+      "restoreUnsent": "The restore request has not been sent",
+      "restoreChanged": "The restored record was changed afterwards",
+      "restoreDeleted": "The restored record was deleted afterwards",
       "restored": "Deleted record restored",
       "restoreFailed": "Could not confirm whether the record was restored",
       "undoing": "Undoing the last record",
@@ -50,7 +54,10 @@
       "unconfirmed": "It may already be saved. Check your records or resend the same record.",
       "unsaved": "Your input remains on this screen. Check the content and connection.",
       "removeFailed": "It may already be deleted. Check your records.",
-      "restoreFailed": "It may already be restored. Check your records before retrying the same operation.",
+      "restoreUnsent": "The original content and save reference are kept during this login. Use the button below to send it when connected.",
+      "restoreChanged": "The original content will not overwrite it. Check its current contents in your records.",
+      "restoreDeleted": "Retrying will not create another record. Check your record list.",
+      "restoreFailed": "It may already be restored. Check the result below. Retrying retains the same save reference.",
       "undoFailed": "It may already be undone. Check your records."
     }
   },

@@ -38,7 +38,8 @@ docs/
 - [Publishing to GitHub](GITHUB.md)
 - [Care-flow publication and privacy review](security/PUBLISH_REVIEW_2026-10-14.md)
 - [Session revocation fixes, migration and pending acceptance](security/REPO_REVIEW_FIXES_2026-10-20.md)
-- [Latest repository review fixes: passwords, deletion, pagination, exports and Japan-time reminders](security/REPO_REVIEW_FIXES_2026-10-22.md)
+- [Repository review fixes: passwords, deletion, pagination, exports and Japan-time reminders](security/REPO_REVIEW_FIXES_2026-10-22.md)
+- [Latest follow-up fixes: invitation revocation, record restoration, consultation pagination and keyboard access](security/REPO_REVIEW_FOLLOWUP_2026-10-22.md)
 
 ## Subfolders
 

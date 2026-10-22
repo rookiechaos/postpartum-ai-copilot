@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from dependencies.database import get_db
 from middleware.auth import get_current_user
 from models.schemas import User
-from models.database import FamilyDB, FamilyMemberDB
+from models.database import FamilyMemberDB
 from dependencies.container import get_container
 from middleware.authorization import check_user_authorization
 from exceptions import DatabaseError, NotFoundError, ValidationError, ConflictError
@@ -47,10 +47,7 @@ class FamilyResponse(BaseModel):
 
 @router.get("/invitations")
 def get_invitations(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    rows = db.query(FamilyMemberDB, FamilyDB).join(FamilyDB,
-        FamilyMemberDB.family_id == FamilyDB.family_id).filter(
-        FamilyMemberDB.user_id == current_user.user_id, FamilyMemberDB.status == "pending").all()
-    return [{"family_id": family.family_id, "name": family.name} for member, family in rows]
+    return container.get("family_service").get_pending_invitations(current_user.user_id, db)
 
 
 @router.post("/{family_id}/decline")
@@ -72,19 +69,7 @@ def decline_invitation(family_id: str, current_user: User = Depends(get_current_
 
 @router.post("/{family_id}/leave")
 def leave_family(family_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    family = db.query(FamilyDB).filter(FamilyDB.family_id == family_id).first()
-    if family is None:
-        raise NotFoundError("Family not found")
-    if family.created_by == current_user.user_id:
-        raise ValidationError("The creator must revoke other memberships instead of leaving")
-    changed = db.query(FamilyMemberDB).filter(FamilyMemberDB.family_id == family_id,
-        FamilyMemberDB.user_id == current_user.user_id, FamilyMemberDB.status == "active",
-    ).update({"status": "inactive", "permissions": {},
-        "revision": FamilyMemberDB.revision + 1}, synchronize_session=False)
-    if changed != 1:
-        db.rollback()
-        raise NotFoundError("Membership not found")
-    db.commit()
+    container.get("family_service").leave_family(family_id, current_user.user_id, db)
     return {"left": True}
 
 
@@ -174,7 +159,7 @@ async def accept_invitation(
             db=db
         )
         return {"status": "accepted", "family_id": family_id}
-    except (ValidationError, NotFoundError):
+    except (ValidationError, NotFoundError, ConflictError):
         raise
     except Exception as e:
         raise DatabaseError(

@@ -16,6 +16,23 @@ from exceptions import NotFoundError, ValidationError, ConflictError
 from services.ai_data_scope import CARE_TYPES, PARENT_TYPES, records_for_ai
 
 FAMILY_SHARED_DAYS = 7
+ID_INVITATION_VERSION = 1
+
+
+def lock_family_membership_changes(db: Session, family_id: str) -> FamilyDB:
+    """Serialize family invitation transitions on PostgreSQL and SQLite.
+
+    A no-op write works where FOR UPDATE is ignored. Call this before reading
+    memberships so acceptance cannot race an issuer's removal or re-invitation.
+    Link writers share this lock before touching membership or invitation rows.
+    Updating updated_at to itself avoids changing a family's display timestamp.
+    """
+    changed = db.query(FamilyDB).filter(FamilyDB.family_id == family_id).update(
+        {"updated_at": FamilyDB.updated_at}, synchronize_session=False
+    )
+    if changed != 1:
+        raise NotFoundError("Family not found")
+    return db.query(FamilyDB).populate_existing().filter(FamilyDB.family_id == family_id).one()
 
 if TYPE_CHECKING:
     from services.tracking_service import TrackingService
@@ -29,6 +46,77 @@ class FamilyService:
     def _shares_tracking(member: FamilyMemberDB) -> bool:
         permissions = member.permissions or {}
         return permissions.get("share_baby") is True or permissions.get("share_parent") is True
+
+    @staticmethod
+    def _lock_members_in_order(db: Session, family_id: str, user_ids) -> Dict[str, FamilyMemberDB]:
+        """Use the same user-ID lock order as handover acknowledgements.
+
+        Pending and inactive recipients also need locks: invitation acceptance,
+        decline and rejoining can change their rows while an issuer is checked.
+        The family lock must already be held before calling this helper.
+        """
+        members = {}
+        for user_id in sorted({value for value in user_ids if value is not None}):
+            member = db.query(FamilyMemberDB).populate_existing().filter(
+                FamilyMemberDB.family_id == family_id, FamilyMemberDB.user_id == user_id,
+            ).first()
+            if member is None:
+                continue
+            changed = db.query(FamilyMemberDB).filter(FamilyMemberDB.id == member.id,
+                FamilyMemberDB.status == member.status, FamilyMemberDB.revision == member.revision,
+                FamilyMemberDB.role == member.role,
+            ).update({"revision": member.revision, "updated_at": FamilyMemberDB.updated_at},
+                synchronize_session=False)
+            if changed != 1:
+                raise ConflictError("Membership changed; review the invitation again")
+            members[user_id] = member
+        return members
+
+    @staticmethod
+    def _issued_pending_user_ids(db: Session, family_id: str, inviter_user_id: str) -> List[str]:
+        return [user_id for user_id, in db.query(FamilyMemberDB.user_id).filter(
+            FamilyMemberDB.family_id == family_id, FamilyMemberDB.invited_by == inviter_user_id,
+            FamilyMemberDB.status == "pending").all()]
+
+    @staticmethod
+    def _current_id_invitation(member: FamilyMemberDB, family: FamilyDB,
+                               inviter: Optional[FamilyMemberDB]) -> bool:
+        permissions = member.permissions if isinstance(member.permissions, dict) else {}
+        invitation = permissions.get("_id_invitation")
+        if not isinstance(invitation, dict) or type(invitation.get("version")) is not int:
+            return False
+        revision = invitation.get("inviter_revision")
+        if invitation["version"] != ID_INVITATION_VERSION or type(revision) is not int or revision < 1:
+            return False
+        is_creator = inviter is not None and family.created_by == inviter.user_id
+        return bool(member.status == "pending" and member.role in {"admin", "member", "viewer"}
+            and inviter is not None and inviter.family_id == family.family_id
+            and member.invited_by == inviter.user_id and inviter.status == "active"
+            and inviter.revision == revision and (is_creator or inviter.role == "admin")
+            and (member.role != "admin" or is_creator))
+
+    @staticmethod
+    def _revoke_issued_id_invitations(db: Session, family_id: str, inviter_user_id: str) -> None:
+        # Callers already hold the family lock and every current pending
+        # recipient row in user-ID order; no ID invitation can add a new row here.
+        db.query(FamilyMemberDB).filter(FamilyMemberDB.family_id == family_id,
+            FamilyMemberDB.invited_by == inviter_user_id, FamilyMemberDB.status == "pending",
+        ).update({"status": "inactive", "permissions": {},
+            "revision": FamilyMemberDB.revision + 1}, synchronize_session=False)
+
+    def get_pending_invitations(self, user_id: str, db: Session) -> List[Dict[str, Any]]:
+        rows = db.query(FamilyMemberDB, FamilyDB).join(FamilyDB,
+            FamilyMemberDB.family_id == FamilyDB.family_id).filter(
+            FamilyMemberDB.user_id == user_id, FamilyMemberDB.status == "pending").all()
+        result = []
+        for member, family in rows:
+            inviter = db.query(FamilyMemberDB).filter(FamilyMemberDB.family_id == family.family_id,
+                FamilyMemberDB.user_id == member.invited_by).first()
+            # Old pending rows have no trustworthy issuer version. Hide them and
+            # reject acceptance until a current manager explicitly re-invites.
+            if self._current_id_invitation(member, family, inviter):
+                result.append({"family_id": family.family_id, "name": family.name})
+        return result
     
     def create_family(
         self,
@@ -101,35 +189,25 @@ class FamilyService:
             Created member invitation
         """
         try:
-            family = db.query(FamilyDB).filter(FamilyDB.family_id == family_id).first()
-            if not family:
-                raise NotFoundError("Family not found")
+            family = lock_family_membership_changes(db, family_id)
             if role not in {"admin", "member", "viewer"}:
                 raise ValidationError("Invitations cannot grant ownership")
             # Check if inviter has permission
-            inviter_member = db.query(FamilyMemberDB).filter(
-                and_(
-                    FamilyMemberDB.family_id == family_id,
-                    FamilyMemberDB.user_id == inviter_user_id,
-                    FamilyMemberDB.status == "active"
-                )
-            ).first()
+            members = self._lock_members_in_order(db, family_id, (inviter_user_id, invitee_user_id))
+            inviter_member = members.get(inviter_user_id)
             
             is_creator = family.created_by == inviter_user_id
-            if not inviter_member or (not is_creator and inviter_member.role != "admin"):
+            if not inviter_member or inviter_member.status != "active" or (not is_creator and inviter_member.role != "admin"):
                 raise ValidationError("Only owners and admins can invite members")
             if role == "admin" and not is_creator:
                 raise ValidationError("Only the family creator can invite admins")
             if not db.query(UserDB).filter(UserDB.user_id == invitee_user_id, UserDB.is_active.is_(True)).first():
                 raise ValidationError("Cannot invite this account")
+            invitation_permissions = {"_id_invitation": {"version": ID_INVITATION_VERSION,
+                "inviter_revision": inviter_member.revision}}
             
             # Check if already a member
-            existing = db.query(FamilyMemberDB).filter(
-                and_(
-                    FamilyMemberDB.family_id == family_id,
-                    FamilyMemberDB.user_id == invitee_user_id
-                )
-            ).first()
+            existing = members.get(invitee_user_id)
             
             if existing:
                 if existing.status == "active":
@@ -138,7 +216,7 @@ class FamilyService:
                 changed = db.query(FamilyMemberDB).filter(FamilyMemberDB.id == existing.id,
                     FamilyMemberDB.status == existing.status, FamilyMemberDB.revision == existing.revision,
                 ).update({"status": "pending", "invited_by": inviter_user_id, "role": role,
-                    "permissions": {}, "revision": existing.revision + 1}, synchronize_session=False)
+                    "permissions": invitation_permissions, "revision": existing.revision + 1}, synchronize_session=False)
                 if changed != 1:
                     raise ConflictError("Membership changed; refresh before inviting again")
             else:
@@ -148,7 +226,8 @@ class FamilyService:
                     user_id=invitee_user_id,
                     role=role,
                     invited_by=inviter_user_id,
-                    status="pending"
+                    status="pending",
+                    permissions=invitation_permissions,
                 )
                 db.add(member)
             
@@ -175,6 +254,7 @@ class FamilyService:
     ) -> bool:
         """Accept a family invitation"""
         try:
+            family = lock_family_membership_changes(db, family_id)
             member = db.query(FamilyMemberDB).filter(
                 and_(
                     FamilyMemberDB.family_id == family_id,
@@ -185,12 +265,18 @@ class FamilyService:
             
             if not member:
                 raise NotFoundError("Invitation not found")
-            if member.role not in {"admin", "member", "viewer"}:
-                raise ValidationError("Invalid invitation role; request a new invitation")
+            expected_revision, inviter_id = member.revision, member.invited_by
+            members = self._lock_members_in_order(db, family_id, (user_id, inviter_id))
+            member, inviter = members.get(user_id), members.get(inviter_id)
+            # Re-read both rows under the shared ordering before trusting the
+            # issuer or the recipient's pending invitation snapshot.
+            if (member is None or member.revision != expected_revision or member.invited_by != inviter_id
+                or not self._current_id_invitation(member, family, inviter)):
+                raise NotFoundError("Invitation is no longer available; request a new invitation")
             
             changed = db.query(FamilyMemberDB).filter(FamilyMemberDB.id == member.id,
                 FamilyMemberDB.status == "pending", FamilyMemberDB.revision == member.revision,
-            ).update({"status": "active", "joined_at": datetime.utcnow(),
+            ).update({"status": "active", "permissions": {}, "joined_at": datetime.utcnow(),
                 "revision": member.revision + 1}, synchronize_session=False)
             if changed != 1:
                 raise NotFoundError("Invitation is no longer available")
@@ -340,29 +426,19 @@ class FamilyService:
     ) -> bool:
         """Remove a member from family (only owner/admin can remove)"""
         try:
-            family = db.query(FamilyDB).filter(FamilyDB.family_id == family_id).first()
-            if not family:
-                raise NotFoundError("Family not found")
+            family = lock_family_membership_changes(db, family_id)
             # Check if remover has permission
-            remover_member = db.query(FamilyMemberDB).filter(
-                and_(
-                    FamilyMemberDB.family_id == family_id,
-                    FamilyMemberDB.user_id == remover_user_id,
-                    FamilyMemberDB.status == "active"
-                )
-            ).first()
+            pending_user_ids = self._issued_pending_user_ids(db, family_id, member_user_id)
+            members = self._lock_members_in_order(db, family_id,
+                [remover_user_id, member_user_id, *pending_user_ids])
+            remover_member = members.get(remover_user_id)
             
             is_creator = family.created_by == remover_user_id
-            if not remover_member or (not is_creator and remover_member.role != "admin"):
+            if not remover_member or remover_member.status != "active" or (not is_creator and remover_member.role != "admin"):
                 raise ValidationError("Only owners and admins can remove members")
             
             # Cannot remove owner
-            member = db.query(FamilyMemberDB).filter(
-                and_(
-                    FamilyMemberDB.family_id == family_id,
-                    FamilyMemberDB.user_id == member_user_id
-                )
-            ).first()
+            member = members.get(member_user_id)
             
             if member_user_id == family.created_by:
                 raise ValidationError("Cannot remove the family creator")
@@ -376,6 +452,7 @@ class FamilyService:
                     "revision": member.revision + 1}, synchronize_session=False)
                 if changed != 1:
                     raise ConflictError("Membership changed; refresh before revoking again")
+                self._revoke_issued_id_invitations(db, family_id, member_user_id)
                 db.commit()
                 logger.log_info(f"Member {member_user_id} removed from family {family_id}")
                 return True
@@ -384,6 +461,29 @@ class FamilyService:
         except Exception as e:
             db.rollback()
             logger.log_error(e, context={"action": "remove_member", "family_id": family_id})
+            raise
+
+    def leave_family(self, family_id: str, user_id: str, db: Session) -> bool:
+        try:
+            family = lock_family_membership_changes(db, family_id)
+            if family.created_by == user_id:
+                raise ValidationError("The creator must revoke other memberships instead of leaving")
+            pending_user_ids = self._issued_pending_user_ids(db, family_id, user_id)
+            members = self._lock_members_in_order(db, family_id, [user_id, *pending_user_ids])
+            member = members.get(user_id)
+            if member is None or member.status != "active":
+                raise NotFoundError("Membership not found")
+            changed = db.query(FamilyMemberDB).filter(FamilyMemberDB.id == member.id,
+                FamilyMemberDB.revision == member.revision, FamilyMemberDB.status == "active",
+            ).update({"status": "inactive", "permissions": {},
+                "revision": FamilyMemberDB.revision + 1}, synchronize_session=False)
+            if changed != 1:
+                raise NotFoundError("Membership not found")
+            self._revoke_issued_id_invitations(db, family_id, user_id)
+            db.commit()
+            return True
+        except Exception:
+            db.rollback()
             raise
     
     def _family_to_dict(self, family: FamilyDB) -> Dict[str, Any]:
@@ -406,7 +506,7 @@ class FamilyService:
             "status": member.status,
             "revision": member.revision,
             "joined_at": member.joined_at.isoformat() if member.joined_at else None,
-            "permissions": member.permissions or {}
+            "permissions": {} if member.status == "pending" else member.permissions or {}
         }
     
     async def generate_family_summary(

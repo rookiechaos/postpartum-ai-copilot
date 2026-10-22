@@ -4,7 +4,7 @@ import api from '../utils/api'
 import taskManager from '../utils/taskManager'
 import { japanDateTime, japanDateTimeInput, utcDate } from '../utils/japanTime'
 import { earliestRecordTime } from '../utils/trackingPolicy'
-import { recordOperation, recordPayload as payload, requestKey as newRequestKey, isRecordOperation } from '../utils/recordOperations'
+import { recordFields, recordOperation, recordPayload as payload, requestKey as newRequestKey, isRecordOperation } from '../utils/recordOperations'
 import useAccountDraft from '../utils/useAccountDraft'
 import { DraftRecoveryNotice } from './DraftRecovery'
 import AIUseNotice from './AIUseNotice'
@@ -24,6 +24,9 @@ import { Button, ConfirmDialog, EmptyState, ErrorMessage, FormField, PageHeader 
 import './TrackingPanel.css'
 
 const types = ['feeding', 'diaper', 'sleep', 'mood', 'pumping', 'recovery']
+const restoredContentMatches = (record, data) => recordFields.every(key => ['timestamp', 'end_timestamp'].includes(key)
+  ? (record[key] == null && data[key] == null) || utcDate(record[key]).getTime() === utcDate(data[key]).getTime()
+  : (record[key] ?? null) === (data[key] ?? null))
 
 export default function TrackingPanel({ userId, initialEntryType, requestKey = 0, onRecordsChanged, visible = true }) {
   const { t, i18n } = useTranslation()
@@ -45,6 +48,8 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   const [deleteObservation, setDeleteObservation] = useState('')
   const [deleteError, setDeleteError] = useState('')
   const [undoEntry, setUndoEntry] = useState(null)
+  const [pendingRestore, setPendingRestore] = useState(null)
+  const [restoreObservation, setRestoreObservation] = useState('')
   const [loading, setLoading] = useState(false)
   const [showCharts, setShowCharts] = useState(false)
   const [acceptedAI, setAcceptedAI] = useState(false)
@@ -65,6 +70,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   const consumedRequest = useRef(null)
   const formHeading = useRef(null)
   const deleteHeading = useRef(null)
+  const restoreHeading = useRef(null)
   const pendingFormFocus = useRef(false)
   const writing = useRef(false)
   // Keep uncertainty attached to the original operation until success or explicit abandonment.
@@ -96,13 +102,20 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     tab: 'tracking', detail: { action: 'resume' }, entryType: pendingDelete.entry_type,
     subjectId: pendingDelete.subject_id, time: pendingDelete.timestamp, action: 'reviewFixes.deletion.check',
   } : null)
+  useCareWork('record-restore', pendingRestore ? {
+    version: `${pendingRestore.data.request_key}:${saveStatus}:${restoreObservation}`,
+    title: ['changed', 'deleted'].includes(restoreObservation) ? 'reviewFixes.restoration.review' : 'reviewFixes.restoration.pending',
+    priority: 0, critical: true, tab: 'tracking', detail: { action: 'resume' },
+    entryType: pendingRestore.entry.entry_type, subjectId: pendingRestore.entry.subject_id,
+    time: pendingRestore.entry.timestamp, action: 'reviewFixes.restoration.check',
+  } : null)
 
   useEffect(() => {
-    if (!pendingDelete) return
+    if (!pendingDelete && !pendingRestore) return
     const warn = event => { event.preventDefault(); event.returnValue = '' }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
-  }, [pendingDelete])
+  }, [pendingDelete, pendingRestore])
 
   useEffect(() => {
     if (!visible) return
@@ -115,7 +128,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   }, [userId, attempt, recordRange, visible, reconnections])
 
   const openRecord = (request, confirm = true) => {
-    if (pendingSave || pendingDelete || writing.current || loading || draft.candidate || draft.status === 'loading') return
+    if (pendingSave || pendingDelete || pendingRestore || writing.current || loading || draft.candidate || draft.status === 'loading') return
     if (confirm && formDraft && !window.confirm(t('friendly.record.replace'))) return
     // Home passes an owner-read snapshot. The immutable key/revision still guards
     // the update: an intervening edit or deletion is rejected by the API.
@@ -135,22 +148,23 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     if (!request) return
     // Pending writes and recovery drafts must be resolved explicitly, never
     // replaced just because navigation supplied a new target.
-    if (pendingSave || pendingDelete || writing.current || loading || formDraft || draft.candidate) setOpenRequest(request)
+    if (pendingSave || pendingDelete || pendingRestore || writing.current || loading || formDraft || draft.candidate) setOpenRequest(request)
     else if (draft.status === 'loading') setOpenRequest({ ...request, autoOpen: true })
     else openRecord(request, false)
-  }, [initialEntryType, requestKey, pendingSave, pendingDelete, loading, formDraft, draft.candidate, draft.status])
+  }, [initialEntryType, requestKey, pendingSave, pendingDelete, pendingRestore, loading, formDraft, draft.candidate, draft.status])
   useEffect(() => {
     if (!visible || !openRequest?.autoOpen || draft.status === 'loading') return
-    if (pendingSave || pendingDelete || writing.current || loading || formDraft || draft.candidate) {
+    if (pendingSave || pendingDelete || pendingRestore || writing.current || loading || formDraft || draft.candidate) {
       setOpenRequest(previous => ({ ...previous, autoOpen: false })); return
     }
     openRecord(openRequest, false)
-  }, [visible, openRequest, pendingSave, pendingDelete, loading, formDraft, draft.candidate, draft.status])
+  }, [visible, openRequest, pendingSave, pendingDelete, pendingRestore, loading, formDraft, draft.candidate, draft.status])
   useEffect(() => {
     if (visible && pendingDelete && pendingFormFocus.current && revealElement(deleteHeading.current)) pendingFormFocus.current = false
+    else if (visible && pendingRestore && pendingFormFocus.current && revealElement(restoreHeading.current)) pendingFormFocus.current = false
     else if (visible && showAddForm && pendingFormFocus.current && revealElement(formHeading.current)) pendingFormFocus.current = false
     else if (visible && pendingFormFocus.current && initialEntryType?.action === 'resume' && revealElement(document.getElementById('tracking-resume-heading'))) pendingFormFocus.current = false
-  }, [visible, showAddForm, pendingDelete, formFocus])
+  }, [visible, showAddForm, pendingDelete, pendingRestore, formFocus])
 
   useEffect(() => {
     if (!undoEntry) return
@@ -166,7 +180,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     summaryVersion.current++; setSummary(null); setAttempt(value => value + 1); onRecordsChanged?.()
   }
   const saveEntry = async formData => {
-    if (writing.current || pendingDelete) return false
+    if (writing.current || pendingDelete || pendingRestore) return false
     const operation = pendingSave || { data: recordOperation(payload(formData)),
       editing: editing ? { id: editing.id, record_key: editing.record_key, revision: editing.revision } : null }
     if (!online || navigator.onLine === false) {
@@ -203,7 +217,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     finally { writing.current = false; setLoading(false) }
   }
   const cancelForm = () => {
-    if (writing.current || loading || pendingDelete) return
+    if (writing.current || loading || pendingDelete || pendingRestore) return
     if (pendingSave && !duplicates.review && !window.confirm(t('polish.abandonWrite'))) return
     duplicates.clear()
     unconfirmedRequest.current = null
@@ -251,7 +265,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     finally { writing.current = false; setLoading(false) }
   }
   const removeEntry = async entry => {
-    if (!entry || writing.current || loading || pendingSave
+    if (!entry || writing.current || loading || pendingSave || pendingRestore
       || (pendingDelete && pendingDelete.record_key !== entry.record_key)) return false
     if (!online || navigator.onLine === false) { setDeleteError('offline'); return false }
     const retrying = Boolean(pendingDelete)
@@ -279,15 +293,61 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     }
     finally { writing.current = false; setLoading(false) }
   }
-  const restoreEntry = async () => {
-    if (!undoEntry || writing.current || loading || pendingSave || pendingDelete) return
-    const restoring = undoEntry
-    writing.current = true; setLoading(true); setSaveStatus('restoring')
-    try {
-      await api.addTrackingEntry({ ...payload(restoring), request_key: restoring.restore_request_key })
-      setUndoEntry(null); setSaveStatus('restored'); refresh(); toast.success(t('work.restored'))
-    } catch { setSaveStatus('restoreFailed'); toast.error(t('work.restoreFailed')) }
+  const resolveRestoration = (result, operation) => {
+    if (result.state === 'saved' && result.record) {
+      // Creation receipts can outlive later edits. Only the current owner-read
+      // record can confirm that the original contents are still restored.
+      if (result.record.revision === 1 && restoredContentMatches(result.record, operation.data)) {
+        const age = Math.floor((Date.now() - utcDate(operation.data.timestamp).getTime()) / 86400000)
+        if (age >= recordRange) setRecordRange(age < 30 ? 30 : age < 90 ? 90 : 365)
+        setPendingRestore(null); setRestoreObservation(''); setSaveStatus('restored')
+        refresh(); toast.success(t('work.restored'))
+      } else {
+        setRestoreObservation('changed'); setSaveStatus('restoreChanged'); refresh()
+      }
+      return true
+    }
+    if (result.state === 'deleted') {
+      // Never generate a new key or recreate a restored record that was deleted.
+      setRestoreObservation('deleted'); setSaveStatus('restoreDeleted'); refresh(); return true
+    }
+    if (result.state !== 'not_found') throw new Error('Restore result unavailable')
+    setRestoreObservation('notFound'); setSaveStatus(operation.attempted ? 'restoreFailed' : 'restoreUnsent')
+    return false
+  }
+  const checkRestoration = async () => {
+    if (!pendingRestore || writing.current || loading) return
+    const operation = pendingRestore
+    writing.current = true; setLoading(true); setSaveStatus('restoreChecking')
+    try { resolveRestoration(await api.get(`/api/tracking/operations/${operation.data.request_key}`), operation) }
+    catch { setRestoreObservation('checkFailed'); setSaveStatus(operation.attempted ? 'restoreFailed' : 'restoreUnsent') }
     finally { writing.current = false; setLoading(false) }
+  }
+  const restoreEntry = async () => {
+    if ((!undoEntry && !pendingRestore) || writing.current || loading || pendingSave || pendingDelete
+      || ['changed', 'deleted'].includes(restoreObservation)) return
+    const operation = pendingRestore || { entry: { ...undoEntry },
+      data: { ...payload(undoEntry), request_key: undoEntry.restore_request_key }, attempted: false }
+    // Undo's eight-second offer expires independently. Once accepted, this frozen
+    // operation survives until confirmation or the user's explicit abandonment.
+    setPendingRestore(operation); setUndoEntry(null); setRestoreObservation('')
+    if (!online || navigator.onLine === false) {
+      setRestoreObservation('offline'); setSaveStatus(operation.attempted ? 'restoreFailed' : 'restoreUnsent'); return
+    }
+    writing.current = true; setLoading(true); setSaveStatus('restoring')
+    let checking = operation.attempted
+    try {
+      if (operation.attempted && resolveRestoration(await api.get(`/api/tracking/operations/${operation.data.request_key}`), operation)) return
+      const attempted = { ...operation, attempted: true }
+      setPendingRestore(attempted); setRestoreObservation(''); setSaveStatus('restoring'); checking = false
+      await api.addTrackingEntry(operation.data)
+      checking = true; setSaveStatus('restoreChecking')
+      resolveRestoration(await api.get(`/api/tracking/operations/${operation.data.request_key}`), attempted)
+    } catch (failure) {
+      setRestoreObservation(checking ? 'checkFailed' : failure.status === 409 ? 'conflict'
+        : failure.status >= 400 && failure.status < 500 ? 'rejected' : '')
+      setSaveStatus('restoreFailed'); toast.error(t('reviewFixes.restoration.unconfirmed'))
+    } finally { writing.current = false; setLoading(false) }
   }
   const loadSummary = async () => {
     if (!acceptedAI || summaryLoading || !analysisReady) return
@@ -307,17 +367,18 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
 
   return <div className="tracking-panel">
     <PageHeader titleId="tracking-resume-heading" title={t('tracking.title')} description={t('pilot.noPressure')}
-      actions={<Button variant={showAddForm ? 'secondary' : 'primary'} disabled={loading || Boolean(pendingDelete) || (!showAddForm && (Boolean(draft.candidate) || draft.status === 'loading'))} onClick={() => {
+      actions={<Button variant={showAddForm ? 'secondary' : 'primary'} disabled={loading || Boolean(pendingDelete) || Boolean(pendingRestore) || (!showAddForm && (Boolean(draft.candidate) || draft.status === 'loading'))} onClick={() => {
         if (showAddForm) cancelForm()
         else openRecord({ entryType })
       }}>{showAddForm ? t('tracking.cancel') : `+ ${t('tracking.addEntry')}`}</Button>} />
-    <DraftRecoveryNotice draft={draft} disabled={loading || Boolean(pendingDelete)} />
+    <DraftRecoveryNotice draft={draft} disabled={loading || Boolean(pendingDelete) || Boolean(pendingRestore)} />
     {openRequest && <section className="record-open-request" aria-label={t('friendly.record.incoming')}>
       <p>{t('friendly.record.incoming')}</p>
       {openRequest.record && <><strong>{t(`tracking.${openRequest.record.entry_type}`)}</strong><RecordTime value={openRequest.record.timestamp} now={now} /></>}
-      {(pendingSave || pendingDelete || draft.candidate || draft.status === 'loading') && <p>{t(pendingDelete ? 'reviewFixes.deletion.pending' : 'friendly.record.resolveDraft')}</p>}
+      {(pendingSave || pendingDelete || pendingRestore || draft.candidate || draft.status === 'loading') && <p>{t(pendingRestore ? 'reviewFixes.restoration.pending'
+        : pendingDelete ? 'reviewFixes.deletion.pending' : 'friendly.record.resolveDraft')}</p>}
       <div className="pilot-actions">
-        <button type="button" className="pilot-button secondary" disabled={loading || Boolean(pendingSave) || Boolean(pendingDelete) || Boolean(draft.candidate) || draft.status === 'loading'}
+        <button type="button" className="pilot-button secondary" disabled={loading || Boolean(pendingSave) || Boolean(pendingDelete) || Boolean(pendingRestore) || Boolean(draft.candidate) || draft.status === 'loading'}
           onClick={() => openRecord(openRequest)}>{t('friendly.record.open')}</button>
         <button type="button" className="pilot-button secondary" onClick={() => setOpenRequest(null)}>{t('friendly.record.discardOpen')}</button>
       </div>
@@ -337,6 +398,20 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
         }}>{t('reviewFixes.deletion.abandon')}</Button>
       </div>
     </section>}
+    {pendingRestore && <section className="pilot-panel" aria-labelledby="tracking-restore-pending">
+      <h3 id="tracking-restore-pending" ref={restoreHeading} tabIndex={-1}>{t('reviewFixes.restoration.review')}</h3>
+      <strong>{t(`tracking.${pendingRestore.entry.entry_type}`)}</strong><CareRecordIdentity record={pendingRestore.entry} />
+      <RecordTime value={pendingRestore.entry.timestamp} now={now} /><p>{t('reviewFixes.restoration.notice')}</p>
+      {restoreObservation && <p role="status">{t(`reviewFixes.restoration.${restoreObservation}`)}</p>}
+      <div className="pilot-actions">
+        <Button variant="secondary" disabled={loading} onClick={checkRestoration}>{t('reviewFixes.restoration.check')}</Button>
+        <Button variant="secondary" disabled={loading || ['changed', 'deleted'].includes(restoreObservation)} onClick={restoreEntry}>{t('reviewFixes.restoration.retry')}</Button>
+        <Button variant="quiet" disabled={loading} onClick={() => {
+          if (!window.confirm(t('reviewFixes.restoration.abandonConfirm'))) return
+          setPendingRestore(null); setRestoreObservation(''); setSaveStatus(''); refresh()
+        }}>{t('reviewFixes.restoration.abandon')}</Button>
+      </div>
+    </section>}
     <DuplicateReview review={duplicates.review} disabled={loading} onContinue={() => saveEntry()} onCancel={() => {
       duplicates.clear(); setPendingSave(null); setSaveStatus(''); draft.clear()
     }} />
@@ -345,9 +420,9 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     {showAddForm && <div ref={formHeading} tabIndex={-1} className="record-form-region" role="region" aria-label={t(editing ? 'work.editRecord' : 'tracking.addEntry')}>
       <EntryForm key={`${editing ? `edit:${editing.record_key}:${editing.revision}` : 'new'}:${formRevision}`}
       entryType={entryType} initialEntry={editing} restored={restoredForm} onDraftChange={setFormDraft} locked={Boolean(pendingSave)}
-      onEntryTypeChange={setEntryType} onSubmit={saveEntry} onCancel={cancelForm} loading={loading || Boolean(pendingDelete) || Boolean(duplicates.review)} saving={saveStatus === 'saving'} /></div>}
+      onEntryTypeChange={setEntryType} onSubmit={saveEntry} onCancel={cancelForm} loading={loading || Boolean(pendingDelete) || Boolean(pendingRestore) || Boolean(duplicates.review)} saving={saveStatus === 'saving'} /></div>}
     {undoEntry && <div className="pilot-panel undo-notice" role="status"><p>{t('work.lastDeleted')}</p>
-      <button className="pilot-button secondary" disabled={loading || Boolean(pendingSave) || Boolean(pendingDelete)} onClick={restoreEntry}>{t('work.undoDelete')}</button></div>}
+      <button className="pilot-button secondary" disabled={loading || Boolean(pendingSave) || Boolean(pendingDelete) || Boolean(pendingRestore)} onClick={restoreEntry}>{t('work.undoDelete')}</button></div>}
     <section className="entries-list"><h3>{t('tracking.recentEntries')}</h3><p>{t('pilot.japanTime')}</p>
       <FormField as="select" label={t('work.recordPeriod')} value={recordRange} disabled={loading} onChange={event => setRecordRange(Number(event.target.value))}>
         {[7, 30, 90, 365].map(days => <option key={days} value={days}>{t('work.rangeDays', { days })}</option>)}
@@ -370,10 +445,10 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
           {entry.breast_condition && <span>{t(`tracking.${entry.breast_condition}`)}</span>}
         </div>
         {['notes', 'mood_notes', 'recovery_notes'].map(key => entry[key] && <p key={key} className="entry-notes">{entry[key]}</p>)}
-        <div className="pilot-actions"><button className="pilot-button secondary" disabled={loading || Boolean(pendingSave) || Boolean(pendingDelete) || Boolean(draft.candidate) || draft.status === 'loading'} onClick={() => {
+        <div className="pilot-actions"><button className="pilot-button secondary" disabled={loading || Boolean(pendingSave) || Boolean(pendingDelete) || Boolean(pendingRestore) || Boolean(draft.candidate) || draft.status === 'loading'} onClick={() => {
           openRecord({ record: entry })
         }}>{t('work.editRecord')}</button>
-          <Button variant="secondary" disabled={loading || Boolean(pendingSave) || Boolean(pendingDelete)} onClick={() => {
+          <Button variant="secondary" disabled={loading || Boolean(pendingSave) || Boolean(pendingDelete) || Boolean(pendingRestore)} onClick={() => {
             setDeleteError(''); setDeleteTarget(entry)
           }}>{t('common.delete')}</Button></div>
       </article>)}
@@ -381,10 +456,10 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     <ConfirmDialog open={visible && Boolean(deleteTarget)} danger title={t('work.deleteConfirm')}
       description={deleteTarget ? <><strong>{t(`tracking.${deleteTarget.entry_type}`)}</strong>
         <CareRecordIdentity record={deleteTarget} /><RecordTime value={deleteTarget.timestamp} now={now} /></> : undefined}
-      confirmLabel={t('work.confirmDelete')} busy={loading || Boolean(pendingSave)}
+      confirmLabel={t('work.confirmDelete')} busy={loading || Boolean(pendingSave) || Boolean(pendingRestore)}
       error={deleteError ? t(`reviewFixes.deletion.${deleteError}`) : undefined}
       onConfirm={() => removeEntry(deleteTarget)} onClose={() => setDeleteTarget(null)} />
-    <RecordOrganizer visible={visible} blocked={loading || Boolean(pendingSave) || Boolean(pendingDelete)} onRecordsChanged={refresh}
+    <RecordOrganizer visible={visible} blocked={loading || Boolean(pendingSave) || Boolean(pendingDelete) || Boolean(pendingRestore)} onRecordsChanged={refresh}
       openRequest={initialEntryType?.action === 'organize' ? requestKey : 0} />
     <details className="pilot-panel"><summary>{t('pilot.optionalAnalysis')}</summary>
       <CareScope subjectId={analysisSubject} mode="analysis" disabled={summaryLoading} onUseLast={id => {
@@ -400,7 +475,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
       {!analysisReady && <p role="status">{t('reviewFixes.analysisUnavailable')} <button type="button" className="text-action" onClick={care.reload}>{t('pilot.retry')}</button></p>}
       <button className="pilot-button secondary" onClick={() => setShowCharts(value => !value)}>{t(showCharts ? 'tracking.hideCharts' : 'tracking.showCharts')}</button>
       {showCharts && analysisReady && <Charts key={analysisSubject || 'unassigned'} userId={userId} subjectId={analysisSubject} refreshKey={attempt} visible={visible}
-        onRecord={!loading && !pendingSave && !pendingDelete && !draft.candidate && draft.status !== 'loading' ? () => openRecord({ entryType }) : undefined} />}
+        onRecord={!loading && !pendingSave && !pendingDelete && !pendingRestore && !draft.candidate && draft.status !== 'loading' ? () => openRecord({ entryType }) : undefined} />}
       <AIUseNotice scope="records" accepted={acceptedAI} onChange={setAcceptedAI} disabled={summaryLoading || !analysisReady}
         profileLabel={t('reviewFixes.analysisProfile')}
         includeProfile={includeProfile} onProfileChange={setIncludeProfile} includeParent={includeParent} onParentChange={setIncludeParent}

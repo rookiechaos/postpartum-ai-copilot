@@ -102,7 +102,7 @@ export default function RecordOrganizer({ visible, blocked, onRecordsChanged, op
     row.amount_ml != null && `${row.amount_ml} mL`, row.pumped_amount_ml != null && `${row.pumped_amount_ml} mL`,
     (row.duration_minutes ?? row.sleep_duration_minutes) != null && `${row.duration_minutes ?? row.sleep_duration_minutes} ${t('pilot.minutes')}`].filter(value => value !== false && value != null && value !== '').join(' · ')
   return <details className="pilot-panel record-organizer" open={open} onToggle={event => { if (event.target === event.currentTarget) setOpen(event.currentTarget.open) }}>
-    <summary id="record-organizer-heading" ref={heading} tabIndex={-1}>{t('workflow.organize.title')}</summary><p>{t('workflow.organize.notice')}</p>
+    <summary id="record-organizer-heading" ref={heading}>{t('workflow.organize.title')}</summary><p>{t('workflow.organize.notice')}</p>
     {result && <p role="status">{t(result.undone ? 'workflow.organize.undone' : 'workflow.organize.saved', { count: result.count })}</p>}
     {error && <p role="alert">{t(`workflow.organize.errors.${error}`)}</p>}
     {!preview ? <>

@@ -14,6 +14,23 @@
   "timerCorrection": "No saved record was found at this moment. You can correct the input while keeping the start and end times. The same save reference is retained in case the original save finishes later. If it has already saved, open that record to make corrections.",
   "timerExisting": "A record exists for this save reference but differs from the input. Open the saved record to check and correct it.",
   "openTimerRecord": "Open saved record",
+  "restoration": {
+    "review": "Review restoring the deleted record",
+    "pending": "Continue restoring or check the result",
+    "notice": "After you choose Undo, the original content and save reference remain available beyond 8 seconds during this login. Checking only reads the result. A resend happens only when you choose the button below.",
+    "check": "Check restore result",
+    "retry": "Send the restore request with the same content",
+    "notFound": "No record for this save reference was found at this moment. An earlier request may still finish later. Check again or resend using the same content and save reference.",
+    "changed": "A record exists for this save reference, but it was changed after restoration or differs from the original content. It will not be overwritten or copied. Check your current records.",
+    "deleted": "This save reference was saved and later deleted. Resending will not recreate it. Check your records.",
+    "checkFailed": "The saved record could not be read, so the restore result is unconfirmed. Check your connection and check the result again.",
+    "offline": "No restore request was sent on this attempt because you are offline. If an earlier request was sent, check its result first when connected.",
+    "conflict": "The record for this save reference changed or was deleted, or the save conditions changed. No new save reference will be generated. Check the result first.",
+    "rejected": "This attempt was rejected. An earlier request may already have completed, so check the result and your login or record conditions.",
+    "unconfirmed": "The restore result could not be confirmed. The original content is retained. Check the result before taking another action.",
+    "abandon": "Stop this restore check",
+    "abandonConfirm": "Stop this restore check? Any request already sent will not be cancelled. The original content and save reference will no longer be retained, so you cannot resend the same operation from this screen. Check your records."
+  },
   "deletion": {
     "pending": "The record's deletion result is still unconfirmed",
     "notice": "Checking does not delete or restore anything automatically. If the record is confirmed absent, Undo will be available for 8 seconds from that confirmation. This check is kept only in the current login session.",
