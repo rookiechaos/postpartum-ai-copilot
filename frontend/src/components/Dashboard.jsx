@@ -4,6 +4,7 @@ import { ArrowRight, Baby, Calendar, ChevronRight, Clock, Droplets, Heart, Messa
 import api from '../utils/api'
 import { japanDay, utcDate } from '../utils/japanTime'
 import { recordOperation, isRecordOperation } from '../utils/recordOperations'
+import { readCreationResult } from '../utils/recordSaveResult'
 import RecordingExample from './RecordingExample'
 import FamilyCareOverview from './FamilyCareOverview'
 import RecordTime, { useRecordClock } from './RecordTime'
@@ -40,6 +41,8 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
   const [attempt, setAttempt] = useState(0)
   const [pending, setPending] = useState(null)
   const [saveStatus, setSaveStatus] = useState('')
+  const [saveObservation, setSaveObservation] = useState('')
+  const [existingRecord, setExistingRecord] = useState(null)
   const [undo, setUndo] = useState(null)
   const [receipt, setReceipt] = useState(null)
   const [receiptMode, setReceiptMode] = useState(null)
@@ -55,7 +58,7 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
   const draft = useAccountDraft('quick', userId, pending ? { pending } : null, content => {
     if (!isRecordOperation(content.pending)) return false
     unconfirmedRequest.current = content.pending.request_key
-    setPending(content.pending); setSaveStatus('unconfirmed')
+    setPending(content.pending); setSaveStatus('unconfirmed'); setSaveObservation(''); setExistingRecord(null)
   })
   const refresh = () => { setAttempt(value => value + 1); onRecordsChanged?.() }
   const recordName = entry => [t(`tracking.${entry.entry_type}`),
@@ -100,8 +103,31 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
     return () => clearTimeout(timer)
   }, [undo])
 
-  const saveQuick = async operation => {
-    if (writing.current) return
+  const resolveCreation = async (result, operation) => {
+    if (result.state !== 'not_found') duplicates.clear()
+    if (result.state === 'matched') {
+      await draft.clear()
+      unconfirmedRequest.current = null
+      setQuickScope(privateSubject(operation.subject_id))
+      setUndo(result.record); setReceipt(result.record); setReceiptMode(null); setPending(null)
+      setSaveObservation(''); setExistingRecord(null); setSaveStatus('saved'); refresh()
+      return true
+    }
+    setExistingRecord(result.record)
+    setSaveObservation(result.state === 'not_found' ? 'notFound' : result.state)
+    setSaveStatus('unconfirmed'); refresh()
+    return result.state !== 'not_found'
+  }
+  const checkQuick = async () => {
+    if (writing.current || !pending) return
+    writing.current = true; setSaveStatus('checking')
+    try { await resolveCreation(await readCreationResult(pending), pending) }
+    catch { setSaveObservation('checkFailed'); setSaveStatus('unconfirmed') }
+    finally { writing.current = false }
+  }
+  const saveQuick = async (operation, duplicateConfirmed = false) => {
+    if (writing.current || !operation || ['changed', 'deleted'].includes(saveObservation)) return
+    if (!pending) { setUndo(null); setReceipt(null); setReceiptMode(null); setExistingRecord(null); setSaveObservation('') }
     if (!online || navigator.onLine === false) {
       setPending(operation)
       setSaveStatus(unconfirmedRequest.current === operation.request_key ? 'unconfirmed' : 'offline')
@@ -109,19 +135,25 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
     }
     writing.current = true
     setPending(operation); setSaveStatus('saving')
+    let checking = false
     try {
-      if (!pending && !(await duplicates.check(operation))) { setSaveStatus('unsaved'); return }
+      if (pending) {
+        checking = true; setSaveStatus('checking')
+        if (await resolveCreation(await readCreationResult(operation), operation)) return
+        checking = false; setSaveStatus('saving')
+      }
+      if (!(duplicateConfirmed && duplicates.review?.operation.request_key === operation.request_key)
+        && !(await duplicates.check(operation))) {
+        setSaveStatus(unconfirmedRequest.current === operation.request_key ? 'unconfirmed' : 'unsaved'); return
+      }
       duplicates.clear()
-      const result = await api.addTrackingEntry(operation)
-      await draft.clear()
-      unconfirmedRequest.current = null
-      // The receipt carries identity/version only; keep the submitted care fields
-      // so its name and edit action refer to the record that was actually saved.
-      const saved = { ...operation, ...result }
-      setQuickScope(privateSubject(operation.subject_id))
-      setUndo(saved); setReceipt(saved); setReceiptMode(null); setPending(null); setSaveStatus('saved'); refresh()
+      await api.addTrackingEntry(operation)
+      unconfirmedRequest.current = operation.request_key
+      checking = true; setSaveStatus('checking')
+      await resolveCreation(await readCreationResult(operation), operation)
     } catch (failure) {
-      if (!(failure.status >= 400 && failure.status < 500)) unconfirmedRequest.current = operation.request_key
+      if (checking || !(failure.status >= 400 && failure.status < 500)) unconfirmedRequest.current = operation.request_key
+      setSaveObservation(checking ? 'checkFailed' : failure.status === 409 ? 'conflict' : '')
       setSaveStatus(unconfirmedRequest.current === operation.request_key ? 'unconfirmed' : 'unsaved')
       setAttempt(value => value + 1)
     }
@@ -184,14 +216,18 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
           setReceipt(result); setUndo(null); refresh()
         }} onCancel={() => setReceiptMode(null)} />}
       </section>}
-      <DraftRecoveryNotice draft={draft} disabled={['saving', 'undoing'].includes(saveStatus)} compact />
-      <DuplicateReview review={duplicates.review} disabled={['saving', 'undoing'].includes(saveStatus)} onContinue={() => saveQuick(pending)} onCancel={() => {
-        duplicates.clear(); setPending(null); setSaveStatus(''); draft.clear()
+      <DraftRecoveryNotice draft={draft} disabled={['saving', 'undoing', 'checking'].includes(saveStatus)} compact />
+      <DuplicateReview review={duplicates.review} disabled={['saving', 'undoing', 'checking'].includes(saveStatus)} onContinue={() => saveQuick(pending, true)} onCancel={() => {
+        if (writing.current || (pending && unconfirmedRequest.current === pending.request_key && !window.confirm(t('polish.abandonWrite')))) return
+        unconfirmedRequest.current = null
+        duplicates.clear(); setPending(null); setSaveStatus(''); setSaveObservation(''); setExistingRecord(null); draft.clear()
       }} />
-      {pending && saveStatus !== 'saving' && !duplicates.review && <div className="pilot-actions"><p>{t('localCare.record.retryHint')}</p>
-        <Button variant="secondary" onClick={() => setAttempt(value => value + 1)}>{t('localCare.record.check')}</Button>
-        <Button variant="secondary" onClick={() => saveQuick(pending)}>{t('localCare.record.resend')}</Button>
-        <Button variant="secondary" onClick={() => setConfirmAbandon(true)}>{t('localCare.record.stopRetry')}</Button></div>}
+      {pending && !duplicates.review && <div className="pilot-actions"><p>{t('localCare.record.retryHint')}</p>
+        {saveObservation && <p role="status">{t(`reviewFixes.creation.${saveObservation}`)}</p>}
+        <Button variant="secondary" disabled={['saving', 'checking'].includes(saveStatus)} onClick={checkQuick}>{t('localCare.record.check')}</Button>
+        <Button variant="secondary" disabled={['saving', 'checking'].includes(saveStatus) || ['changed', 'deleted'].includes(saveObservation)} onClick={() => saveQuick(pending)}>{t('localCare.record.resend')}</Button>
+        {existingRecord && <Button variant="secondary" disabled={['saving', 'checking'].includes(saveStatus)} onClick={() => setTimelineRequest({ ...existingRecord, focusVersion: Date.now() })}>{t('reviewFixes.creation.review')}</Button>}
+        <Button variant="secondary" disabled={['saving', 'checking'].includes(saveStatus)} onClick={() => setConfirmAbandon(true)}>{t('localCare.record.stopRetry')}</Button></div>}
     </section>
     <CareTimeline compact subjectId={care.activeId} entries={entries} userId={userId} visible={visible} refreshKey={refreshKey + attempt} error={error}
       navigationRecord={timelineRequest} onReload={() => setAttempt(value => value + 1)} onFullEdit={editRecord} onRecordsChanged={refresh} blocked={quickBlocked} />
@@ -220,10 +256,14 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
     </section>
     <ConfirmDialog open={visible && confirmAbandon && Boolean(pending)} danger title={t('foundation.home.stopRetryTitle')}
       description={t('polish.abandonWrite')} confirmLabel={t('localCare.record.stopRetry')} onClose={() => setConfirmAbandon(false)}
+      busy={['saving', 'checking', 'clearing'].includes(saveStatus)}
       onConfirm={async () => {
         if (writing.current) return false
-        if (!(await draft.clear())) throw new Error('Draft could not be cleared')
-        unconfirmedRequest.current = null; setPending(null); setSaveStatus(''); refresh()
+        writing.current = true; setSaveStatus('clearing')
+        try {
+          if (!(await draft.clear())) { setSaveStatus('unconfirmed'); throw new Error('Draft could not be cleared') }
+          unconfirmedRequest.current = null; setPending(null); setSaveStatus(''); setSaveObservation(''); setExistingRecord(null); refresh()
+        } finally { writing.current = false }
       }} />
   </div>
 }

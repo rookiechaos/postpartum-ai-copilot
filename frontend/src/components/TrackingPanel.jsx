@@ -5,6 +5,7 @@ import taskManager from '../utils/taskManager'
 import { japanDateTime, japanDateTimeInput, utcDate } from '../utils/japanTime'
 import { earliestRecordTime } from '../utils/trackingPolicy'
 import { recordFields, recordOperation, recordPayload as payload, requestKey as newRequestKey, isRecordOperation } from '../utils/recordOperations'
+import { readCreationResult } from '../utils/recordSaveResult'
 import useAccountDraft from '../utils/useAccountDraft'
 import { DraftRecoveryNotice } from './DraftRecovery'
 import AIUseNotice from './AIUseNotice'
@@ -65,6 +66,8 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   const [formRevision, setFormRevision] = useState(0)
   const [pendingSave, setPendingSave] = useState(null)
   const [saveStatus, setSaveStatus] = useState('')
+  const [saveObservation, setSaveObservation] = useState('')
+  const [existingCreation, setExistingCreation] = useState(null)
   const [openRequest, setOpenRequest] = useState(null)
   const [formFocus, setFormFocus] = useState(0)
   const consumedRequest = useRef(null)
@@ -86,7 +89,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     setEditing(content.editing || null); setEntryType(content.entryType); setRestoredForm(content)
     setPendingSave(content.pendingSave || null); setFormRevision(value => value + 1); setShowAddForm(true)
     unconfirmedRequest.current = content.pendingSave?.data.request_key || null
-    setSaveStatus(content.pendingSave ? 'unconfirmed' : '')
+    setSaveStatus(content.pendingSave ? 'unconfirmed' : ''); setSaveObservation(''); setExistingCreation(null)
   })
   const summaryVersion = useRef(0)
   useCareWork('record', pendingSave ? { version: `${pendingSave.data.request_key}:${saveStatus}`, title: duplicates.review ? 'continuity.work.duplicateReview'
@@ -134,7 +137,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     // the update: an intervening edit or deletion is rejected by the API.
     setRestoredForm(null); setFormDraft(null); setEditing(request.record || null)
     setEntryType(request.record?.entry_type || request.entryType); setShowAddForm(true)
-    setSaveStatus(''); setOpenRequest(null); setFormRevision(value => value + 1)
+    setSaveStatus(''); setSaveObservation(''); setExistingCreation(null); setOpenRequest(null); setFormRevision(value => value + 1)
     pendingFormFocus.current = true; setFormFocus(value => value + 1)
   }
   useEffect(() => {
@@ -179,8 +182,48 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   const refresh = () => {
     summaryVersion.current++; setSummary(null); setAttempt(value => value + 1); onRecordsChanged?.()
   }
-  const saveEntry = async formData => {
-    if (writing.current || pendingDelete || pendingRestore) return false
+  const finishSave = async operation => {
+    const age = Math.floor((Date.now() - utcDate(operation.data.timestamp).getTime()) / 86400000)
+    if (age >= recordRange) setRecordRange(age < 30 ? 30 : age < 90 ? 90 : 365)
+    setPendingSave(null); setFormDraft(null); await draft.clear()
+    unconfirmedRequest.current = null
+    setSaveObservation(''); setExistingCreation(null)
+    setRestoredForm(null); setShowAddForm(false); setEditing(null); setSaveStatus('saved'); refresh()
+    toast.success(t('pilot.recordSaved'))
+  }
+  const resolveCreation = async (result, operation) => {
+    if (result.state !== 'not_found') duplicates.clear()
+    if (result.state === 'matched') { await finishSave(operation); return true }
+    setExistingCreation(result.record)
+    setSaveObservation(result.state === 'not_found' ? 'notFound' : result.state)
+    setSaveStatus('unconfirmed'); refresh()
+    return result.state !== 'not_found'
+  }
+  const checkCreation = async () => {
+    if (writing.current || !pendingSave || pendingSave.editing) return
+    writing.current = true; setLoading(true); setSaveStatus('checking')
+    try { await resolveCreation(await readCreationResult(pendingSave.data), pendingSave) }
+    catch { setSaveObservation('checkFailed'); setSaveStatus('unconfirmed') }
+    finally { writing.current = false; setLoading(false) }
+  }
+  const openCurrentCreation = async () => {
+    if (writing.current || !existingCreation || !window.confirm(t('reviewFixes.creation.replace'))) return
+    writing.current = true; setLoading(true)
+    try {
+      const current = await api.getTrackingEntry(existingCreation)
+      if (!(await draft.clear())) { toast.error(t('interaction.timer.errors.draftClear')); return }
+      unconfirmedRequest.current = null
+      setPendingSave(null); setSaveObservation(''); setExistingCreation(null); setFormDraft(null); setRestoredForm(null)
+      setEditing(current); setEntryType(current.entry_type); setShowAddForm(true); setSaveStatus('')
+      setFormRevision(value => value + 1); pendingFormFocus.current = true; setFormFocus(value => value + 1)
+    } catch (failure) {
+      if (failure.status === 404) { setExistingCreation(null); setSaveObservation('deleted') }
+      else { setSaveObservation('checkFailed') }
+      setSaveStatus('unconfirmed')
+    } finally { writing.current = false; setLoading(false) }
+  }
+  const saveEntry = async (formData, duplicateConfirmed = false) => {
+    if (writing.current || pendingDelete || pendingRestore || ['changed', 'deleted'].includes(saveObservation)) return false
     const operation = pendingSave || { data: recordOperation(payload(formData)),
       editing: editing ? { id: editing.id, record_key: editing.record_key, revision: editing.revision } : null }
     if (!online || navigator.onLine === false) {
@@ -190,25 +233,38 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     }
     writing.current = true
     setPendingSave(operation); setLoading(true); setSaveStatus('saving')
+    let checking = false
     try {
-      if (!pendingSave && !operation.editing && !(await duplicates.check(operation.data))) { setSaveStatus('unsaved'); return false }
+      if (pendingSave && !operation.editing) {
+        checking = true; setSaveStatus('checking')
+        const result = await readCreationResult(operation.data)
+        if (await resolveCreation(result, operation)) return result.state === 'matched'
+        checking = false; setSaveStatus('saving')
+      }
+      if (!operation.editing && !(duplicateConfirmed && duplicates.review?.operation.request_key === operation.data.request_key)
+        && !(await duplicates.check(operation.data))) {
+        setSaveStatus(unconfirmedRequest.current === operation.data.request_key ? 'unconfirmed' : 'unsaved'); return false
+      }
       duplicates.clear()
-      if (operation.editing) await api.updateTrackingEntry(operation.editing.id, {
-        ...payload(operation.data), record_key: operation.editing.record_key, revision: operation.editing.revision,
-      })
-      else await api.addTrackingEntry(operation.data)
-      const age = Math.floor((Date.now() - utcDate(operation.data.timestamp).getTime()) / 86400000)
-      if (age >= recordRange) setRecordRange(age < 30 ? 30 : age < 90 ? 90 : 365)
-      setPendingSave(null); setFormDraft(null); await draft.clear()
-      unconfirmedRequest.current = null
-      setRestoredForm(null); setShowAddForm(false); setEditing(null); setSaveStatus('saved'); refresh()
-      toast.success(t('pilot.recordSaved'))
-      return true
+      if (operation.editing) {
+        await api.updateTrackingEntry(operation.editing.id, {
+          ...payload(operation.data), record_key: operation.editing.record_key, revision: operation.editing.revision,
+        })
+        await finishSave(operation)
+        return true
+      }
+      await api.addTrackingEntry(operation.data)
+      unconfirmedRequest.current = operation.data.request_key
+      checking = true; setSaveStatus('checking')
+      const result = await readCreationResult(operation.data)
+      await resolveCreation(result, operation)
+      return result.state === 'matched'
     } catch (err) {
-      if (!(err.status >= 400 && err.status < 500)) unconfirmedRequest.current = operation.data.request_key
+      if (checking || !(err.status >= 400 && err.status < 500)) unconfirmedRequest.current = operation.data.request_key
       const unconfirmed = unconfirmedRequest.current === operation.data.request_key
+      setSaveObservation(checking ? 'checkFailed' : err.status === 409 ? 'conflict' : '')
       setSaveStatus(unconfirmed ? 'unconfirmed' : 'unsaved')
-      if (!unconfirmed && [400, 404, 409, 422].includes(err.status)) setPendingSave(null)
+      if (!checking && !unconfirmed && [400, 404, 409, 422].includes(err.status)) { setPendingSave(null); setSaveObservation('') }
       if (err.status === 409 || err.status === 404) refresh()
       toast.error(t(unconfirmed ? 'flows.connection.unconfirmedSave'
         : err.status === 409 || err.status === 404 ? 'work.recordConflict' : 'pilot.recordFailed'))
@@ -218,9 +274,11 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   }
   const cancelForm = () => {
     if (writing.current || loading || pendingDelete || pendingRestore) return
-    if (pendingSave && !duplicates.review && !window.confirm(t('polish.abandonWrite'))) return
+    if (pendingSave && (!duplicates.review || unconfirmedRequest.current === pendingSave.data.request_key)
+      && !window.confirm(t('polish.abandonWrite'))) return
     duplicates.clear()
     unconfirmedRequest.current = null
+    setSaveObservation(''); setExistingCreation(null)
     setSaveStatus('')
     setPendingSave(null); setFormDraft(null); setRestoredForm(null); setShowAddForm(false); setEditing(null)
     draft.clear(); setAttempt(value => value + 1)
@@ -412,14 +470,20 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
         }}>{t('reviewFixes.restoration.abandon')}</Button>
       </div>
     </section>}
-    <DuplicateReview review={duplicates.review} disabled={loading} onContinue={() => saveEntry()} onCancel={() => {
-      duplicates.clear(); setPendingSave(null); setSaveStatus(''); draft.clear()
+    <DuplicateReview review={duplicates.review} disabled={loading} onContinue={() => saveEntry(undefined, true)} onCancel={() => {
+      if (writing.current || (pendingSave && unconfirmedRequest.current === pendingSave.data.request_key && !window.confirm(t('polish.abandonWrite')))) return
+      unconfirmedRequest.current = null
+      duplicates.clear(); setPendingSave(null); setSaveStatus(''); setSaveObservation(''); setExistingCreation(null); draft.clear()
     }} />
-    {pendingSave && <button type="button" className="pilot-button secondary" disabled={loading} onClick={() => setAttempt(value => value + 1)}>{t('flows.connection.checkRecords')}</button>}
+    {pendingSave && <button type="button" className="pilot-button secondary" disabled={loading || Boolean(duplicates.review)}
+      onClick={pendingSave.editing ? () => setAttempt(value => value + 1) : checkCreation}>{t('flows.connection.checkRecords')}</button>}
+    {pendingSave && saveObservation && <p role="status">{t(`reviewFixes.creation.${saveObservation}`)}</p>}
+    {existingCreation && <Button variant="secondary" disabled={loading} onClick={openCurrentCreation}>{t('reviewFixes.openTimerRecord')}</Button>}
     {pendingSave && <p>{t('localCare.record.retryHint')} {japanDateTime(pendingSave.data.timestamp, i18n.resolvedLanguage || 'ja')}</p>}
     {showAddForm && <div ref={formHeading} tabIndex={-1} className="record-form-region" role="region" aria-label={t(editing ? 'work.editRecord' : 'tracking.addEntry')}>
       <EntryForm key={`${editing ? `edit:${editing.record_key}:${editing.revision}` : 'new'}:${formRevision}`}
       entryType={entryType} initialEntry={editing} restored={restoredForm} onDraftChange={setFormDraft} locked={Boolean(pendingSave)}
+      submitBlocked={['changed', 'deleted'].includes(saveObservation)}
       onEntryTypeChange={setEntryType} onSubmit={saveEntry} onCancel={cancelForm} loading={loading || Boolean(pendingDelete) || Boolean(pendingRestore) || Boolean(duplicates.review)} saving={saveStatus === 'saving'} /></div>}
     {undoEntry && <div className="pilot-panel undo-notice" role="status"><p>{t('work.lastDeleted')}</p>
       <button className="pilot-button secondary" disabled={loading || Boolean(pendingSave) || Boolean(pendingDelete) || Boolean(pendingRestore)} onClick={restoreEntry}>{t('work.undoDelete')}</button></div>}
@@ -492,7 +556,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
   </div>
 }
 
-function EntryForm({ entryType, initialEntry, restored, onDraftChange, locked, onEntryTypeChange, onSubmit, onCancel, loading, saving }) {
+function EntryForm({ entryType, initialEntry, restored, onDraftChange, locked, onEntryTypeChange, onSubmit, onCancel, loading, saving, submitBlocked }) {
   const { t } = useTranslation()
   const care = useCareSession()
   const [formData, setFormData] = useState(restored?.formData || (initialEntry ? payload(initialEntry) : privateSubject(babyKinds.includes(entryType) ? care.activeId : '')))
@@ -549,7 +613,7 @@ function EntryForm({ entryType, initialEntry, restored, onDraftChange, locked, o
       onChange={event => setFormData({ ...formData, [key]: event.target.value === '' ? null : Number(event.target.value) })} /></label>
   return <form className="entry-form" onSubmit={event => {
     event.preventDefault()
-    if (loading) return
+    if (loading || submitBlocked) return
     if (locked) { onSubmit(); return }
     const date = when === 'now' ? new Date() : new Date(`${recordedAt}:00+09:00`)
     if (!Number.isFinite(date.getTime()) || date.getTime() > Date.now() + 60000) { setError(t('work.invalidTime')); return }
@@ -605,7 +669,7 @@ function EntryForm({ entryType, initialEntry, restored, onDraftChange, locked, o
     </details>
     {error && <p role="alert">{error}</p>}
   </fieldset><div className="form-actions"><button type="button" disabled={loading} onClick={onCancel}>{t('tracking.cancel')}</button>
-      <button type="submit" disabled={loading}>{t(saving ? 'tracking.adding' : locked ? 'localCare.record.resend' : initialEntry ? 'work.saveChanges' : 'tracking.addEntryButton')}</button></div>
+      <button type="submit" disabled={loading || submitBlocked}>{t(saving ? 'tracking.adding' : locked ? 'localCare.record.resend' : initialEntry ? 'work.saveChanges' : 'tracking.addEntryButton')}</button></div>
   </form>
 }
 

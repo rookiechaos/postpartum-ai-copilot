@@ -89,37 +89,19 @@ function Charts({ userId, subjectId = '', onRecord, refreshKey = 0, visible = tr
   }
 
 
-  if (loading) {
-    return (
-      <div className="charts-loading">
-        <div className="spinner"></div>
-        <p>{t('charts.loading')}</p>
-      </div>
-    )
-  }
-
-  if (error) return <div role="alert"><p>{t('pilot.loadFailed')}</p>
-    <button type="button" className="pilot-button secondary" onClick={() => setAttempt(value => value + 1)}>{t('pilot.retry')}</button></div>
-
-  if (chartData.length === 0 || chartData.every(day => day.feeds === 0 && day.diapers === 0 && day.sleepMinutes === 0 && day.mood === null)) {
-    return (
-      <EmptyState
-        type="charts"
-        onAction={onRecord}
-      />
-    )
-  }
+  const empty = chartData.length === 0 || chartData.every(day => day.feeds === 0 && day.diapers === 0 && day.sleepMinutes === 0 && day.mood === null)
 
   return (
     <div className="charts-container">
       <div className="charts-header">
         <h2>📊 {t('charts.title')}</h2>
         <div className="time-range-selector">
-          <Calendar size={18} />
+          <Calendar size={18} aria-hidden="true" />
           <select 
             value={timeRange} 
             onChange={(e) => setTimeRange(Number(e.target.value))}
             className="time-select"
+            aria-label={t('continuity.period.choose')}
           >
             <option value={3}>{t('charts.last3Days')}</option>
             <option value={7}>{t('charts.last7Days')}</option>
@@ -129,7 +111,12 @@ function Charts({ userId, subjectId = '', onRecord, refreshKey = 0, visible = tr
         </div>
       </div>
 
-      <div className="charts-grid">
+      {loading ? <div className="charts-loading" role="status">
+        <div className="spinner" aria-hidden="true" />
+        <p>{t('charts.loading')}</p>
+      </div> : error ? <div role="alert"><p>{t('pilot.loadFailed')}</p>
+        <button type="button" className="pilot-button secondary" onClick={() => setAttempt(value => value + 1)}>{t('pilot.retry')}</button>
+      </div> : empty ? <EmptyState type="charts" onAction={onRecord} /> : <div className="charts-grid">
         <div className="chart-card">
           <h3>{t('charts.feedingFrequency')}</h3>
           <ResponsiveContainer width="100%" height={250}>
@@ -197,7 +184,7 @@ function Charts({ userId, subjectId = '', onRecord, refreshKey = 0, visible = tr
             </LineChart>
           </ResponsiveContainer>
         </div>
-      </div>
+      </div>}
     </div>
   )
 }

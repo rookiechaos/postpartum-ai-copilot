@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 import { japanDateTime, japanDay, utcDate } from '../utils/japanTime'
 import { useToast } from './Toast'
+import { ErrorMessage } from './ui'
 import './ExportData.css'
 
 // Backups preserve every supported record field; consultation formatting is intentionally compact.
@@ -21,10 +22,12 @@ const csvCell = value => {
 export default function ExportData({ userId }) {
   const { t, i18n } = useTranslation()
   const [exporting, setExporting] = useState(false)
+  const [failedFormat, setFailedFormat] = useState(null)
   const toast = useToast()
   const download = async format => {
     if (exporting) return
     setExporting(true)
+    setFailedFormat(null)
     try {
       const entries = await api.getTracking(userId, 365)
       const language = i18n.resolvedLanguage || 'ja'
@@ -43,11 +46,12 @@ export default function ExportData({ userId }) {
       document.body.appendChild(link); link.click(); link.remove()
       setTimeout(() => URL.revokeObjectURL(url), 1000)
       toast.success(t('work.exportSuccess'))
-    } catch { toast.error(t('work.exportFailed')) }
+    } catch { setFailedFormat(format) }
     finally { setExporting(false) }
   }
   return <section className="export-data">
     <div className="export-header"><h3>{t('work.exportTitle')}</h3><p>{t('work.exportNotice')}</p></div>
+    {failedFormat && <ErrorMessage title={t('work.exportFailed')} onRetry={() => download(failedFormat)} retryDisabled={exporting} />}
     <div className="export-options">{['csv', 'json'].map(format => <button key={format} className="export-button" disabled={exporting} onClick={() => download(format)}>
       {exporting ? t('common.loading') : t(`work.exportFormats.${format}`)}
     </button>)}</div>

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Lock, Shield, Smartphone, History, CheckCircle, X, QrCode } from 'lucide-react'
+import { Shield, Smartphone, History, CheckCircle, X } from 'lucide-react'
 import api from '../utils/api'
 import errorTracker from '../utils/errorTracker'
 import { japanDateTime } from '../utils/japanTime'
@@ -15,90 +15,177 @@ function SecuritySettings({ userId }) {
   const [show2FASetup, setShow2FASetup] = useState(false)
   const [twoFASetupData, setTwoFASetupData] = useState(null)
   const [verificationToken, setVerificationToken] = useState('')
+  const [backupCodesSaved, setBackupCodesSaved] = useState(false)
+  const [copyStatus, setCopyStatus] = useState('')
   const [error, setError] = useState('')
+  const generation = useRef(0)
+  const activeOperation = useRef(null)
 
   useEffect(() => {
+    generation.current += 1
+    activeOperation.current = null
+    clearSetup()
+    setTwoFAStatus(null)
+    setDevices([])
+    setLoginHistory([])
     loadSecurityData()
+    return () => {
+      generation.current += 1
+      activeOperation.current = null
+    }
   }, [userId])
 
-  const loadSecurityData = async () => {
+  const clearSetup = () => {
+    setShow2FASetup(false)
+    setTwoFASetupData(null)
+    setVerificationToken('')
+    setBackupCodesSaved(false)
+    setCopyStatus('')
+  }
+
+  // A synchronous lock also covers clicks before React applies disabled state.
+  const startOperation = () => {
+    if (activeOperation.current) return null
+    const operation = { generation: generation.current }
+    activeOperation.current = operation
     setLoading(true)
     setError('')
+    return operation
+  }
+
+  const isCurrentOperation = (operation) => activeOperation.current === operation && operation.generation === generation.current
+
+  const finishOperation = (operation) => {
+    if (!isCurrentOperation(operation)) return
+    activeOperation.current = null
+    setLoading(false)
+  }
+
+  const fetchSecurityData = async (operation) => {
+    const [statusRes, devicesRes, historyRes] = await Promise.all([
+      api.get2FAStatus(),
+      api.getDevices(),
+      api.getLoginHistory()
+    ])
+    if (!isCurrentOperation(operation)) return
+    setTwoFAStatus(statusRes.status)
+    setDevices(devicesRes.devices || [])
+    setLoginHistory(historyRes.history || [])
+  }
+
+  const loadSecurityData = async () => {
+    const operation = startOperation()
+    if (!operation) return
     try {
-      const [statusRes, devicesRes, historyRes] = await Promise.all([
-        api.get2FAStatus(),
-        api.getDevices(),
-        api.getLoginHistory()
-      ])
-      
-      setTwoFAStatus(statusRes.status)
-      setDevices(devicesRes.devices || [])
-      setLoginHistory(historyRes.history || [])
+      await fetchSecurityData(operation)
     } catch (error) {
+      if (!isCurrentOperation(operation)) return
       errorTracker.trackError(error, { action: 'load_security_data' })
       setError(t('pilot.loadFailed'))
     } finally {
-      setLoading(false)
+      finishOperation(operation)
     }
   }
 
   const handleSetup2FA = async () => {
-    setLoading(true)
+    const operation = startOperation()
+    if (!operation) return
+    clearSetup()
     try {
       const data = await api.setup2FA()
-      setTwoFASetupData(data.setup)
+      if (!isCurrentOperation(operation)) return
+      const setup = data.setup
+      if (typeof setup?.qr_code !== 'string' || !setup.qr_code.startsWith('data:image/png;base64,') ||
+        !Array.isArray(setup.backup_codes) || !setup.backup_codes.length ||
+        !setup.backup_codes.every(code => typeof code === 'string' && code.trim())) {
+        throw new Error('Incomplete authenticator setup')
+      }
+      // Keep only the material displayed here, in component memory.
+      setTwoFASetupData({ qr_code: setup.qr_code, backup_codes: setup.backup_codes })
       setShow2FASetup(true)
     } catch (error) {
+      if (!isCurrentOperation(operation)) return
       errorTracker.trackError(error, { action: 'setup_2fa' })
       setError(t('security.actionFailed'))
     } finally {
-      setLoading(false)
+      finishOperation(operation)
     }
   }
 
+  const handleCopyBackupCodes = async () => {
+    if (!twoFASetupData) return
+    const operation = startOperation()
+    if (!operation) return
+    setCopyStatus('')
+    try {
+      await navigator.clipboard.writeText(twoFASetupData.backup_codes.join('\n'))
+      if (isCurrentOperation(operation)) setCopyStatus(t('security.backupCodesCopied'))
+    } catch {
+      if (isCurrentOperation(operation)) setCopyStatus(t('security.backupCodesCopyFailed'))
+    } finally {
+      finishOperation(operation)
+    }
+  }
+
+  const handleCancelSetup = () => {
+    if (activeOperation.current) return
+    clearSetup()
+    setError('')
+  }
+
   const handleEnable2FA = async () => {
-    if (!verificationToken) return
-    
-    setLoading(true)
+    if (!twoFASetupData || !backupCodesSaved || !/^\d{6}$/.test(verificationToken)) return
+    const operation = startOperation()
+    if (!operation) return
     try {
       await api.enable2FA(verificationToken)
-      setShow2FASetup(false)
-      setVerificationToken('')
+      // The API revokes the session and signs out; unmount also discards setup.
+      if (isCurrentOperation(operation)) clearSetup()
     } catch (error) {
+      if (!isCurrentOperation(operation)) return
       errorTracker.trackError(error, { action: 'enable_2fa' })
       setError(t('security.actionFailed'))
     } finally {
-      setLoading(false)
+      finishOperation(operation)
     }
   }
 
   const handleDisable2FA = async () => {
+    if (activeOperation.current) return
     if (!confirm(t('security.confirmDisable2FA', 'Are you sure you want to disable 2FA?'))) {
       return
     }
     
-    setLoading(true)
+    const operation = startOperation()
+    if (!operation) return
     try {
       await api.disable2FA()
     } catch (error) {
+      if (!isCurrentOperation(operation)) return
       errorTracker.trackError(error, { action: 'disable_2fa' })
       setError(t('security.actionFailed'))
     } finally {
-      setLoading(false)
+      finishOperation(operation)
     }
   }
 
   const handleRemoveDevice = async (deviceId) => {
+    if (activeOperation.current) return
     if (!confirm(t('security.confirmRemoveDevice', 'Are you sure you want to remove this device?'))) {
       return
     }
     
+    const operation = startOperation()
+    if (!operation) return
     try {
       await api.removeDevice(deviceId)
-      await loadSecurityData()
+      if (isCurrentOperation(operation)) await fetchSecurityData(operation)
     } catch (error) {
+      if (!isCurrentOperation(operation)) return
       errorTracker.trackError(error, { action: 'remove_device' })
       setError(t('security.actionFailed'))
+    } finally {
+      finishOperation(operation)
     }
   }
 
@@ -143,10 +230,27 @@ function SecuritySettings({ userId }) {
               <div className="two-fa-setup">
                 <h4>{t('security.scanQRCode', 'Scan QR Code')}</h4>
                 <img src={twoFASetupData.qr_code} alt={t('security.qrAlt')} className="qr-code" />
+                <div className="backup-codes-panel">
+                  <h4>{t('security.backupCodesTitle')}</h4>
+                  <p>{t('security.backupCodesHelp')}</p>
+                  <ul className="backup-codes-list" aria-label={t('security.backupCodesTitle')}>
+                    {twoFASetupData.backup_codes.map((code, index) => <li key={index}><code>{code}</code></li>)}
+                  </ul>
+                  <button type="button" className="btn-secondary" disabled={loading} onClick={handleCopyBackupCodes}>
+                    {t('security.copyBackupCodes')}
+                  </button>
+                  <p className="backup-codes-copy-status" role="status">{copyStatus}</p>
+                  <label className="backup-codes-confirmation">
+                    <input type="checkbox" checked={backupCodesSaved} disabled={loading} onChange={event => setBackupCodesSaved(event.target.checked)} />
+                    <span>{t('security.backupCodesSaved')}</span>
+                  </label>
+                  <p className="backup-codes-notice">{t('security.backupCodesSignOut')}</p>
+                </div>
                 <p>{t('security.enterVerificationCode', 'Enter verification code from your authenticator app')}</p>
                 <input
                   type="text"
                   value={verificationToken}
+                  disabled={loading}
                   onChange={(e) => setVerificationToken(e.target.value)}
                   placeholder="000000"
                   aria-label={t('security.enterVerificationCode')}
@@ -155,10 +259,10 @@ function SecuritySettings({ userId }) {
                   maxLength={6}
                   className="verification-input"
                 />
-                <button className="btn-primary" disabled={loading || !/^\d{6}$/.test(verificationToken)} onClick={handleEnable2FA}>
+                <button className="btn-primary" disabled={loading || !backupCodesSaved || !/^\d{6}$/.test(verificationToken)} onClick={handleEnable2FA}>
                   {t('security.enable', 'Enable 2FA')}
                 </button>
-                <button className="btn-secondary" onClick={() => setShow2FASetup(false)}>
+                <button className="btn-secondary" disabled={loading} onClick={handleCancelSetup}>
                   {t('common.cancel', 'Cancel')}
                 </button>
               </div>
@@ -167,11 +271,11 @@ function SecuritySettings({ userId }) {
             {!show2FASetup && (
               <div className="security-actions">
                 {twoFAStatus.is_enabled ? (
-                  <button className="btn-secondary" onClick={handleDisable2FA}>
+                  <button className="btn-secondary" disabled={loading} onClick={handleDisable2FA}>
                     {t('security.disable2FA', 'Disable 2FA')}
                   </button>
                 ) : (
-                  <button className="btn-primary" onClick={handleSetup2FA}>
+                  <button className="btn-primary" disabled={loading} onClick={handleSetup2FA}>
                     {t('security.setup2FA', 'Setup 2FA')}
                   </button>
                 )}
@@ -212,6 +316,7 @@ function SecuritySettings({ userId }) {
                   )}
                   <button
                     className="btn-danger"
+                    disabled={loading}
                     onClick={() => handleRemoveDevice(device.device_id)}
                   >
                     {t('security.remove', 'Remove')}

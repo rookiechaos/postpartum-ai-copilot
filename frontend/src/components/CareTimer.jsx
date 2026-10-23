@@ -4,6 +4,7 @@ import api from '../utils/api'
 import { japanDateTime, japanDateTimeInput, utcDate } from '../utils/japanTime'
 import { earliestRecordTime } from '../utils/trackingPolicy'
 import { isRecordOperation, recordOperation, requestKey } from '../utils/recordOperations'
+import { readCreationResult } from '../utils/recordSaveResult'
 import useAccountDraft from '../utils/useAccountDraft'
 import { DraftRecoveryNotice } from './DraftRecovery'
 import RecordSaveStatus from './RecordSaveStatus'
@@ -33,6 +34,7 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
   const [pending, setPending] = useState(null)
   const [correction, setCorrection] = useState(false)
   const [existingRecord, setExistingRecord] = useState(null)
+  const [saveObservation, setSaveObservation] = useState('')
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [returned, setReturned] = useState(false)
@@ -54,7 +56,7 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
     setEnd(typeof value.end === 'string' ? value.end : value.timer.ended_at ? japanDateTimeInput(value.timer.ended_at) : '')
     setSide(['left', 'right', 'both'].includes(value.side) ? value.side : '')
     setSubjectScope(value.subjectScope || privateSubject(''))
-    setPending(value.pending || null); setCorrection(value.correction === true); setExistingRecord(null)
+    setPending(value.pending || null); setCorrection(value.correction === true); setExistingRecord(null); setSaveObservation('')
     uncertain.current = Boolean(value.pending || value.correction)
     setStatus(value.pending ? 'unconfirmed' : ''); setReturned(true); setConfirmed(false)
   })
@@ -96,7 +98,7 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
     if (timer || writing.current || blocked || draft.candidate || draft.status === 'loading') return
     const startedAt = new Date().toISOString()
     duplicates.clear()
-    setCorrection(false); setExistingRecord(null)
+    setCorrection(false); setExistingRecord(null); setSaveObservation('')
     setTimer({ entry_type: kind, started_at: startedAt, ended_at: null, request_key: requestKey() })
     setSubjectScope(privateSubject(care.activeId)); setLastSaved(null)
     setStart(japanDateTimeInput(startedAt)); setEnd(''); setClock(Date.now()); setStatus(''); setError('')
@@ -116,14 +118,23 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
   const busy = ['saving', 'checking', 'clearing'].includes(status)
   const finish = async saved => {
     setLastSaved(saved)
-    setCorrection(false); setExistingRecord(null)
+    setCorrection(false); setExistingRecord(null); setSaveObservation('')
     uncertain.current = false; setPending(null); setTimer(null); setConfirmed(false); setReturned(false)
     setStart(''); setEnd(''); setSide(''); setError(''); setStatus('saving'); onRecordsChanged()
     await draft.clear(); setStatus('saved')
   }
-  const save = async event => {
+  const resolveCreation = async result => {
+    if (result.state !== 'not_found') duplicates.clear()
+    if (result.state === 'matched') { await finish(result.record); return true }
+    setExistingRecord(result.record)
+    setSaveObservation(result.state === 'not_found' ? 'notFound' : result.state)
+    setError(result.state === 'not_found' ? '' : 'conflict')
+    setStatus('unconfirmed'); onRecordsChanged()
+    return result.state !== 'not_found'
+  }
+  const save = async (event, duplicateConfirmed = false) => {
     event.preventDefault()
-    if (writing.current || blocked || !timer || !confirmed) return
+    if (writing.current || blocked || !timer || !confirmed || ['changed', 'deleted'].includes(saveObservation) || error === 'conflict') return
     if (!pending && !validTimes) { setError('invalidTime'); return }
     const operation = pending || { ...recordOperation({ entry_type: timer.entry_type, timestamp: startedAt.toISOString(),
       end_timestamp: endedAt.toISOString(), ...(subjectScope || privateSubject('')),
@@ -132,39 +143,40 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
     setPending(operation)
     if (navigator.onLine === false) { setStatus(uncertain.current ? 'unconfirmed' : 'offline'); return }
     writing.current = true; setStatus('saving'); setError('')
+    let checking = false
     try {
-      if (!pending && !(await duplicates.check(operation))) { setStatus('unsaved'); return }
+      if (pending) {
+        checking = true; setStatus('checking')
+        if (await resolveCreation(await readCreationResult(operation))) return
+        checking = false; setStatus('saving')
+      }
+      if (!(duplicateConfirmed && duplicates.review?.operation.request_key === operation.request_key)
+        && !(await duplicates.check(operation))) { setStatus(uncertain.current ? 'unconfirmed' : 'unsaved'); return }
       duplicates.clear()
-      const result = await api.addTrackingEntry(operation)
-      await finish({ ...operation, ...result })
+      await api.addTrackingEntry(operation)
+      uncertain.current = true
+      checking = true; setStatus('checking')
+      await resolveCreation(await readCreationResult(operation))
     } catch (failure) {
-      if (!(failure.status >= 400 && failure.status < 500)) uncertain.current = true
+      if (checking || !(failure.status >= 400 && failure.status < 500)) uncertain.current = true
       setStatus(uncertain.current ? 'unconfirmed' : 'unsaved')
-      if ([404, 409].includes(failure.status)) setError('conflict')
-      if (failure.status === 422 && !uncertain.current) { setPending(null); setError('invalidTime') }
+      setSaveObservation(checking ? 'checkFailed' : '')
+      if (!checking && [404, 409].includes(failure.status)) setError('conflict')
+      if (!checking && failure.status === 422 && !uncertain.current) { setPending(null); setError('invalidTime') }
     } finally { writing.current = false }
   }
   const check = async (forCorrection = false) => {
     if (writing.current || !pending) return
     writing.current = true; setStatus('checking'); setError('')
     try {
-      const result = await api.get(`/api/tracking/operations/${pending.request_key}`)
-      const record = result.record
-      const fields = [...(pending.entry_type === 'feeding' ? ['entry_type', 'feeding_type', 'duration_minutes', 'side'] : ['entry_type', 'sleep_duration_minutes']),
-        ...['subject_id', 'family_shared'].filter(key => Object.prototype.hasOwnProperty.call(pending, key))]
-      const sameEnd = pending.end_timestamp === undefined || (record?.end_timestamp && utcDate(record.end_timestamp).getTime() === utcDate(pending.end_timestamp).getTime())
-      if (result.state === 'saved' && record.revision === 1 && sameEnd && utcDate(record.timestamp).getTime() === utcDate(pending.timestamp).getTime()
-        && fields.every(key => (record[key] ?? null) === (pending[key] ?? null))) await finish(record)
-      else if (result.state === 'saved' || result.state === 'deleted') {
-        setExistingRecord(result.state === 'saved' ? record : null)
-        setError('conflict'); setStatus('unconfirmed'); onRecordsChanged()
-      } else if (result.state === 'not_found' && forCorrection) {
+      const result = await readCreationResult(pending)
+      if (result.state === 'not_found' && forCorrection) {
         // Keep the SAME idempotency key. A delayed original write can still
         // finish after this read; the corrected request must not create a second row.
-        duplicates.clear(); setPending(null); setExistingRecord(null); setCorrection(true)
+        duplicates.clear(); setPending(null); setExistingRecord(null); setSaveObservation(''); setCorrection(true)
         setConfirmed(false); setError(''); setStatus('unsaved'); onRecordsChanged()
-      } else { setError('notFound'); setStatus(uncertain.current ? 'unconfirmed' : 'unsaved'); onRecordsChanged() }
-    } catch { setError('checkFailed'); setStatus(uncertain.current ? 'unconfirmed' : 'unsaved') }
+      } else await resolveCreation(result)
+    } catch { setSaveObservation('checkFailed'); setStatus('unconfirmed') }
     finally { writing.current = false }
   }
   const discard = async () => {
@@ -174,7 +186,7 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
       const cleared = await draft.clear()
       if (!cleared) { setError('draftClear'); setStatus(pending ? 'unconfirmed' : ''); return false }
       duplicates.clear()
-      setCorrection(false); setExistingRecord(null)
+      setCorrection(false); setExistingRecord(null); setSaveObservation('')
       uncertain.current = false; setTimer(null); setPending(null); setStatus(''); setConfirmed(false); setError(''); setSide('')
     } finally { writing.current = false }
   }
@@ -214,8 +226,9 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
         <label><input type="checkbox" disabled={busy} checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />{t('interaction.timer.confirm')}</label>
         <button type="submit" className="pilot-button" disabled={blocked || busy || Boolean(duplicates.review) || !confirmed || (!pending && !validTimes) || error === 'conflict'}>
         {t(pending ? 'localCare.record.resend' : 'interaction.timer.save')}</button></form>}
-      <DuplicateReview review={duplicates.review} disabled={busy} continueDisabled={blocked || !confirmed || error === 'conflict'} onContinue={() => save({ preventDefault() {} })} onCancel={() => {
-        duplicates.clear(); setPending(null); setStatus(''); setConfirmed(false)
+      <DuplicateReview review={duplicates.review} disabled={busy} continueDisabled={blocked || !confirmed || error === 'conflict'} onContinue={() => save({ preventDefault() {} }, true)} onCancel={() => {
+        if (writing.current || (uncertain.current && !window.confirm(t('polish.abandonWrite')))) return
+        duplicates.clear(); setPending(null); setStatus(''); setConfirmed(false); setSaveObservation(''); setExistingRecord(null)
       }} />
       {correction && <p role="status">{t('reviewFixes.timerCorrection')}</p>}
       {pending && <p>{t('localCare.record.retryHint')} <button type="button" className="text-action" disabled={busy} onClick={() => check()}>{t('localCare.record.check')}</button></p>}
@@ -226,6 +239,7 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
     </>}
     {['checking', 'clearing'].includes(status) ? <p role="status">{t('common.loading')}</p> : <RecordSaveStatus status={status} />}
     {error && <ErrorMessage title={t(`interaction.timer.errors.${error}`)} />}
+    {saveObservation && <p role="status">{t(`reviewFixes.creation.${saveObservation}`)}</p>}
     {lastSaved && <button type="button" className="pilot-button secondary" onClick={() => onLocate?.(lastSaved)}>{t('continuity.period.findSaved')}</button>}
     <ConfirmDialog open={visible && confirmDiscard && Boolean(timer)} danger title={t('interaction.timer.discard')}
       description={t(pending ? 'polish.abandonWrite' : 'interaction.timer.discardConfirm')} confirmLabel={t('interaction.timer.discard')}

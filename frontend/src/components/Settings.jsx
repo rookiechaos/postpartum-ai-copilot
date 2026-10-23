@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 import { Save, User, Baby, Shield, HelpCircle, Eye } from 'lucide-react'
@@ -25,6 +24,7 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
   })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState(false)
   const [loadState, setLoadState] = useState('loading')
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [activeSubTab, setActiveSubTab] = useState('profile')
@@ -35,6 +35,7 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
     const loadSettings = async () => {
       setLoadState('loading')
       setSaved(false)
+      setSaveError(false)
       try {
         const context = await api.getUserContext(userId)
         if (!active) return
@@ -61,6 +62,8 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
   const handleSave = async () => {
     if (loadState !== 'ready' || saving) return
     setSaving(true)
+    setSaved(false)
+    setSaveError(false)
     try {
       const savedContext = await api.updateUserContext(userId, {
         babyName: settings.babyName,
@@ -79,7 +82,7 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
       setTimeout(() => setSaved(false), 3000)
     } catch (error) {
       console.error('Error saving settings:', error)
-      toast.error(i18n.t('common.error'))
+      setSaveError(true)
     } finally {
       setSaving(false)
     }
@@ -125,11 +128,7 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
       {loadState === 'loading' && <p role="status">{t('common.loading')}</p>}
       {loadState === 'error' && <ErrorMessage title={t('pilot.loadFailed')} onRetry={() => setLoadAttempt(value => value + 1)} />}
       <fieldset className="settings-sections" disabled={loadState !== 'ready' || saving}>
-        <motion.div
-          className="settings-section"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
+        <div className="settings-section">
           <div className="section-header">
             <User size={20} />
             <h3>{t('settings.profile')}</h3>
@@ -147,14 +146,9 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
               <p className="field-hint">{t('ui.account.languageNotice')}</p>
             </div>
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
-          className="settings-section"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
+        <div className="settings-section">
           <div className="section-header">
             <Baby size={20} />
             <h3>{t('settings.babyInfo')}</h3>
@@ -186,14 +180,9 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
               {['breast', 'formula', 'mixed'].map(value => <option key={value} value={value}>{t(`tracking.${value}`)}</option>)}
             </FormField>
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
-          className="settings-section"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
+        <div className="settings-section">
           <div className="section-header">
             <Shield size={20} />
             <h3>{t('settings.privacy')}</h3>
@@ -203,9 +192,10 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
               {t('settings.privacyNote')}
             </p>
           </div>
-        </motion.div>
+        </div>
       </fieldset>
 
+      {saveError && <ErrorMessage title={t('pilot.saveFailed')} onRetry={handleSave} retryDisabled={saving || loadState !== 'ready'} />}
       <div className="settings-footer">
         <Button
           busy={saving} busyLabel={t('settings.saving')}

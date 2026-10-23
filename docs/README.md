@@ -41,6 +41,7 @@ docs/
 - [Session revocation fixes, migration and pending acceptance](security/REPO_REVIEW_FIXES_2026-10-20.md)
 - [Repository review fixes: passwords, deletion, pagination, exports and Japan-time reminders](security/REPO_REVIEW_FIXES_2026-10-22.md)
 - [Latest follow-up fixes: invitation revocation, record restoration, consultation pagination and keyboard access](security/REPO_REVIEW_FOLLOWUP_2026-10-22.md)
+- [Record creation retries, two-factor recovery codes, chart controls and accessible feedback](security/REPO_REVIEW_UI_AND_RETRIES_2026-10-22.md)
 
 ## Subfolders
 

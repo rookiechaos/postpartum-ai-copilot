@@ -485,6 +485,13 @@
     "reducedMotion": "Reduce motion", "reducedMotionDesc": "Reduce animations and transitions.", "deviceOnly": "Saved in this device's browser without account or health information.", "keyboardHelp": "Use Tab to move between controls, then Enter or Space to activate them.", "saveFailed": "This browser could not save the preference. It is applied to the current screen."
   },
   "security": {
+    "backupCodesTitle": "Save your recovery codes before enabling",
+    "backupCodesHelp": "If you lose access to your authenticator, enter one of these codes when signing in. Each code works once. Write them down or save them in a secure place you can access without this device. Do not share them.",
+    "copyBackupCodes": "Copy recovery codes",
+    "backupCodesCopied": "Copied. Store the codes securely, then confirm below.",
+    "backupCodesCopyFailed": "Could not copy. Select the codes to copy them manually, or write them down.",
+    "backupCodesSaved": "I have saved these recovery codes in a secure place.",
+    "backupCodesSignOut": "Enabling signs you out immediately. These codes will no longer be displayed. Canceling clears this screen; starting setup again replaces these codes.",
     "title": "Account security", "description": "Check two-factor authentication and login history.", "confirmDisable2FA": "Disable two-factor authentication? You must sign in again after the change.", "confirmRemoveDevice": "Remove this registered device?",
     "twoFactorAuth": "Two-factor authentication", "twoFactorDesc": "Use an authenticator code as well as your password. Sign in again after changing this setting.", "2faEnabled": "Two-factor authentication is enabled", "2faDisabled": "Two-factor authentication is not set up",
     "scanQRCode": "Scan with your authenticator app", "enterVerificationCode": "Enter the six-digit code shown in your authenticator app.", "qrAlt": "QR code for authenticator setup", "enable": "Enable two-factor authentication", "disable2FA": "Disable two-factor authentication", "setup2FA": "Set up two-factor authentication",

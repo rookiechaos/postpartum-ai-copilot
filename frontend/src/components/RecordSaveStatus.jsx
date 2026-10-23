@@ -8,6 +8,7 @@ const detailedStates = new Set(['offline', 'unconfirmed', 'unsaved', 'removeFail
 
 export default function RecordSaveStatus({ status }) {
   const { t } = useTranslation()
+  if (status === 'checking') return <StatusMessage title={t('common.loading')} />
   if (!states.has(status)) return null
   const detail = detailedStates.has(status) ? t(`localCare.record.statusDetails.${status}`) : ''
   const tone = ['saved', 'removed', 'restored', 'undone'].includes(status) ? 'success'

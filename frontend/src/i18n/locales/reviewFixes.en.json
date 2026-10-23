@@ -14,6 +14,15 @@
   "timerCorrection": "No saved record was found at this moment. You can correct the input while keeping the start and end times. The same save reference is retained in case the original save finishes later. If it has already saved, open that record to make corrections.",
   "timerExisting": "A record exists for this save reference but differs from the input. Open the saved record to check and correct it.",
   "openTimerRecord": "Open saved record",
+  "creation": {
+    "changed": "This record was saved, but it has since changed or differs from your input. Your input is retained. Open the current record to check it; resending will not overwrite it.",
+    "deleted": "This record was saved and later deleted. Your input is retained for review. Resending will not recreate it.",
+    "notFound": "No saved record was found at this moment. An earlier request may still finish later. Check again, or explicitly resend the same content.",
+    "checkFailed": "The current saved record could not be read. Your input is retained and the result remains unconfirmed. Check your connection and check again.",
+    "conflict": "This save could not be accepted. Check its result and your current records before continuing.",
+    "review": "Check current record",
+    "replace": "Stop this pending check and open the current record for editing? The pending input will be discarded. Any request already sent is not cancelled."
+  },
   "restoration": {
     "review": "Review restoring the deleted record",
     "pending": "Continue restoring or check the result",

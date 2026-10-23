@@ -89,6 +89,60 @@
   margin: 1rem 0;
 }
 
+.backup-codes-panel {
+  margin: var(--space-5) 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-control);
+  background: var(--color-warm-surface);
+  text-align: start;
+}
+
+.backup-codes-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+  gap: var(--space-2);
+  padding: 0;
+  margin: var(--space-4) 0;
+  list-style: none;
+}
+
+.backup-codes-list code {
+  display: block;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-align: center;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.backup-codes-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  cursor: pointer;
+}
+
+.security-settings .backup-codes-confirmation input {
+  flex: 0 0 auto;
+  width: 1.25rem;
+  height: 1.25rem;
+  min-height: 0;
+  margin: 0.2rem 0 0;
+  padding: 0;
+}
+
+.backup-codes-copy-status,
+.backup-codes-notice {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-muted);
+}
+
 .security-actions {
   margin-top: 1rem;
 }
