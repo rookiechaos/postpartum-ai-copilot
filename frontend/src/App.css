@@ -1,4 +1,8 @@
 .app { max-width: var(--content-width); margin: 0 auto; min-height: 100vh; background: transparent; color: var(--color-text); }
+.family-skip-link { position: fixed; top: var(--space-3); left: var(--space-3); z-index: 200; max-width: calc(100vw - 2rem); padding: var(--space-3) var(--space-4); border: 2px solid var(--color-brand); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-brand); font-weight: 700; transform: translateY(calc(-100% - 2rem)); }
+.family-skip-link:focus { transform: none; outline: var(--focus-ring); outline-offset: 3px; }
+.family-subpage-nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-5); font-size: var(--font-size-sm); }
+.family-subpage-nav span { color: var(--color-muted); }
 .app-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-5); padding: var(--space-8) var(--space-6) var(--space-6); }
 .header-content { min-width: 0; }
 .header-content h1 { font-size: clamp(1.1rem, 2.4vw, 1.4rem); line-height: 1.5; overflow-wrap: anywhere; letter-spacing: .025em; }

@@ -19,6 +19,8 @@ Design illustrations with fictional examples; these are not screenshots of the r
 
 配色・余白・文字・ナビゲーションの整理と、図の範囲は[UIの見た目の改善と模式図](docs/product/VISUAL_REFRESH.md)にまとめています。図は構成を伝えるために内容を省略しており、表示・操作の実行確認を示すものではありません。
 
+最新の[アプリ全体の使いやすさと復帰の改善](docs/product/APP_EXPERIENCE.md)では、家庭の各ページから途中の記録・タイマー・AI相談・相談材料の保存確認に戻る入口、現在のページに沿ったキーボード操作、地域の相談先検索、画面ごとの日本語・英語の復帰案内を追加しています。入力の自動送信は行わず、未対応の下書きと未実施の受入確認も同資料に記載しています。
+
 今回の改善はソース変更の段階です。依頼に従い、アプリの起動、依存関係のインストール、ビルド、テスト、実データでの操作は行っていません。
 実際の利用開始前に、[基本機能の変更と未実施の受入確認](docs/product/PRODUCT_IMPROVEMENTS.md)、[7項目の製品改善・移行事項](docs/product/PRODUCT_POLISH.md)、[UI構成の整理と未実施の表示確認](docs/product/UI_REFINEMENT.md)を確認してください。過去の検証結果は今回の動作確認を意味しません。
 今回追加した[家族の引き継ぎ・相談の進捗・アカウント対応の仕様と未実施の確認](docs/product/CARE_FLOWS.md)も参照してください。

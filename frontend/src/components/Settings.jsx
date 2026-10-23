@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
+import { revealElement } from '../utils/focusView'
 import { Save, User, Baby, Shield, HelpCircle, Eye } from 'lucide-react'
 import { useToast } from './Toast'
 import PrivacyCenter from './PrivacyCenter'
@@ -13,7 +14,7 @@ import { InstallInstructions } from './InstallPrompt'
 import { Button, ErrorMessage, FormField, PageHeader } from './ui'
 import './Settings.css'
 
-function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntrance }) {
+function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntrance, navigationRequest, visible = true }) {
   const { t, i18n } = useTranslation()
   const displayLanguage = (i18n.resolvedLanguage || i18n.language || 'ja').split('-')[0]
   const [settings, setSettings] = useState({
@@ -28,7 +29,15 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
   const [loadState, setLoadState] = useState('loading')
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [activeSubTab, setActiveSubTab] = useState('profile')
+  const handledNavigation = useRef(0)
+  const helpButton = useRef(null)
   const toast = useToast()
+
+  useEffect(() => {
+    if (!visible || !navigationRequest?.key || handledNavigation.current === navigationRequest.key || navigationRequest.view !== 'help') return
+    setActiveSubTab('help')
+    if (revealElement(helpButton.current)) handledNavigation.current = navigationRequest.key
+  }, [navigationRequest?.key, visible])
 
   useEffect(() => {
     let active = true
@@ -46,9 +55,8 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
           feedingType: context.feedingType || ''
         })
         setLoadState('ready')
-      } catch (error) {
+      } catch {
         if (active) {
-          console.error('Error loading settings:', error)
           setLoadState('error')
         }
       }
@@ -80,8 +88,7 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
       }
       toast.success(i18n.t('settings.saved'))
       setTimeout(() => setSaved(false), 3000)
-    } catch (error) {
-      console.error('Error saving settings:', error)
+    } catch {
       setSaveError(true)
     } finally {
       setSaving(false)
@@ -94,6 +101,7 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
 
       <div className="settings-tabs">
         <button
+          type="button" aria-pressed={activeSubTab === 'profile'}
           className={activeSubTab === 'profile' ? 'active' : ''}
           onClick={() => setActiveSubTab('profile')}
         >
@@ -101,6 +109,7 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
           {t('settings.profile')}
         </button>
         <button
+          type="button" aria-pressed={activeSubTab === 'export'}
           className={activeSubTab === 'export' ? 'active' : ''}
           onClick={() => setActiveSubTab('export')}
         >
@@ -108,6 +117,7 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
           {t('work.dataPrivacy')}
         </button>
         <button
+          type="button" ref={helpButton} aria-pressed={activeSubTab === 'help'}
           className={activeSubTab === 'help' ? 'active' : ''}
           onClick={() => setActiveSubTab('help')}
         >
@@ -115,6 +125,7 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
           {t('settings.help')}
         </button>
         <button
+          type="button" aria-pressed={activeSubTab === 'accessibility'}
           className={activeSubTab === 'accessibility' ? 'active' : ''}
           onClick={() => setActiveSubTab('accessibility')}
         >

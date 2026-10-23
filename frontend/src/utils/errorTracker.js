@@ -77,10 +77,10 @@ class ErrorTracker {
       await api.post('/api/monitoring/errors', {
         errors: errorsToReport
       })
-    } catch (error) {
+    } catch {
       // If reporting fails, keep errors for next attempt
       this.errors.unshift(...errorsToReport)
-      console.error('Failed to report errors:', error)
+      console.error('Diagnostics could not be sent.')
     }
   }
 
@@ -139,9 +139,9 @@ class ErrorTracker {
         })
 
         observer.observe({ entryTypes: ['largest-contentful-paint', 'first-input', 'layout-shift'] })
-      } catch (error) {
+      } catch {
         // PerformanceObserver might not be supported
-        console.warn('Web Vitals tracking not available:', error)
+        console.warn('Performance diagnostics are unavailable.')
       }
     }
   }

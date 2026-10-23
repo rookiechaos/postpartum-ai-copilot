@@ -4,6 +4,14 @@ import api from '../utils/api'
 import { needsReview, phoneHref, publicHttps } from '../utils/publicDirectory'
 import { revealElement } from '../utils/focusView'
 import SupportProgress, { useSupportJourneys } from './SupportProgress'
+import { Button, EmptyState, FormField } from './ui'
+import './SupportDirectorySearch.css'
+
+// Only index the public fields displayed on service cards, including their details.
+// Queries stay in this mounted view; they are never sent to the API or stored.
+const searchableFields = ['name', 'area', 'description', 'audience', 'hours', 'phone',
+  'cost_note', 'application_steps', 'visiting_note', 'preparation', 'fallback_contact', 'pause_notice']
+const normalizeSearch = value => String(value || '').normalize('NFKC').toLowerCase().trim()
 
 // National sources remain available when the API or model is unavailable.
 export default function SupportDirectory({ compact = false, previewProfile, visible = true, onPrepareSheet, userId, navigationRequest }) {
@@ -12,6 +20,7 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
   const [unavailable, setUnavailable] = useState(false)
   const [directoryAttempt, setDirectoryAttempt] = useState(0)
   const [purpose, setPurpose] = useState('all')
+  const [query, setQuery] = useState('')
   const [script, setScript] = useState('')
   const [scriptError, setScriptError] = useState('')
   const [scriptTarget, setScriptTarget] = useState('')
@@ -24,6 +33,7 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
   const pendingStepFocus = useRef(false)
   const handledNavigation = useRef(null)
   const scriptHeading = useRef(null)
+  const searchInput = useRef(null)
   const pendingScriptFocus = useRef(false)
   const progress = useSupportJourneys(userId, visible && !compact && !previewProfile)
   const progressEnabled = Boolean(userId && !compact && !previewProfile)
@@ -45,6 +55,18 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
     return () => { active = false }
   }, [previewProfile, visible, directoryAttempt])
   const shownProfile = previewProfile || profile
+  const resources = shownProfile?.resources || []
+  const searchTerms = normalizeSearch(query).split(/\s+/).filter(Boolean)
+  const resourceMatches = resources.map(resource => {
+    if (purpose !== 'all' && (resource.category || 'parenting') !== purpose) return false
+    const searchableText = normalizeSearch(searchableFields.map(field => resource[field] || '').join(' '))
+    return searchTerms.every(term => searchableText.includes(term))
+  })
+  const matchingCount = resourceMatches.filter(Boolean).length
+  const hasFilters = purpose !== 'all' || Boolean(query)
+  const clearFilters = () => {
+    setPurpose('all'); setQuery(''); searchInput.current?.focus()
+  }
   const selectedContact = contactKey === 'organization' && shownProfile?.name ? { ...shownProfile, resource_key: 'organization' }
     : shownProfile?.resources?.find(resource => resource.resource_key === contactKey)
   const selectedName = selectedContact?.name || progress.rows.find(row => row.contact_key === contactKey)?.contact_name || progress.editors[contactKey]?.contact_name || ''
@@ -116,6 +138,16 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
         </div></fieldset>
         <p className="field-hint">{t(purpose === 'all' ? 'localCare.support.purposeNotice' : 'localCare.support.matchedCategory',
           { category: t(`polish.purposes.${purpose}`) })}</p>
+        <div className="support-search">
+          <FormField ref={searchInput} type="search" label={t('findSupport.label')} hint={t('findSupport.hint')}
+            placeholder={t('findSupport.placeholder')} autoComplete="off" spellCheck={false} maxLength={100}
+            value={query} onChange={event => setQuery(event.target.value)} />
+          <div className="support-search-summary">
+            <p role="status" aria-atomic="true">{shownProfile ? t('findSupport.count', { count: matchingCount, total: resources.length }) : t('findSupport.pending')}</p>
+            {hasFilters && <Button variant="quiet" onClick={clearFilters}>{t('findSupport.clear')}</Button>}
+          </div>
+          <p className="support-search-scope">{t('findSupport.scope')}</p>
+        </div>
         {unavailable && <p role="status">{t(shownProfile ? 'flows.directory.stale' : 'pilot.directoryUnavailable')}
           <button type="button" className="text-action" onClick={() => setDirectoryAttempt(value => value + 1)}>{t('friendly.support.reloadDirectory')}</button></p>}
         {!previewProfile && !unavailable && !profile && <p role="status">{t('common.loading')}</p>}
@@ -135,8 +167,8 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
           {shownProfile.account_support_notice && <p>{shownProfile.account_support_notice}</p>}
           </details>
         </article>}
-        {shownProfile?.resources?.map((resource, index) => <article key={resource.resource_key || index} className="support-card local-support-card"
-          hidden={purpose !== 'all' && (resource.category || 'parenting') !== purpose}>
+        {resources.map((resource, index) => <article key={resource.resource_key || index} className="support-card local-support-card"
+          hidden={!resourceMatches[index]}>
           <h4>{publicHttps(resource.url) ? <a href={publicHttps(resource.url)} target="_blank" rel="noreferrer">{resource.name}</a> : resource.name}</h4>
           <p>{t('work.serviceArea')}: {resource.area || t('pilot.checkSource')}</p>
           <p>{t('pilot.hours')}: {resource.hours || t('pilot.checkSource')}</p>
@@ -161,8 +193,13 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
             </section>)}
           </details>
         </article>)}
-        {shownProfile && purpose !== 'all' && !shownProfile.resources?.some(resource => (resource.category || 'parenting') === purpose)
-          && <p>{t('polish.noPurposeContacts')}</p>}
+        {shownProfile && matchingCount === 0 && <div className="support-search-empty">
+          <EmptyState compact icon={null} headingLevel={4}
+            title={t(resources.length ? 'findSupport.noMatchesTitle' : 'findSupport.noServicesTitle')}
+            description={t(resources.length ? 'findSupport.noMatchesDescription' : 'findSupport.noServicesDescription',
+              { national: t('friendly.support.national') })}
+            actionLabel={t('findSupport.clear')} onAction={hasFilters ? clearFilters : undefined} />
+        </div>}
         </div>
         {progressEnabled && progress.error && <p role="alert">{t('flows.journey.loadError')} <button type="button" className="text-action" onClick={progress.reload}>{t('friendly.support.reloadAllProgress')}</button></p>}
         {progressEnabled && shownProfile && archived.length > 0 && <details>

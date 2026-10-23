@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from './utils/api'
-import { CareSessionProvider } from './utils/CareSession'
+import { CareSessionProvider, useCareSession } from './utils/CareSession'
 import useEntranceNavigation from './utils/useEntranceNavigation'
 import { applyDisplaySettings, readDisplaySettings } from './utils/displaySettings'
 import { revealElement } from './utils/focusView'
@@ -23,6 +23,8 @@ import LanguageSelector from './components/LanguageSelector'
 import OperatorPortal from './components/OperatorPortal'
 import Auth from './components/Auth'
 import ProductBrand from './components/ProductBrand'
+import ErrorBoundary from './components/ErrorBoundary'
+import PendingCare from './components/PendingCare'
 import { NotificationDelivery } from './components/NotificationManager'
 import { Home, MessageCircle, BarChart3, Phone, Settings as SettingsIcon, Moon } from 'lucide-react'
 import './App.css'
@@ -86,8 +88,8 @@ function App() {
     api.setOnUnauthorized(clearAccount)
 
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(error => {
-        console.error('Service Worker registration failed:', error)
+      navigator.serviceWorker.register('/sw.js').catch(() => {
+        console.error('Service Worker registration failed')
       })
     }
 
@@ -124,25 +126,27 @@ function App() {
   if (!authChecked) {
     return (
       <div className="app app-loading" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p>{t('auth.loggingIn', 'Loading...')}</p>
+        <p role="status">{t('auth.loggingIn', 'Loading...')}</p>
       </div>
     )
   }
-  if (!entry) return <EntryScreen onChoose={chooseEntry} />
-  if (!userId) return <Auth entry={entry} onBack={() => chooseEntry(null)} onSuccess={completeSignIn} />
-  if (entry === 'operator') return <OperatorPortal key={`${sessionKey}:${userId}:operator`}
-    registerLeaveGuard={registerLeaveGuard} onExit={() => chooseEntry(null)} onOrganization={() => chooseEntry('organization')} />
-  if (entry === 'organization') return <OrganizationPortal key={`${sessionKey}:${userId}:organization`}
-    userId={userId} registerLeaveGuard={registerLeaveGuard} onFamily={() => chooseEntry('family')} onExit={() => chooseEntry(null)} />
+  if (!entry) return <ErrorBoundary key="entry"><EntryScreen onChoose={chooseEntry} /></ErrorBoundary>
+  if (!userId) return <ErrorBoundary key={`auth:${entry}`} onHome={() => chooseEntry(null)}>
+    <Auth entry={entry} onBack={() => chooseEntry(null)} onSuccess={completeSignIn} /></ErrorBoundary>
+  if (entry === 'operator') return <ErrorBoundary key={`${sessionKey}:${userId}:operator`} onHome={() => chooseEntry(null)}>
+    <OperatorPortal registerLeaveGuard={registerLeaveGuard} onExit={() => chooseEntry(null)} onOrganization={() => chooseEntry('organization')} /></ErrorBoundary>
+  if (entry === 'organization') return <ErrorBoundary key={`${sessionKey}:${userId}:organization`} onHome={() => chooseEntry(null)}>
+    <OrganizationPortal userId={userId} registerLeaveGuard={registerLeaveGuard} onFamily={() => chooseEntry('family')} onExit={() => chooseEntry(null)} /></ErrorBoundary>
   return <CareSessionProvider key={`${sessionKey}:${userId}:family`} userId={userId}>
-    <AuthenticatedApp userId={userId} onChooseEntry={chooseEntry}
+    <AuthenticatedApp userId={userId} onChooseEntry={chooseEntry} registerLeaveGuard={registerLeaveGuard}
       pendingInvite={pendingInvite} onInvitationHandled={clearInvite} />
   </CareSessionProvider>
 }
 
 // A new login mounts fresh private state, including all child components.
-function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHandled }) {
+function AuthenticatedApp({ userId, onChooseEntry, registerLeaveGuard, pendingInvite, onInvitationHandled }) {
   const { t, i18n } = useTranslation()
+  const { work } = useCareSession()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [nightMode, setNightMode] = useState(false)
   const [showWelcome, setShowWelcome] = useState(false)
@@ -150,6 +154,8 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
   const [trackingRequest, setTrackingRequest] = useState(null)
   const [chatDraft, setChatDraft] = useState('')
   const [chatRequestKey, setChatRequestKey] = useState(0)
+  const [chatNavigation, setChatNavigation] = useState({ key: 0 })
+  const [settingsNavigation, setSettingsNavigation] = useState({ key: 0 })
   const [trackingRequestKey, setTrackingRequestKey] = useState(0)
   const [visitedTabs, setVisitedTabs] = useState(['dashboard'])
   const [recordVersion, setRecordVersion] = useState(0)
@@ -161,6 +167,16 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
   const familyVisible = !nightMode && !pendingInvite
   const panelRefs = useRef({})
   const pendingPanelFocus = useRef(false)
+  const hasOpenWork = Object.values(work).some(item => item.critical || item.protectLeave)
+  const confirmLeave = useCallback(() => !hasOpenWork || window.confirm(t('experience.leavePrompt')), [hasOpenWork, t])
+
+  useEffect(() => registerLeaveGuard(confirmLeave), [registerLeaveGuard, confirmLeave])
+  useEffect(() => {
+    if (!hasOpenWork) return
+    const warn = event => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [hasOpenWork])
 
   useEffect(() => {
     if (!showWelcome && familyVisible && pendingPanelFocus.current) {
@@ -176,51 +192,12 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
     if (welcomeCompleted) {
       api.getUserContext(userId).then(context => {
         if (active) setUserContext(context)
-      }).catch(error => {
-        if (active) console.error('Error loading context:', error)
+      }).catch(() => {
+        if (active) console.error('Error loading context')
       })
     }
     return () => { active = false }
   }, [userId])
-
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      // Skip if user is typing in input/textarea
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-        return
-      }
-
-      // Keyboard shortcuts
-      if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
-        e.preventDefault()
-        // Focus search if available
-        const searchInput = document.querySelector('input[type="search"], input[placeholder*="Search"]')
-        if (searchInput) {
-          searchInput.focus()
-        }
-      } else if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
-        e.preventDefault()
-        // Open help
-        navigate('settings')
-        // Trigger help tab if available
-        const helpButton = document.querySelector('[data-tab="help"]')
-        if (helpButton) {
-          helpButton.click()
-        }
-      } else if (e.key === 'Escape') {
-        // Close modals
-        const modals = document.querySelectorAll('.modal, .overlay')
-        modals.forEach(modal => {
-          if (modal.style.display !== 'none') {
-            modal.style.display = 'none'
-          }
-        })
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
 
   const handleWelcomeComplete = async (formData = {}, task = 'record') => {
     const suppliedFields = Object.fromEntries(Object.entries(formData).filter(([, value]) => value !== ''))
@@ -237,21 +214,47 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
     setUserContext(newContext)
   }
 
-  const navigate = (tab, detail) => {
+  const navigate = useCallback((tab, detail) => {
     if (tab === 'dashboard' && detail) setDashboardRequest(previous => ({ ...detail, key: previous.key + 1 }))
     if (tab === 'tracking' && detail) { setTrackingRequest(detail); setTrackingRequestKey(value => value + 1) }
-    if (tab === 'chat' && detail) { setChatDraft(detail); setChatRequestKey(value => value + 1) }
+    const chatResume = tab === 'chat' && detail?.action === 'resume'
+    const chatQuestion = tab === 'chat' && typeof detail === 'string' && detail.length > 0
+    const settingsHelp = tab === 'settings' && detail?.view === 'help'
+    if (chatQuestion) { setChatDraft(detail); setChatRequestKey(value => value + 1) }
+    if (chatResume) setChatNavigation(previous => ({ key: previous.key + 1, action: 'resume' }))
+    if (settingsHelp) setSettingsNavigation(previous => ({ key: previous.key + 1, view: 'help' }))
     const supportDestination = tab === 'support' && ['contacts', 'sheet'].includes(detail?.view) ? detail : null
     if (supportDestination) setSupportRequest(previous => ({ key: previous.key + 1, view: supportDestination.view,
       contactKey: supportDestination.contactKey || '',
       contactName: supportDestination.contactName || '',
       question: supportDestination.view === 'sheet' && typeof supportDestination.question === 'string' ? supportDestination.question : '' }))
     // A requested support view or incoming question owns its more specific focus target.
-    pendingPanelFocus.current = !supportDestination && !(detail && ['chat', 'tracking', 'dashboard'].includes(tab))
+    pendingPanelFocus.current = !supportDestination && !chatResume && !chatQuestion && !settingsHelp
+      && !(detail && ['tracking', 'dashboard'].includes(tab))
     setNavigationKey(value => value + 1)
     setVisitedTabs(previous => previous.includes(tab) ? previous : [...previous, tab])
     setActiveTab(tab)
-  }
+  }, [])
+
+  useEffect(() => {
+    const handleKeyDown = event => {
+      if (!familyVisible || showWelcome || event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return
+      if (event.target?.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return
+      if (Array.from(document.querySelectorAll('dialog[open], [role="dialog"], [aria-modal="true"]'))
+        .some(element => !element.closest('[hidden]') && element.getClientRects().length)) return
+      if (event.key === '/') {
+        // Retained tabs and closed details must never receive shortcut focus.
+        const search = Array.from(panelRefs.current[activeTab]?.querySelectorAll('input[type="search"]') || [])
+          .find(element => !element.disabled && !element.closest('[hidden], [inert]') && element.getClientRects().length
+            && window.getComputedStyle(element).visibility !== 'hidden')
+        if (search) { event.preventDefault(); search.focus() }
+      } else if (event.key === '?') {
+        event.preventDefault(); navigate('settings', { view: 'help' })
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [activeTab, familyVisible, showWelcome, navigate])
 
   const handleInvitation = familyId => {
     onInvitationHandled()
@@ -260,9 +263,9 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
       setRecordVersion(value => value + 1); setNightMode(false); navigate('family')
     }
   }
-  if (pendingInvite && showWelcome) return <FamilyInviteReview token={pendingInvite} onHandled={handleInvitation} />
+  if (pendingInvite && showWelcome) return <ErrorBoundary compact onHome={onInvitationHandled}><FamilyInviteReview token={pendingInvite} onHandled={handleInvitation} /></ErrorBoundary>
   if (showWelcome) {
-    return <WelcomeScreen onComplete={handleWelcomeComplete} onExit={() => onChooseEntry(null)} />
+    return <ErrorBoundary key="welcome" onHome={() => onChooseEntry(null)}><WelcomeScreen onComplete={handleWelcomeComplete} onExit={() => onChooseEntry(null)} /></ErrorBoundary>
   }
 
   const tabs = [
@@ -274,8 +277,11 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
   ]
 
   return (
-    <><NotificationDelivery userId={userId} />{pendingInvite && <FamilyInviteReview token={pendingInvite} onHandled={handleInvitation} />}
+    <><NotificationDelivery userId={userId} />{pendingInvite && <ErrorBoundary compact onHome={onInvitationHandled}><FamilyInviteReview token={pendingInvite} onHandled={handleInvitation} /></ErrorBoundary>}
     <div className="app family-app" hidden={!familyVisible}>
+      <a className="family-skip-link" href="#family-main" onClick={event => {
+        event.preventDefault(); revealElement(panelRefs.current[activeTab])
+      }}>{t('experience.skip')}</a>
       <header className="app-header">
         <div className="header-content">
           <ProductBrand as="h1" />
@@ -311,8 +317,13 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
         ))}
       </nav>
 
-      <main className="app-main">
+      <main className="app-main" id="family-main" tabIndex={-1}>
         <ConnectionNotice onCheck={() => navigate('tracking')} />
+        <ErrorBoundary compact><PendingCare activeTab={activeTab} onNavigate={navigate} /></ErrorBoundary>
+        {['family', 'checkin'].includes(activeTab) && <nav className="family-subpage-nav" aria-label={t('ui.nav.label')}>
+          <button type="button" className="text-action" onClick={() => navigate('dashboard')}>{t('experience.backHome')}</button>
+          <span aria-current="page">{t(activeTab === 'family' ? 'polish.familyHandoff' : 'checkin.title')}</span>
+        </nav>}
         {firstTask && <section className="pilot-panel first-task-guide"><h3>{t(`continuity.onboarding.tasks.${firstTask}.title`)}</h3>
           <p>{t(`continuity.onboarding.tasks.${firstTask}.hint`)}</p>
           <button type="button" className="text-action" onClick={() => setFirstTask('')}>{t('continuity.onboarding.dismiss')}</button>
@@ -321,12 +332,14 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
           ref={element => { panelRefs.current[tab] = element }}
           aria-labelledby={tabs.some(item => item.id === tab) ? `family-tab-${tab}` : undefined}
           aria-label={tab === 'checkin' ? t('checkin.title') : tab === 'family' ? t('polish.familyHandoff') : undefined}>
+            <ErrorBoundary compact label={tabs.find(item => item.id === tab)?.label || t(tab === 'family' ? 'polish.familyHandoff' : 'checkin.title')}
+              onHome={tab !== 'dashboard' ? () => navigate('dashboard') : undefined}>
             {tab === 'dashboard' && (
               <Dashboard userId={userId} userContext={userContext} refreshKey={recordVersion} visible={activeTab === 'dashboard' && familyVisible}
                 navigationRequest={dashboardRequest}
                 onNavigate={navigate} onRecordsChanged={() => setRecordVersion(value => value + 1)} />
             )}
-            {tab === 'chat' && <ChatInterface userId={userId} initialDraft={chatDraft} draftVersion={chatRequestKey} visible={activeTab === 'chat' && familyVisible}
+            {tab === 'chat' && <ChatInterface userId={userId} initialDraft={chatDraft} draftVersion={chatRequestKey} navigationRequest={chatNavigation} visible={activeTab === 'chat' && familyVisible}
               onPrepareSheet={(script, contact) => navigate('support', { view: 'sheet', question: script, contactKey: contact?.key, contactName: contact?.name })} />}
             {tab === 'tracking' && <TrackingPanel userId={userId} initialEntryType={trackingRequest} requestKey={trackingRequestKey}
               visible={activeTab === 'tracking' && familyVisible}
@@ -340,16 +353,19 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
             {tab === 'settings' && (
               <Settings
                 userId={userId}
+                navigationRequest={settingsNavigation} visible={activeTab === 'settings' && familyVisible}
                 onContextUpdate={handleContextUpdate}
-                onLogout={() => api.logout()}
+                onLogout={() => { if (confirmLeave()) api.logout() }}
                 onSwitchEntrance={() => onChooseEntry(null)}
                 onFindHelp={() => navigate('support', { view: 'contacts' })}
               />
             )}
+            </ErrorBoundary>
           </section>)}
         <div className="family-tab-panel" hidden={activeTab !== 'dashboard'}><InstallPrompt ready={recordVersion > 0} /></div>
       </main>
-    </div>{nightMode && <div hidden={Boolean(pendingInvite)}><NightMode userId={userId} onExit={() => setNightMode(false)} /></div>}</>
+    </div>{nightMode && <div hidden={Boolean(pendingInvite)}><ErrorBoundary compact label={t('nightMode.title')} onHome={() => setNightMode(false)}>
+      <NightMode userId={userId} onExit={() => setNightMode(false)} /></ErrorBoundary></div>}</>
   )
 }
 

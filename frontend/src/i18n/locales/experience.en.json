@@ -1,0 +1,18 @@
+{
+  "skip": "Skip to this page's content",
+  "backHome": "Back to home",
+  "trackedWorkTitle": "Continue an unfinished task",
+  "trackedWorkCount_one": "{{count}} item",
+  "trackedWorkCount_other": "{{count}} items",
+  "trackedWorkOpen": "Return to this task",
+  "trackedWorkOpenItem": "Return to this task: {{title}}",
+  "trackedWorkHere": "On this page",
+  "trackedWorkHint": "Return to a record, timer, AI question or a consultation material's pending save result. Other pages may also contain unfinished inputs. Opening a task does not submit it.",
+  "leavePrompt": "Leave the family area? Unfinished record, timer or chat inputs, and pending result checks for records or consultation materials may be lost. Other pages may also have unfinished inputs. Operations already submitted may still complete. Choose Cancel to stay and review your work.",
+  "packetPending": "A consultation material's save or deletion result needs checking",
+  "chatProcessing": "Waiting for an AI answer",
+  "chatDraft": "A question is being drafted",
+  "chatRecovery": "A saved question draft is available",
+  "chatPrepared": "A consultation question is being prepared",
+  "chatHint": "Your question stays here when you switch pages during this login. Returning does not send it or select what to share."
+}

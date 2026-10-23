@@ -1,0 +1,14 @@
+{
+  "label": "Search local services",
+  "hint": "Search by service name, area or support offered. Separate words with a space to match all of them.",
+  "placeholder": "For example: feeding Shinjuku",
+  "count_one": "Showing {{count}} of {{total}} listed local services",
+  "count_other": "Showing {{count}} of {{total}} listed local services",
+  "pending": "Local service information has not loaded yet.",
+  "clear": "Clear search and category",
+  "scope": "Filters apply to the local service list. Emergency advice, national services and the operator's contact details stay available. Your call script and next steps are kept.",
+  "noMatchesTitle": "No services match these filters",
+  "noMatchesDescription": "Try a shorter word, another area or clear the filters. You can also open ‘{{national}}’ above to find a local contact.",
+  "noServicesTitle": "No local services have been listed yet",
+  "noServicesDescription": "You can open ‘{{national}}’ above for local contacts, or ask the operator if their contact details are listed."
+}

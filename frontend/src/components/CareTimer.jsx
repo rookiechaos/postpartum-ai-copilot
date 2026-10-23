@@ -64,7 +64,7 @@ export default function CareTimer({ userId, visible, requestedKind, requestVersi
     title: duplicates.review ? 'continuity.work.duplicateReview' : pending && status === 'offline' ? 'continuity.work.recordUnsent'
       : pending ? 'continuity.work.timerPending' : timer.ended_at ? 'continuity.work.timerReview' : 'continuity.work.timerRunning',
     priority: pending ? 0 : 1, tab: 'dashboard', detail: { section: 'care-timer-heading' },
-    critical: Boolean(pending), entryType: timer.entry_type, subjectId: subjectScope?.subject_id, time: timer.started_at,
+    critical: Boolean(pending), protectLeave: true, entryType: timer.entry_type, subjectId: subjectScope?.subject_id, time: timer.started_at,
     action: pending ? 'workflow.work.checkSave' : timer.ended_at ? 'workflow.work.confirmEnd' : 'workflow.work.openTimer' } : draft.candidate ? {
     version: draft.candidate.updated_at, title: 'continuity.work.timerRecovery', priority: 2,
     tab: 'dashboard', detail: { section: 'care-timer-heading' }, action: 'workflow.work.restore',

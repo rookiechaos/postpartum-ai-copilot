@@ -1,0 +1,16 @@
+{
+  "pageTitle": "This page could not be displayed",
+  "appTitle": "The app could not be displayed",
+  "pageDescription": "You can reopen this page or continue using another part of the app.",
+  "appDescription": "You can try opening the app again using the button below.",
+  "pageDraftWarning": "Unsaved input on this page may have been lost. Reopening the page starts its display again.",
+  "appDraftWarning": "Unsaved input and your current screen state may have been lost. Opening the app again restarts its display.",
+  "checkSavedWork": "If you were saving something, check your records or saved consultation sheets first. Operations already submitted may still complete. Review the result before repeating an action.",
+  "retryPage": "Reopen this page",
+  "retryApp": "Open the app again",
+  "home": "Return to home",
+  "reloadOption": "If it still does not open: reload the browser",
+  "reloadWarning": "Reloading the browser clears unsaved input and in-memory work across the app. Optional saved drafts are separate. Check saved records after reloading before repeating a save or send.",
+  "cancelReload": "Keep this screen",
+  "confirmReload": "Reload the browser"
+}

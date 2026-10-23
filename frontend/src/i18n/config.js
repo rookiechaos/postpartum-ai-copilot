@@ -24,6 +24,12 @@ import workflowEnglish from './locales/workflow.en.json'
 import workflowJapanese from './locales/workflow.ja.json'
 import foundationEnglish from './locales/foundation.en.json'
 import foundationJapanese from './locales/foundation.ja.json'
+import findSupportEnglish from './locales/findSupport.en.json'
+import findSupportJapanese from './locales/findSupport.ja.json'
+import recoveryEnglish from './locales/recovery.en.json'
+import recoveryJapanese from './locales/recovery.ja.json'
+import experienceEnglish from './locales/experience.en.json'
+import experienceJapanese from './locales/experience.ja.json'
 
 i18n
   .use(LanguageDetector)
@@ -31,10 +37,10 @@ i18n
   .init({
     resources: {
       en: {
-        translation: { ...enTranslations, polish: polishEnglish, ui: uiEnglish, flows: flowsEnglish, friendly: friendlyEnglish, localCare: localCareEnglish, interaction: interactionEnglish, continuity: continuityEnglish, reviewFixes: reviewFixesEnglish, workflow: workflowEnglish, foundation: foundationEnglish }
+        translation: { ...enTranslations, polish: polishEnglish, ui: uiEnglish, flows: flowsEnglish, friendly: friendlyEnglish, localCare: localCareEnglish, interaction: interactionEnglish, continuity: continuityEnglish, reviewFixes: reviewFixesEnglish, workflow: workflowEnglish, foundation: foundationEnglish, findSupport: findSupportEnglish, recovery: recoveryEnglish, experience: experienceEnglish }
       },
       ja: {
-        translation: { ...jaTranslations, polish: polishJapanese, ui: uiJapanese, flows: flowsJapanese, friendly: friendlyJapanese, localCare: localCareJapanese, interaction: interactionJapanese, continuity: continuityJapanese, reviewFixes: reviewFixesJapanese, workflow: workflowJapanese, foundation: foundationJapanese }
+        translation: { ...jaTranslations, polish: polishJapanese, ui: uiJapanese, flows: flowsJapanese, friendly: friendlyJapanese, localCare: localCareJapanese, interaction: interactionJapanese, continuity: continuityJapanese, reviewFixes: reviewFixesJapanese, workflow: workflowJapanese, foundation: foundationJapanese, findSupport: findSupportJapanese, recovery: recoveryJapanese, experience: experienceJapanese }
       }
     },
     fallbackLng: 'ja',

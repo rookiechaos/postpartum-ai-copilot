@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 import { requestKey } from '../utils/recordOperations'
 import { japanDateTime } from '../utils/japanTime'
+import { useCareWork } from '../utils/CareSession'
 
 const mergePackets = (...pages) => {
   const records = new Map()
@@ -37,6 +38,12 @@ export default function ConsultationPackets({ visible, content, canSave, onOpen,
   const newId = useRef(null)
   if (!newId.current) newId.current = requestKey()
   const contentVersion = JSON.stringify(content)
+  const pendingOperation = pending || unresolved
+  useCareWork('consultation-packet', pendingOperation ? {
+    version: `${pendingOperation.mode}:${pendingOperation.body?.request_key || pendingOperation.revision}`,
+    title: 'experience.packetPending', priority: 0, critical: true,
+    tab: 'support', detail: { view: 'sheet' }, action: 'experience.trackedWorkOpen',
+  } : null)
   useEffect(() => { setSaved(false) }, [contentVersion])
   useEffect(() => { onLockChange?.(busy || Boolean(pending)) }, [busy, pending, onLockChange])
   const invalidateList = () => {

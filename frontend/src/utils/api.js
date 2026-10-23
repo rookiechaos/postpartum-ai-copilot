@@ -47,7 +47,7 @@ function notifyAuthChange(preserveTasks = false, reason = 'session-change') {
   observedAuthState = readAuthState()
   const change = { token: getToken(), preserveTasks, reason }
   authListeners.forEach(callback => {
-    try { callback(change) } catch (error) { console.error('Auth listener failed:', error) }
+    try { callback(change) } catch { console.error('Authentication state could not be updated.') }
   })
 }
 
@@ -237,7 +237,7 @@ export const api = {
       assertSession(session)
       return data
     } catch (error) {
-      console.error('API GET error:', error)
+      console.error('An API read could not be completed.')
       throw communicationError(error)
     } finally {
       cleanup()
@@ -285,7 +285,7 @@ export const api = {
       assertSession(session)
       return result
     } catch (error) {
-      console.error('API POST error:', error)
+      console.error('An API save or send could not be confirmed.')
       throw communicationError(error, true)
     } finally {
       cleanup()
@@ -335,7 +335,7 @@ export const api = {
       assertSession(session)
       return data
     } catch (error) {
-      console.error('API DELETE error:', error)
+      console.error('An API deletion could not be confirmed.')
       throw communicationError(error, true)
     } finally {
       cleanup()

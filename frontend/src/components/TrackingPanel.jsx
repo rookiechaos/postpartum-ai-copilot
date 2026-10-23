@@ -97,7 +97,7 @@ export default function TrackingPanel({ userId, initialEntryType, requestKey = 0
     tab: 'tracking', detail: { action: 'resume' }, critical: true, entryType: pendingSave.data.entry_type,
     subjectId: pendingSave.data.subject_id, time: pendingSave.data.timestamp, action: 'workflow.work.checkSave' } : draft.candidate || formDraft ? {
     version: draft.candidate?.updated_at || String(formRevision), title: 'continuity.work.recordRecovery', priority: 3,
-    tab: 'tracking', detail: { action: 'resume' }, action: 'workflow.work.continueRecord',
+    tab: 'tracking', detail: { action: 'resume' }, action: 'workflow.work.continueRecord', protectLeave: Boolean(formDraft),
   } : null)
   useCareWork('record-delete', pendingDelete ? {
     version: `${pendingDelete.record_key}:${saveStatus}:${deleteObservation}`,

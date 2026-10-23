@@ -8,9 +8,10 @@ import useAccountDraft from '../utils/useAccountDraft'
 import { DraftRecoveryNotice } from './DraftRecovery'
 import { revealElement } from '../utils/focusView'
 import { publicHttps } from '../utils/publicDirectory'
+import { useCareWork } from '../utils/CareSession'
 import './ChatInterface.css'
 
-function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = true, onPrepareSheet }) {
+function ChatInterface({ userId, initialDraft = '', draftVersion = 0, navigationRequest, visible = true, onPrepareSheet }) {
   const { t, i18n } = useTranslation()
   const [messages, setMessages] = useState([
     {
@@ -49,6 +50,23 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
   const pendingComposerFocus = useRef(false)
   const questionDraftRef = useRef(null)
   const pendingQuestionFocus = useRef(false)
+  const handledNavigation = useRef(0)
+  const hasLocalDraft = Boolean(input.trim() || followUp || preparedQuestion)
+  const chatWorkTitle = loading ? 'experience.chatProcessing' : input.trim() || followUp ? 'experience.chatDraft'
+    : preparedQuestion ? 'experience.chatPrepared' : draft.candidate ? 'experience.chatRecovery' : null
+  useCareWork('chat', chatWorkTitle ? {
+    version: `${chatWorkTitle}:${messages.length}:${draft.candidate?.updated_at || ''}`,
+    title: chatWorkTitle, critical: loading, protectLeave: loading || hasLocalDraft,
+    priority: loading ? 0 : 2, tab: 'chat', detail: { action: 'resume' }, action: 'experience.trackedWorkOpen',
+  } : null)
+  useEffect(() => {
+    if (!visible || !navigationRequest?.key || handledNavigation.current === navigationRequest.key) return
+    // Continuing work only changes focus: it must never replace a question or
+    // restore consent, send a request, or recover a server draft automatically.
+    const target = loading ? threadRef.current : !input.trim() && !followUp && preparedQuestion
+      ? questionDraftRef.current : composerRef.current
+    if (revealElement(target)) handledNavigation.current = navigationRequest.key
+  }, [navigationRequest?.key, visible, loading, preparedQuestion, input, followUp])
   useEffect(() => {
     if (visible && pendingQuestionFocus.current && preparedQuestion && revealElement(questionDraftRef.current)) pendingQuestionFocus.current = false
   }, [preparedQuestion?.index, visible])
@@ -172,7 +190,6 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
           setMessages(prev => [...prev, assistantMessage])
           setTaskStatus('completed')
         } catch (taskError) {
-          console.error('Task error:', taskError)
           throw taskError
         }
       } else {
@@ -204,8 +221,7 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, visible = 
       }
       setFollowUp(null); setIncludePrevious(false); setIncludeProfile(false); setNextAction('')
       await draft.clear()
-    } catch (error) {
-      console.error('Chat error:', error)
+    } catch {
       setTaskStatus('failed')
       setFailed(true)
       setInput(current => current.trim() ? current : queryText)
