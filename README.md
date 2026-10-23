@@ -6,6 +6,19 @@ AIに詳しくなくても、授乳を記録する、困りごとを整理する
 **現在は小規模な試行向けです。** AIの回答には誤りが含まれます。診断・治療・臨床的なリスク判定・救急対応は行いません。
 日本で救急車が必要な場合は **119** に直接連絡してください。
 
+### 画面のイメージ · Interface overview
+
+家庭では「相手と共有先 → 今の記録 → 最近の記録」を中心に。小さな機関では、確認が必要な案内から順に整え、公開前に見直せます。
+
+**UIデザインの模式図・架空の例。実行画面のスクリーンショットではありません。**
+Design illustrations with fictional examples; these are not screenshots of the running application. Open either image to view the original SVG.
+
+[![家庭版のデスクトップ・スマートフォン模式図。記録する相手と共有先、簡単な記録操作、本人の最近の記録を順に表示。架空の例で、実行画面のスクリーンショットではありません。](docs/assets/family-ui-overview.svg)](docs/assets/family-ui-overview.svg)
+
+[![小規模機関版の模式図。相談先一覧、毎週の確認、下書き保存から公開前確認へ進む流れを表示。架空の例で、実行画面のスクリーンショットではありません。](docs/assets/organization-ui-overview.svg)](docs/assets/organization-ui-overview.svg)
+
+配色・余白・文字・ナビゲーションの整理と、図の範囲は[UIの見た目の改善と模式図](docs/product/VISUAL_REFRESH.md)にまとめています。図は構成を伝えるために内容を省略しており、表示・操作の実行確認を示すものではありません。
+
 今回の改善はソース変更の段階です。依頼に従い、アプリの起動、依存関係のインストール、ビルド、テスト、実データでの操作は行っていません。
 実際の利用開始前に、[基本機能の変更と未実施の受入確認](docs/product/PRODUCT_IMPROVEMENTS.md)、[7項目の製品改善・移行事項](docs/product/PRODUCT_POLISH.md)、[UI構成の整理と未実施の表示確認](docs/product/UI_REFINEMENT.md)を確認してください。過去の検証結果は今回の動作確認を意味しません。
 今回追加した[家族の引き継ぎ・相談の進捗・アカウント対応の仕様と未実施の確認](docs/product/CARE_FLOWS.md)も参照してください。

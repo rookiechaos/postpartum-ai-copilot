@@ -1,30 +1,40 @@
-.app { max-width: var(--content-width); margin: 0 auto; min-height: 100vh; background: var(--color-bg); color: var(--color-text); }
-.app-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; padding: 1.25rem 1.5rem; }
+.app { max-width: var(--content-width); margin: 0 auto; min-height: 100vh; background: transparent; color: var(--color-text); }
+.app-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-5); padding: var(--space-8) var(--space-6) var(--space-6); }
 .header-content { min-width: 0; }
-.header-content h1 { font-size: clamp(1.2rem, 3vw, 1.7rem); line-height: 1.5; overflow-wrap: anywhere; }
-.tagline { margin-top: .25rem; color: var(--color-muted); line-height: 1.7; }
+.header-content h1 { font-size: clamp(1.1rem, 2.4vw, 1.4rem); line-height: 1.5; overflow-wrap: anywhere; letter-spacing: .025em; }
+.tagline { margin-top: .375rem; padding-inline-start: 3.375rem; color: var(--color-muted); font-size: var(--font-size-sm); line-height: 1.7; }
 .header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
-.night-mode-btn, .entrance-switch { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; min-height: 44px; padding: .6rem .9rem; border: 1px solid var(--color-border); border-radius: .75rem; color: var(--color-brand); background: var(--color-surface); cursor: pointer; }
-.tab-nav { position: sticky; top: 0; z-index: 20; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .25rem; padding: .5rem; border-block: 1px solid var(--color-border); background: var(--color-surface); }
-.tab-nav button { min-width: 0; min-height: 52px; display: flex; align-items: center; justify-content: center; gap: .5rem; padding: .5rem; border: 1px solid transparent; border-radius: .75rem; background: transparent; color: var(--color-muted); cursor: pointer; line-height: 1.4; }
+.night-mode-btn, .entrance-switch { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; max-width: 100%; min-height: var(--control-height); padding: .6rem .9rem; border: 1px solid var(--color-border); border-radius: var(--radius-pill); color: var(--color-brand); background: var(--color-surface); cursor: pointer; font-size: var(--font-size-sm); }
+.night-mode-btn:hover, .entrance-switch:hover { background: var(--color-tint); border-color: var(--color-brand); }
+.night-mode-btn svg { flex-shrink: 0; }
+.tab-nav { position: sticky; top: var(--space-3); z-index: 20; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-1); margin-inline: var(--space-6); padding: var(--space-2); border: 1px solid var(--color-line-soft); border-radius: 1.25rem; background: var(--color-surface); box-shadow: var(--shadow-panel); }
+.tab-nav button { min-width: 0; min-height: 3.5rem; display: flex; align-items: center; justify-content: center; gap: .5rem; padding: .5rem; border: 1px solid transparent; border-radius: var(--radius-control); background: transparent; color: var(--color-muted); cursor: pointer; line-height: 1.5; font-size: var(--font-size-sm); }
 .tab-nav button svg { flex-shrink: 0; }
 .tab-nav button:hover, .tab-nav button.active { background: var(--color-tint); color: var(--color-brand); }
-.tab-nav button.active { border-color: var(--color-brand); font-weight: 700; }
+.tab-nav button.active { font-weight: 700; }
+.tab-nav button.active :is(.nav-label-full, .nav-label-short) { text-decoration: underline; text-underline-offset: .35em; text-decoration-thickness: 1.5px; }
+.nav-icon { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 2rem; height: 2rem; border-radius: .625rem; }
+.tab-nav button.active .nav-icon { color: var(--color-brand); background: var(--color-surface); }
 .nav-label-short { display: none; }
-.app-main { padding: 1.5rem; }
-.family-tab-panel { min-width: 0; }
+.app-main { padding: var(--space-8) var(--space-6) var(--space-12); }
+.family-tab-panel { min-width: 0; scroll-margin-block-start: 7rem; }
 .family-tab-panel > :first-child { margin-top: 0; }
+html.high-contrast .tab-nav { border-color: var(--color-border); }
+html.high-contrast .tab-nav button.active { border-color: var(--color-brand); }
 @media (max-width: 700px) {
-  .family-app { --mobile-nav-height: 5.25rem; padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px)); }
-  .app-header { padding: 1rem; gap: .5rem; }
+  .family-app { --mobile-nav-height: 6rem; padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px)); }
+  .app-header { padding: var(--space-5) var(--space-4); gap: var(--space-4); }
   .header-content { flex: 1 1 100%; }
-  .tagline { font-size: .85rem; }
+  .header-content h1 { font-size: var(--font-size-lg); }
+  .tagline { font-size: var(--font-size-xs); }
   .header-actions { width: 100%; justify-content: space-between; }
-  .night-mode-btn { font-size: .85rem; }
-  .tab-nav { position: fixed; inset: auto 0 0; min-height: var(--mobile-nav-height); padding: .375rem .25rem calc(.375rem + env(safe-area-inset-bottom, 0px)); gap: .125rem; border-bottom: 0; box-shadow: 0 -2px 12px #213b3510; }
-  .tab-nav button { flex-direction: column; gap: .25rem; padding: .5rem .125rem; font-size: .8rem; }
+  .night-mode-btn { font-size: var(--font-size-xs); }
+  .tab-nav { position: fixed; inset: auto 0 0; min-height: var(--mobile-nav-height); margin: 0; padding: .5rem .375rem calc(.5rem + env(safe-area-inset-bottom, 0px)); gap: .125rem; border: 0; border-top: 1px solid var(--color-border); border-radius: 1.25rem 1.25rem 0 0; box-shadow: var(--shadow-float); }
+  .tab-nav button { flex-direction: column; gap: .25rem; padding: .375rem .125rem; font-size: .8125rem; }
+  .tab-nav button.active { background: var(--color-tint); }
   .nav-label-full { display: none; }
   .nav-label-short { display: inline; }
-  .app-main { padding: 1rem; }
+  .app-main { padding: var(--space-4) var(--space-4) var(--space-8); }
   .family-tab-panel { scroll-margin-block: 1rem; }
 }
+@media (max-width: 360px) { .tagline { padding-inline-start: 0; } }

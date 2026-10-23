@@ -1,4 +1,4 @@
-.pilot-shell { max-width: var(--content-width); min-height: 100vh; margin: 0 auto; padding: 28px; background: var(--color-bg); color: var(--pilot-ink); }
+.pilot-shell { max-width: var(--content-width); min-height: 100vh; margin: 0 auto; padding: var(--space-8) var(--space-6); background: transparent; color: var(--pilot-ink); }
 .care-scope { display: flex; flex-direction: column; align-items: flex-start; gap: .4rem; padding: .85rem 1rem; margin: .75rem 0; border-inline-start: 4px solid var(--pilot-brand); border-radius: .5rem; background: var(--color-bg); overflow-wrap: anywhere; }
 .care-scope > span { font-size: .9rem; line-height: 1.7; }
 .workflow-records { display: grid; gap: .75rem; padding-inline-start: 1.25rem; }
@@ -10,15 +10,26 @@
 .workflow-action-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: 1rem; }
 .workflow-action-grid .support-card { min-width: 0; margin: 0; }
 @media print { .care-scope, .consultation-packets { display: none !important; } }
-.pilot-topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
-.entry-intro { max-width: 720px; margin: 42px auto 32px; text-align: center; }
-.entry-intro h1 { margin: 12px 0 20px; font-size: clamp(1.8rem, 4vw, 2.7rem); line-height: 1.45; letter-spacing: .02em; }
+.pilot-topbar { display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-6); padding-bottom: var(--space-5); border-bottom: 1px solid var(--color-line-soft); }
+.entry-intro { display: grid; grid-template-columns: minmax(0, 1fr) 12rem; align-items: center; gap: var(--space-8); margin: var(--space-12) 0 var(--space-8); text-align: start; }
+.entry-intro-copy { max-width: 42rem; min-width: 0; }
+.entry-illustration { width: 100%; max-width: 12rem; height: auto; justify-self: end; }
+.entry-intro h1 { margin: var(--space-3) 0 var(--space-5); font-size: clamp(1.8rem, 4vw, 2.7rem); line-height: 1.5; letter-spacing: .035em; font-weight: 600; }
+.entry-intro-copy > p:last-child { color: var(--color-muted); }
 .entry-intro p, .entrance-card p, .pilot-panel p, .support-directory p { line-height: 1.8; }
-.pilot-eyebrow { color: var(--pilot-brand); font-weight: 600; }
-.entry-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
-.entrance-card { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; min-width: 0; padding: 28px; border: 1px solid var(--pilot-border); border-radius: 20px; background: var(--color-surface); box-shadow: var(--shadow-panel); }
+.pilot-eyebrow { color: var(--pilot-brand); font-weight: 600; font-size: var(--font-size-sm); letter-spacing: .04em; }
+.entry-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); }
+.entrance-card { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-4); min-width: 0; padding: var(--space-8); border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-surface); box-shadow: var(--shadow-panel); }
+.entrance-card--family { background: linear-gradient(145deg, var(--color-surface) 40%, var(--color-tint)); }
+.entrance-symbol { display: inline-flex; align-items: center; justify-content: center; width: 3.5rem; height: 3.5rem; flex-shrink: 0; border-radius: 1.125rem; color: var(--color-brand); background: var(--color-tint); }
+.entrance-card--organization .entrance-symbol { color: var(--color-accent); background: var(--color-accent-tint); }
+.entrance-card > p { color: var(--color-muted); }
+.entrance-card ul li::marker { color: var(--color-brand); }
+.entrance-card .pilot-button { width: 100%; }
 .product-brand { display: flex; align-items: center; gap: .625rem; min-width: 0; font-weight: 600; }
-.product-brand > svg { flex: 0 0 auto; color: var(--color-brand); }
+.product-brand .product-brand-mark { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; flex: 0 0 2.75rem; border-radius: .9375rem; background: var(--color-brand); color: var(--color-surface); }
+.product-brand-mark::after { content: ''; position: absolute; right: -.125rem; bottom: .0625rem; width: .625rem; height: .875rem; border: 2px solid var(--color-bg); border-radius: .75rem .125rem .75rem .125rem; background: var(--color-accent); transform: rotate(18deg); }
+.product-brand-name { letter-spacing: .02em; }
 .product-brand > span { min-width: 0; overflow-wrap: anywhere; }
 .auth-header .product-brand { justify-content: center; }
 .pilot-topbar .product-brand { font-size: 1.05rem; }
@@ -26,7 +37,7 @@
 .entrance-card h2 { font-size: 1.4rem; }
 .entrance-card ul { padding-left: 22px; line-height: 2; flex: 1; }
 .pilot-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: var(--control-height); padding: var(--control-padding-block) var(--control-padding-inline); background: var(--pilot-brand); color: #fff; border: 1px solid var(--pilot-brand); border-radius: var(--radius-control); font: inherit; font-weight: var(--font-weight-label); cursor: pointer; text-decoration: none; line-height: var(--line-height-heading); }
-.pilot-button.secondary { color: var(--color-brand); background: var(--color-tint); border-color: var(--color-border); }
+.pilot-button.secondary { color: var(--color-brand); background: var(--color-surface); border-color: var(--color-border); }
 .pilot-button:hover:not(:disabled) { background: var(--color-brand-hover); color: #fff; }
 .pilot-button.secondary:hover:not(:disabled) { background: var(--color-tint); color: var(--color-brand-hover); border-color: var(--color-brand); }
 .pilot-button:disabled { opacity: .55; cursor: not-allowed; }
@@ -44,7 +55,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .support-card a.pilot-button.secondary { color: var(--color-brand); }
 .support-directory.compact { padding: 18px; }
 .support-directory.compact h2 { font-size: 1.1rem; }
-.pilot-panel { padding: var(--panel-padding); margin: var(--space-5) 0; background: var(--color-surface); color: var(--color-text); border: 1px solid var(--pilot-border); border-radius: var(--radius-panel); }
+.pilot-panel { padding: var(--panel-padding); margin: var(--space-5) 0; background: var(--color-surface); color: var(--color-text); border: 1px solid var(--pilot-border); border-radius: var(--radius-panel); box-shadow: var(--shadow-panel); }
+.pilot-panel .pilot-panel { box-shadow: none; }
 .pilot-panel h2, .pilot-panel h3 { margin-bottom: var(--space-3); font-size: var(--font-size-xl); line-height: var(--line-height-heading); }
 .pilot-panel h3 { font-size: var(--font-size-lg); }
 .pilot-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: var(--space-4) 0; }
@@ -84,7 +96,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .night-mode .support-directory h2 { color: #e6f3eb; }
 @media (max-width: 700px) {
   .pilot-shell { padding: 20px 16px; }
-  .entry-intro { margin: 28px auto; text-align: left; }
+  .entry-intro { display: block; margin: var(--space-8) auto; text-align: start; }
+  .entry-illustration { display: none; }
   .entry-grid, .family-primary-actions { grid-template-columns: 1fr; }
   .entrance-card, .pilot-panel { padding: 20px; }
   .family-action { min-height: 120px; }
@@ -93,6 +106,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .pilot-button { max-width: 100%; }
   .pilot-actions .pilot-button { flex: 1 1 140px; }
 }
+html.high-contrast .entrance-card--family { background: var(--color-surface); }
+html.high-contrast .entrance-symbol, html.high-contrast .product-brand-mark { border: 1px solid currentColor; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }

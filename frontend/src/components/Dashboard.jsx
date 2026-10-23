@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ArrowRight, Baby, Calendar, ChevronRight, Clock, Droplets, Heart, MessageCircle, Milk, Moon, Phone, SlidersHorizontal } from 'lucide-react'
 import api from '../utils/api'
 import { japanDay, utcDate } from '../utils/japanTime'
 import { recordOperation, isRecordOperation } from '../utils/recordOperations'
@@ -24,8 +25,10 @@ import DuplicateReview from './DuplicateReview'
 import { Button, ConfirmDialog, PageHeader } from './ui'
 import './Dashboard.css'
 
+const shortcutIcons = { wet: Droplets, dirty: Baby, breast: Heart, formula: Milk, sleep: Moon, feedingTimer: Clock }
+
 export default function Dashboard({ userId, userContext, onNavigate, onRecordsChanged, refreshKey = 0, visible = true, navigationRequest }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const care = useCareSession()
   const [quickScope, setQuickScope] = useState(privateSubject(''))
   const selectedScope = quickScope.subject_id === (care.activeId || null) ? quickScope : privateSubject(care.activeId)
@@ -133,27 +136,36 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
   }
 
   return <div className="dashboard family-dashboard">
-    <PageHeader title={t('friendly.home.title')} description={t('pilot.todayIntro')} />
+    <div className="home-heading">
+      <p className="home-date"><Calendar size={15} aria-hidden="true" /><time dateTime={japanDay(now)}>{new Intl.DateTimeFormat(i18n.resolvedLanguage || 'ja', {
+        timeZone: 'Asia/Tokyo', month: 'long', day: 'numeric', weekday: 'long',
+      }).format(now)}</time></p>
+      <PageHeader title={t('friendly.home.title')} description={t('pilot.todayIntro')} />
+    </div>
     <section className="pilot-panel quick-record-panel">
-      <fieldset className="home-current-baby" disabled={Boolean(pending) || Boolean(receiptMode)}><legend>{t('continuity.subject.current')}</legend>
+      <fieldset className="home-current-baby" disabled={Boolean(pending) || Boolean(receiptMode)}><legend><Baby size={17} aria-hidden="true" />{t('continuity.subject.current')}</legend>
         <CareSubjectFields compact value={selectedScope} onChange={value => { care.setActiveId(value.subject_id || ''); setQuickScope(value) }} />
       </fieldset>
       {care.ready && !care.subjects.length && <Button variant="quiet" onClick={() => revealElement(document.getElementById('care-subject-heading'))}>
         {t('foundation.home.manageBaby')}</Button>}
       <PageHeader headingLevel={3} titleId="quick-record-heading" title={t('polish.recordNow')} />
-      <div className="record-choices">{shortcutKeys.map(key => quickChoices.find(choice => choice.key === key)).map(choice => <Button key={choice.key}
-        disabled={quickBlocked}
+      <div className="record-choices">{shortcutKeys.map(key => quickChoices.find(choice => choice.key === key)).map(choice => {
+        const Icon = shortcutIcons[choice.key] || Clock
+        return <Button key={choice.key} data-quick-kind={choice.key} disabled={quickBlocked}
         onClick={() => {
           if (choice.timer) {
             setTimerRequest(previous => ({ kind: choice.timer, version: previous.version + 1 }))
             revealElement(document.getElementById('care-timer-heading'))
           } else saveQuick(recordOperation({ ...choice.data, ...selectedScope }))
-        }}><span className="quick-record-name">{t(choice.timer ? `interaction.shortcuts.${choice.key}` : `polish.quick.${choice.key}`)}</span>
-          <small>{t(choice.timer ? 'interaction.shortcuts.timerHint' : 'localCare.record.nowHint')}</small></Button>)}</div>
+        }}><span className="quick-record-icon" aria-hidden="true"><Icon size={24} strokeWidth={1.7} /></span>
+          <span className="quick-record-copy"><span className="quick-record-name">{t(choice.timer ? `interaction.shortcuts.${choice.key}` : `polish.quick.${choice.key}`)}</span>
+          <small>{t(choice.timer ? 'interaction.shortcuts.timerHint' : 'localCare.record.nowHint')}</small></span>
+          <ChevronRight className="quick-record-chevron" size={16} aria-hidden="true" /></Button>
+      })}</div>
       <div className="home-record-links">
         <Button variant="quiet" disabled={quickBlocked} aria-expanded={customizing} aria-controls="home-shortcut-settings"
-          onClick={() => setCustomizing(value => !value)}>{t('interaction.shortcuts.title')}</Button>
-        <Button variant="quiet" onClick={() => onNavigate('tracking', 'feeding')}>{t('friendly.home.details')}</Button>
+          onClick={() => setCustomizing(value => !value)}><SlidersHorizontal size={15} aria-hidden="true" />{t('interaction.shortcuts.title')}</Button>
+        <Button variant="quiet" onClick={() => onNavigate('tracking', 'feeding')}>{t('friendly.home.details')}<ArrowRight size={15} aria-hidden="true" /></Button>
       </div>
       <div id="home-shortcut-settings" hidden={!customizing}>{customizing && <QuickActionSettings userId={userId} value={shortcutKeys}
         onSaved={keys => { setShortcutKeys(keys); setCustomizing(false) }} onClose={() => setCustomizing(false)} />}</div>
@@ -183,11 +195,13 @@ export default function Dashboard({ userId, userContext, onNavigate, onRecordsCh
     </section>
     <CareTimeline compact subjectId={care.activeId} entries={entries} userId={userId} visible={visible} refreshKey={refreshKey + attempt} error={error}
       navigationRecord={timelineRequest} onReload={() => setAttempt(value => value + 1)} onFullEdit={editRecord} onRecordsChanged={refresh} blocked={quickBlocked} />
-    <div className="home-record-footer"><Button variant="secondary" onClick={() => onNavigate('tracking')}>{t('polish.allRecords')}</Button></div>
+    <div className="home-record-footer"><Button variant="quiet" onClick={() => onNavigate('tracking')}>{t('polish.allRecords')}<ArrowRight size={16} aria-hidden="true" /></Button></div>
     <ContinueCare visible={visible} refreshKey={refreshKey + attempt} onNavigate={onNavigate} />
     <div className="pilot-actions family-secondary-actions">
-      <Button variant="secondary" onClick={() => onNavigate('chat')}>{t('friendly.chat.title')}</Button>
-      <Button variant="secondary" onClick={() => onNavigate('support', { view: 'contacts' })}>{t('pilot.supportTitle')}</Button>
+      <Button variant="secondary" onClick={() => onNavigate('chat')}><span className="home-secondary-icon"><MessageCircle size={21} aria-hidden="true" /></span>
+        <span>{t('friendly.chat.title')}</span><ArrowRight className="home-secondary-arrow" size={17} aria-hidden="true" /></Button>
+      <Button variant="secondary" onClick={() => onNavigate('support', { view: 'contacts' })}><span className="home-secondary-icon"><Phone size={21} aria-hidden="true" /></span>
+        <span>{t('pilot.supportTitle')}</span><ArrowRight className="home-secondary-arrow" size={17} aria-hidden="true" /></Button>
     </div>
     <section className="home-tools" aria-labelledby="home-tools-heading">
       <PageHeader headingLevel={3} titleId="home-tools-heading" title={t('foundation.home.moreTools')} description={t('foundation.home.moreToolsHint')} />

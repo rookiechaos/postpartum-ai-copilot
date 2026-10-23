@@ -52,6 +52,61 @@ button, input, select, textarea { font: inherit; }
 .service-privacy-info ul, .organization-portal .pilot-panel > ul { padding-left: 24px; line-height: 1.8; }
 .family-help details { border-bottom: 1px solid var(--pilot-border); }
 .family-help details p { margin: 4px 0 16px; }
+/* Daytime service and staff surfaces share the same calm card language. */
+:is(.family-tab-panel, .organization-portal, .auth-container) .support-directory {
+  min-width: 0;
+  padding: 1.75rem;
+  border-color: var(--color-line-soft, var(--color-border));
+  border-radius: var(--radius-card, var(--radius-panel));
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel);
+}
+.support-directory .support-cards { grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
+:is(.family-tab-panel, .organization-portal, .auth-container) .support-directory .support-card {
+  min-width: 0;
+  padding: 1.375rem;
+  border-color: var(--color-line-soft, var(--color-border));
+  border-radius: 1rem;
+  background: var(--color-warm-surface);
+  color: var(--color-text);
+}
+:is(.family-tab-panel, .organization-portal, .auth-container) .support-directory .support-card.urgent {
+  border-color: var(--color-accent, var(--color-border));
+  background: var(--color-accent-tint, var(--color-warm-surface));
+}
+:is(.family-tab-panel, .organization-portal, .auth-container) .support-directory .support-card > h3 { color: var(--color-text); }
+:is(.family-tab-panel, .organization-portal, .auth-container) .support-directory .local-support-card { margin-block: 1rem; }
+.support-directory .service-details { padding-top: .375rem; }
+.support-directory .service-details > p { padding-bottom: .375rem; }
+.support-directory .support-progress { margin-top: 1.25rem; padding-top: .25rem; border-color: var(--color-line-soft, var(--color-border)); }
+.family-tab-panel .support-directory .support-steps {
+  padding: 1.375rem;
+  border-color: var(--color-line-soft, var(--color-border));
+  border-radius: 1rem;
+  background: var(--color-tint);
+}
+.family-tab-panel .support-directory .support-steps > h3 { margin-bottom: .5rem; font-size: var(--font-size-lg); }
+.family-tab-panel .support-directory .support-steps ol { gap: .625rem; margin-block: 1rem 0; }
+.family-tab-panel .support-directory .support-steps li { min-width: 0; }
+.family-tab-panel .support-directory .support-steps [aria-current="step"] { border-color: var(--color-brand); background: var(--color-surface); box-shadow: var(--shadow-panel); }
+.organization-portal > .ui-page-header, .operator-portal > .ui-page-header { margin-block: 2rem 1.5rem; }
+.organization-portal > .pilot-actions, .operator-portal > .pilot-actions { margin-bottom: 1.75rem; }
+.organization-portal .review-queue { background: var(--color-warm-surface); }
+.organization-portal .maintenance-summary { gap: .625rem; margin-block: 1rem; }
+.organization-portal .maintenance-summary span { padding: .5rem .875rem; border-color: var(--color-line-soft, var(--color-border)); border-radius: .75rem; background: var(--color-surface); font-size: var(--font-size-sm); }
+.organization-portal .directory-action-bar { padding: .875rem; border-color: var(--color-line-soft, var(--color-border)); border-radius: 1rem; box-shadow: var(--shadow-float, var(--shadow-panel)); }
+.organization-portal .directory-editor .contact-editor-list { gap: 1rem; margin-block: 1.25rem 1.75rem; }
+.organization-portal .directory-editor .contact-editor-list li { padding: 1.125rem; border-color: var(--color-line-soft, var(--color-border)); border-radius: 1rem; background: var(--color-warm-surface); }
+.organization-portal .directory-editor .contact-list-info > button { min-height: 52px; padding: .75rem .875rem; background: var(--color-surface); border-radius: .75rem; }
+.organization-portal .directory-editor .contact-list-info > button[aria-pressed="true"] { background: var(--color-tint); }
+.organization-portal .directory-editor .contact-task-badges span { padding: .25rem .5rem; border-color: var(--color-line-soft, var(--color-border)); border-radius: .5rem; background: var(--color-tint); }
+.organization-portal .directory-editor .contact-editor { margin-top: 1.5rem; padding-top: 1.5rem; border-color: var(--color-line-soft, var(--color-border)); }
+.organization-portal .directory-editor .editor-group { padding: .25rem 1rem; border: 1px solid var(--color-line-soft, var(--color-border)); border-radius: 1rem; background: var(--color-warm-surface); }
+.organization-portal .directory-editor .editor-group > summary { font-size: var(--font-size-body); }
+.organization-portal .directory-editor .editor-group fieldset { margin-block-end: .75rem; }
+.organization-portal .publication-preview { padding: 1.5rem; border: 1px dashed var(--color-brand); border-radius: var(--radius-card, var(--radius-panel)); background: var(--color-warm-surface); }
+.organization-portal .publication-changes { padding: 1.25rem; border-color: var(--color-line-soft, var(--color-border)); background: var(--color-surface); }
+.operator-portal .support-card { padding: 1.5rem; border-color: var(--color-line-soft, var(--color-border)); border-radius: var(--radius-card, var(--radius-panel)); background: var(--color-warm-surface); }
 .print-sheet, .print-root { display: none; }
 .high-contrast body, .high-contrast .pilot-shell, .high-contrast .app { background: #fff; color: #000; }
 .high-contrast :is(.pilot-panel, .support-card, .entrance-card, .tracking-entry-card, .ai-use-notice, .stat-card, .form-section, .guided-chat, .accessibility-settings, .option-group) { background: #fff; color: #000; border-color: #333; }
@@ -69,6 +124,17 @@ button, input, select, textarea { font: inherit; }
   .settings-tabs button { flex: 1 1 140px; }
   .publication-preview { padding: 8px; }
   .tracking-entry-card .entry-header { flex-wrap: wrap; gap: 8px; }
+  :is(.family-tab-panel, .organization-portal, .auth-container) .support-directory { padding: 1.125rem; }
+  :is(.family-tab-panel, .organization-portal, .auth-container) .support-directory .support-card { padding: 1.125rem; }
+  .family-tab-panel .support-directory .support-steps { padding: 1rem; }
+  .organization-portal .directory-action-bar { padding: .625rem; }
+  .organization-portal .directory-editor .contact-editor-list li { padding: 1rem; }
+  .organization-portal .directory-editor .editor-group { padding-inline: .75rem; }
+  .organization-portal .publication-preview, .operator-portal .support-card { padding: 1.125rem; }
+}
+@media (max-width: 420px) {
+  .support-directory .support-urgent-bar .urgent { grid-template-columns: minmax(0, 1fr); gap: .625rem; }
+  .support-directory .support-urgent-bar .urgent .pilot-button { grid-column: 1; grid-row: auto; width: 100%; }
 }
 @media print {
   @page { size: A4; margin: 16mm; }

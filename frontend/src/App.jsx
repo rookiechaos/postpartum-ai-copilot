@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import api from './utils/api'
 import { CareSessionProvider } from './utils/CareSession'
@@ -284,16 +283,14 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
         </div>
         <div className="header-actions">
           <LanguageSelector />
-          <motion.button
+          <button
             className="night-mode-btn"
             onClick={() => setNightMode(true)}
             title={t('nightMode.title')}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
           >
-            <Moon size={18} />
+            <Moon size={18} aria-hidden="true" />
             {t('nightMode.title')}
-          </motion.button>
+          </button>
         </div>
       </header>
 
@@ -307,7 +304,7 @@ function AuthenticatedApp({ userId, onChooseEntry, pendingInvite, onInvitationHa
             aria-label={tab.label}
             aria-current={activeTab === tab.id ? 'page' : undefined}
           >
-            {tab.icon}
+            <span className="nav-icon" aria-hidden="true">{tab.icon}</span>
             <span className="nav-label-full" aria-hidden="true">{tab.label}</span>
             <span className="nav-label-short" aria-hidden="true">{t(`ui.nav.${tab.id}`)}</span>
           </button>

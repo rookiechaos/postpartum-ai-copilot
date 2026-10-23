@@ -18,6 +18,7 @@ body {
   font-weight: var(--font-weight-body);
   min-height: 100vh;
   line-height: var(--line-height-body);
+  background-image: radial-gradient(ellipse at 15% 0%, var(--color-tint), transparent 42rem);
 }
 
 html:lang(ja) :is(h1, h2, h3, h4, p, label, legend, summary, li, dt, dd) {
@@ -33,6 +34,12 @@ html:lang(ja) :is(h1, h2, h3, h4) { line-height: var(--line-height-heading); }
 
 button, a, input, select, textarea { touch-action: manipulation; }
 button, input, select, textarea { font: inherit; }
+button, a, input, select, textarea, summary { -webkit-tap-highlight-color: transparent; }
+button, input, select, textarea { letter-spacing: inherit; }
+button, a { transition: color var(--motion-duration) ease, background-color var(--motion-duration) ease, border-color var(--motion-duration) ease, box-shadow var(--motion-duration) ease; }
+::selection { color: var(--color-text); background: var(--color-border); }
+html.high-contrast body { background-image: none; }
+html.high-contrast ::selection { color: HighlightText; background: Highlight; }
 button:disabled { cursor: not-allowed; }
 button, a { overflow-wrap: anywhere; }
 [tabindex="-1"] { scroll-margin-block: 6rem; }

@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="980" viewBox="0 0 1400 980" role="img" aria-labelledby="title description">
+  <title id="title">小規模機関版のUIデザイン模式図：相談先の確認と公開前のプレビュー</title>
+  <desc id="description">架空の相談先を用いた情報設計の例。いま対応すること、相談先一覧、毎週の逐項確認、下書き保存、公開前確認、公開を区別しています。家庭の健康記録やチャットを表示する画面ではありません。実行画面のスクリーンショットではありません。</desc>
+  <defs>
+    <style>
+      svg{fill:#213b35}text{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif}.muted{fill:#617169}.small{font-size:13px}.body{font-size:15px}.label{font-size:14px;font-weight:600}.title{font-weight:650}.line{stroke:#dfe5de;stroke-width:1}.icon{fill:none;stroke:#256354;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.center{text-anchor:middle}
+    </style>
+    <filter id="paper" x="-20%" y="-20%" width="150%" height="150%"><feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#213b35" flood-opacity=".07"/></filter>
+  </defs>
+  <rect width="1400" height="980" fill="#f6f5f0"/>
+  <path d="M1220 0h180v180c-92 0-180-88-180-180Z" fill="#e7ede5"/>
+  <rect x="60" y="47" width="144" height="29" rx="14.5" fill="#e6eee7"/>
+  <text x="132" y="66" class="label center" fill="#256354">小さな機関で使う</text>
+  <text x="60" y="125" font-size="37" class="title">地域の案内を、少しずつ、確かに。</text>
+  <text x="61" y="156" font-size="16" class="muted">確認が必要な情報から。下書きと公開を分けて、ご家庭への案内を整えます。</text>
+
+  <g filter="url(#paper)">
+    <rect x="55" y="190" width="1290" height="664" rx="24" fill="#f8f9f5" stroke="#dce3da"/>
+    <path d="M79 190h1242a24 24 0 0 1 24 24v48H55v-48a24 24 0 0 1 24-24Z" fill="#fff"/>
+    <path d="M55 262h1290" class="line"/>
+    <rect x="76" y="205" width="42" height="42" rx="14" fill="#256354"/>
+    <g class="icon" style="stroke:#fff" transform="translate(85 214)"><path d="M4 9a8 8 0 0 1 16 0v3a8 8 0 0 1-16 0ZM5 9C0 7 0 14 4 14M19 9c5-2 5 5 1 5M9 2c-2-4 5-4 4 1M8 10h.1M16 10h.1M9 15q3 3 6 0"/></g>
+    <ellipse cx="115" cy="207" rx="7" ry="4" transform="rotate(-35 115 207)" fill="#bc765b"/>
+    <text x="127" y="233" font-size="20" class="title">産後のくらしサポート</text>
+    <rect x="379" y="211" width="112" height="30" rx="15" fill="#edf2eb"/>
+    <text x="435" y="231" class="small center">機関用の管理</text>
+    <text x="1092" y="232" class="small muted">家庭用の入口</text>
+    <text x="1235" y="232" class="small muted">日本語</text>
+    <path d="m1291 225 4 4 4-4" class="icon"/>
+
+    <text x="88" y="310" font-size="29" class="title">家庭の利用を、地域で支える</text>
+    <text x="90" y="337" class="small muted">この拠点の公開案内を管理します。家庭のチャット・気持ち・健康の記録は表示しません。</text>
+    <rect x="1137" y="282" width="175" height="43" rx="12" fill="#fff" stroke="#dce3da"/>
+    <text x="1224" y="309" class="label center">下書きだけ保存</text>
+
+    <!-- Maintenance summary remains about directory information, not patient data. -->
+    <rect x="88" y="361" width="1224" height="88" rx="16" fill="#fff" stroke="#dfe5de"/>
+    <text x="110" y="392" font-size="18" class="title">いま対応すること</text>
+    <rect x="110" y="406" width="105" height="27" rx="13.5" fill="#fbefe8"/>
+    <text x="162" y="424" class="small center" fill="#915239">要確認 1件</text>
+    <rect x="228" y="406" width="174" height="27" rx="13.5" fill="#edf2eb"/>
+    <text x="315" y="424" class="small center">未公開の相談先変更 1件</text>
+    <text x="837" y="412" class="small muted">担当者で絞る</text>
+    <rect x="946" y="386" width="342" height="43" rx="10" fill="#fbfcf9" stroke="#dfe5de"/>
+    <text x="963" y="413" class="body">すべての担当者</text>
+    <path d="m1263 403 5 5 5-5" class="icon"/>
+
+    <rect x="88" y="467" width="503" height="296" rx="17" fill="#fff" stroke="#dfe5de"/>
+    <text x="110" y="503" font-size="20" class="title">地域の相談先・資料</text>
+    <text x="110" y="527" class="small muted">窓口を選んで、必要な項目だけ編集できます。</text>
+    <rect x="107" y="545" width="465" height="91" rx="13" fill="#edf2eb" stroke="#cbdacb"/>
+    <rect x="107" y="562" width="3" height="56" rx="1.5" fill="#256354"/>
+    <text x="126" y="575" font-size="17" class="title">例：地域の育児相談</text>
+    <rect x="126" y="590" width="64" height="24" rx="12" fill="#fbefe8"/>
+    <text x="158" y="607" font-size="12" class="center" fill="#915239">要確認</text>
+    <text x="206" y="607" font-size="12" class="muted">担当未登録 · 次の確認予定なし</text>
+    <path d="m548 579 5 5-5 5" class="icon"/>
+    <rect x="107" y="648" width="465" height="91" rx="13" fill="#fff" stroke="#dfe5de"/>
+    <text x="126" y="678" font-size="17" class="title">例：産後の生活・ケア</text>
+    <rect x="126" y="693" width="102" height="24" rx="12" fill="#edf2eb"/>
+    <text x="177" y="710" font-size="12" class="center">未公開の変更</text>
+    <text x="244" y="710" font-size="12" class="muted">公開前に内容を確認</text>
+    <path d="m548 682 5 5-5 5" class="icon"/>
+
+    <rect x="610" y="467" width="702" height="296" rx="17" fill="#fff" stroke="#dfe5de"/>
+    <text x="632" y="503" font-size="20" class="title">今週の確認を一つずつ進める</text>
+    <rect x="1202" y="482" width="88" height="28" rx="14" fill="#f3f5f0"/>
+    <text x="1246" y="501" font-size="12" class="center muted">1件中 1件目</text>
+    <path d="M632 524h657" class="line"/>
+    <text x="632" y="554" font-size="17" class="title">例：地域の育児相談</text>
+    <text x="632" y="580" class="small muted">掲載元を開いて確認する ↗</text>
+    <rect x="632" y="599" width="657" height="54" rx="11" fill="#fbfcf9"/>
+    <rect x="646" y="616" width="18" height="18" rx="4" fill="#fff" stroke="#a8b8a8"/>
+    <text x="674" y="629" class="small">掲載内容を実際に確認しました。</text>
+    <text x="632" y="676" font-size="12" class="muted">確認日と次回確認日を指定し、下書きに反映します。</text>
+    <rect x="632" y="694" width="180" height="43" rx="11" fill="#256354"/>
+    <text x="722" y="721" font-size="13" class="center" fill="#fff">変更なしを確認して次へ</text>
+    <rect x="824" y="694" width="159" height="43" rx="11" fill="#fff" stroke="#ccd8cd"/>
+    <text x="903" y="721" font-size="13" class="center">内容を修正する</text>
+    <text x="1010" y="721" font-size="13" class="muted">今回はあとで</text>
+
+    <!-- Publish actions are separate and remain an explicit decision. -->
+    <rect x="88" y="782" width="1224" height="51" rx="13" fill="#eaf0e7"/>
+    <text x="108" y="813" class="small">変更はまだ公開されていません。</text>
+    <text x="389" y="813" class="small muted">下書き保存 → 公開前確認 → 公開する</text>
+    <rect x="1055" y="790" width="236" height="35" rx="10" fill="#fff" stroke="#d1dccf"/>
+    <text x="1173" y="812" class="small center">変更をまとめてプレビューする →</text>
+  </g>
+  <text x="62" y="905" font-size="14" class="muted">機関版の情報設計：確認待ち → 1件ずつ確認・編集 → 家庭向け表示をプレビュー → 公開</text>
+  <text x="62" y="941" font-size="13" class="muted">UIデザインの模式図・架空の例。実行画面のスクリーンショットではありません。</text>
+</svg>

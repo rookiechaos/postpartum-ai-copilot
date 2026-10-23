@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ChevronRight, Clock, Droplets, Heart, Milk, Moon } from 'lucide-react'
 import api from '../utils/api'
 import { japanDay, utcDate } from '../utils/japanTime'
 import RecordTime, { useRecordClock } from './RecordTime'
@@ -11,6 +12,12 @@ import { useCareSession } from '../utils/CareSession'
 import CareScope from './CareScope'
 import { japanDateTime } from '../utils/japanTime'
 import { Button, EmptyState, ErrorMessage, FormField, PageHeader } from './ui'
+
+const recordIcons = { feeding: Milk, diaper: Droplets, sleep: Moon, pumping: Milk, mood: Heart, recovery: Heart }
+function RecordKindIcon({ kind }) {
+  const Icon = recordIcons[kind] || Clock
+  return <span className="timeline-record-symbol" aria-hidden="true"><Icon size={18} strokeWidth={1.8} /></span>
+}
 
 export default function CareTimeline({ entries, userId, visible, refreshKey, error, onReload, onFullEdit, onRecordsChanged, blocked, navigationRecord,
   compact = false, subjectId = '' }) {
@@ -129,14 +136,14 @@ export default function CareTimeline({ entries, userId, visible, refreshKey, err
         title={t('continuity.period.empty')} description={compact ? t('foundation.home.filterNotice') : ''} />
       : <ol className="day-timeline" id={listId}>{displayed.map(entry => <li key={entry.record_key}>
         <button type="button" className="timeline-record" disabled={blocked} onClick={() => setDetail(entry)}>
-          <strong>{name(entry)}</strong><RecordTime value={entry.timestamp} now={now} />
+          <strong className="timeline-record-title">{compact && <RecordKindIcon kind={entry.entry_type} />}{name(entry)}</strong><RecordTime value={entry.timestamp} now={now} />
           <CareRecordIdentity record={entry} />
           {!compact && entry.end_timestamp && <span>{t('continuity.period.ended', { time: japanDateTime(entry.end_timestamp, i18n.resolvedLanguage || 'ja') })}</span>}
           <small>{!scope ? t('polish.recordedByYou') : t('polish.recordedBy', { name: entry.recorder_label || t('polish.memberNumber', { number: entry.recorder_number || '?' }) })}</small>
           {scope && entry.is_own && <small>{t('polish.recordedByYou')}</small>}
-          {['amount_ml', 'duration_minutes', 'sleep_duration_minutes', 'pumped_amount_ml'].map(key => entry[key] != null && <span key={key}>
+          {['amount_ml', 'duration_minutes', 'sleep_duration_minutes', 'pumped_amount_ml'].map(key => entry[key] != null && <span className="timeline-record-value" key={key}>
             {entry[key]} {key.endsWith('_ml') ? 'mL' : t('pilot.minutes')}</span>)}
-          <span className="text-action">{t('interaction.timeline.details')}</span>
+          <span className="text-action">{t('interaction.timeline.details')}{compact && <ChevronRight size={14} aria-hidden="true" />}</span>
         </button>
       </li>)}</ol>}
     {compact && !(scope ? familyError : error) && shown?.length > 3 && <Button variant="secondary" aria-expanded={showAll} aria-controls={listId}
