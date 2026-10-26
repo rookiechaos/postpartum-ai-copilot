@@ -7,11 +7,18 @@ import { printView } from '../utils/printView'
 import useAccountDraft from '../utils/useAccountDraft'
 import { DraftRecoveryNotice } from './DraftRecovery'
 import { revealElement } from '../utils/focusView'
-import { useCareSession } from '../utils/CareSession'
+import { useCareSession, useCareWork } from '../utils/CareSession'
 import CareScope from './CareScope'
 import ConsultationPackets from './ConsultationPackets'
 
-export default function ShareSummary({ userId, visible = true, refreshKey = 0, initialQuestion = '', requestKey = 0, incomingContact, contactRequestKey = 0 }) {
+// This signature remains inside the editor. The shared work registry receives
+// only a counter and destination, never consultation text or contact names.
+const sheetSignature = content => JSON.stringify([content.subject_id || '', content.days,
+  content.questions, Boolean(content.include_parent), Boolean(content.include_notes), Boolean(content.include_details),
+  content.contact_key || '', content.appointment_at ? japanDateTimeInput(content.appointment_at) : '', content.text || ''])
+const emptySheet = { days: 7, questions: ['', '', ''] }
+
+export default function ShareSummary({ userId, visible = true, refreshKey = 0, initialQuestion = '', requestKey = 0, incomingContact, contactRequestKey = 0, resumeRequest }) {
   const { t, i18n } = useTranslation()
   const { subjects, rememberSubject } = useCareSession()
   const [subjectId, setSubjectId] = useState('')
@@ -38,17 +45,25 @@ export default function ShareSummary({ userId, visible = true, refreshKey = 0, i
   const [pendingContact, setPendingContact] = useState(null)
   const [packetLocked, setPacketLocked] = useState(false)
   const [frozenOptions, setFrozenOptions] = useState('')
+  const [savedBaseline, setSavedBaseline] = useState(() => sheetSignature(emptySheet))
+  const [workVersion, setWorkVersion] = useState(0)
   const contactName = contactNameSnapshot || contacts.find(item => item.key === contactKey)?.name || ''
   const optionsKey = JSON.stringify([subjectId, days, includeParent, includeNotes, includeDetails, questions, contactKey, appointment])
   const generation = useRef(0)
   const incomingHeading = useRef(null)
   const sheetHeading = useRef(null)
   const questionInputs = useRef([])
+  const handledResume = useRef(null)
   const sourceKey = JSON.stringify([subjectId, selectedSubject?.revision || 0, days, includeParent, includeNotes, includeDetails, questions, refreshKey, i18n.resolvedLanguage, today, contactKey, contactName, appointment])
   const preview = draft?.text || ''
   const stale = Boolean(draft && draft.sourceKey !== sourceKey)
   const currentCandidate = candidate?.sourceKey === sourceKey ? candidate : null
   const canExport = Boolean(preview && !stale && !loading && !currentCandidate)
+  const content = { contact_key: contactKey || null, subject_id: subjectId || null, days, questions,
+    include_parent: includeParent, include_notes: includeNotes, include_details: includeDetails, text: preview,
+    appointment_at: appointment && Number.isFinite(new Date(`${appointment}:00+09:00`).getTime()) ? new Date(`${appointment}:00+09:00`).toISOString() : null }
+  const signature = sheetSignature(content)
+  const sheetDirty = signature !== savedBaseline
   const recovery = useAccountDraft('sheet', userId, draft || questions.some(question => question.trim())
     ? { draft, days, questions, includeParent, includeNotes, includeDetails, subjectId, contactKey, appointment } : null, content => {
     if (!Array.isArray(content.questions)) return false
@@ -62,6 +77,20 @@ export default function ShareSummary({ userId, visible = true, refreshKey = 0, i
     setContactKey(typeof content.contactKey === 'string' ? content.contactKey : '')
     setAppointment(typeof content.appointment === 'string' ? content.appointment : ''); setContactNameSnapshot(''); setFrozenOptions('')
   })
+  const localSheetWork = sheetDirty || incomingActive || Boolean(pendingContact) || savedDrafts.length > 0
+  useEffect(() => { setWorkVersion(version => version + 1) }, [signature, incomingQuestion, incomingActive, pendingContact, savedDrafts.length, recovery.candidate?.updated_at])
+  useCareWork('consultation-sheet', !packetLocked && (localSheetWork || recovery.candidate) ? {
+    version: workVersion, title: localSheetWork ? 'supportFlow.sheetDraft' : 'supportFlow.sheetRecovery',
+    priority: 2, protectLeave: localSheetWork,
+    tab: 'support', detail: { view: 'sheet', resume: 'sheet' }, action: 'experience.trackedWorkOpen',
+  } : null)
+  useEffect(() => {
+    if (!visible || resumeRequest?.resume !== 'sheet' || !resumeRequest.key || handledResume.current === resumeRequest.key) return
+    // A continuation request only reveals the current editor. Saved drafts,
+    // incoming questions and contact suggestions still require their own choice.
+    handledResume.current = resumeRequest.key
+    setFocusTarget({ kind: incomingActive ? 'incoming' : 'sheet' })
+  }, [visible, resumeRequest?.key, resumeRequest?.resume, incomingActive])
   useEffect(() => {
     if (!visible) return
     let active = true
@@ -189,9 +218,11 @@ export default function ShareSummary({ userId, visible = true, refreshKey = 0, i
       <label className="checkbox-label"><input type="checkbox" disabled={!includeDetails} checked={includeNotes}
         onChange={event => setIncludeNotes(event.target.checked)} />{t('pilot.includeNotes')}</label>
     </fieldset>
-    {(draft || questions.some(question => question.trim()) || recovery.hasSavedDraft) && <button type="button" className="pilot-button secondary" disabled={loading || packetLocked} onClick={() => {
+    {(draft || localSheetWork || recovery.hasSavedDraft) && <button type="button" className="pilot-button secondary" disabled={loading || packetLocked} onClick={() => {
       if (window.confirm(t('polish.deleteSheetConfirm'))) {
         setDraft(null); setQuestions(['', '', '']); setIncomingQuestion(''); setIncomingActive(false); setCandidate(null); setSavedDrafts([]); recovery.clear()
+        setPendingContact(null)
+        setSavedBaseline(sheetSignature({ ...content, questions: ['', '', ''], text: '' }))
         setFocusTarget({ kind: 'sheet' })
       }
     }}>{t('polish.deleteDraft')}</button>}
@@ -225,11 +256,12 @@ export default function ShareSummary({ userId, visible = true, refreshKey = 0, i
       {savedDrafts.map((text, index) => <label key={index}>{t('work.previousSheetNumber', { number: index + 1 })}
         <textarea rows={10} readOnly value={text} />
       </label>)}
+      <button type="button" className="text-action" disabled={loading || packetLocked} onClick={() => {
+        if (window.confirm(t('supportFlow.discardPreviousConfirm'))) setSavedDrafts([])
+      }}>{t('supportFlow.discardPrevious')}</button>
     </details>}
     <ConsultationPackets visible={visible} onLockChange={setPacketLocked} canSave={canExport && !packetLocked}
-      content={{ contact_key: contactKey || null, subject_id: subjectId || null, days, questions,
-        include_parent: includeParent, include_notes: includeNotes, include_details: includeDetails, text: preview,
-        appointment_at: appointment && Number.isFinite(new Date(`${appointment}:00+09:00`).getTime()) ? new Date(`${appointment}:00+09:00`).toISOString() : null }}
+      content={content} onSaved={row => setSavedBaseline(sheetSignature(row.content))}
       onOpen={row => {
         const value = row.content
         const id = value.subject_id || '', key = value.contact_key || '', name = value.contact_name || ''
@@ -240,9 +272,11 @@ export default function ShareSummary({ userId, visible = true, refreshKey = 0, i
         setDraft({ text: value.text, generated: value.text, sourceKey: JSON.stringify([id, subjects.find(item => item.subject_id === id)?.revision || 0,
           value.days, value.include_parent, value.include_notes, value.include_details, value.questions, refreshKey, i18n.resolvedLanguage, today, key, name, time]) })
         setFrozenOptions(JSON.stringify([id, value.days, value.include_parent, value.include_notes, value.include_details, value.questions, key, time])); setFocusTarget({ kind: 'sheet' })
+        setSavedBaseline(sheetSignature(value))
       }} onDeleted={() => {
         setDraft(null); setQuestions(['', '', '']); setCandidate(null); setSavedDrafts([]); setFrozenOptions('')
         setContactKey(''); setContactNameSnapshot(''); setAppointment(''); recovery.clear()
+        setSavedBaseline(sheetSignature({ ...content, questions: ['', '', ''], text: '', contact_key: null, appointment_at: null }))
       }} />
   </section>
 }

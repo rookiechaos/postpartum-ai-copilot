@@ -1,0 +1,13 @@
+{
+  "scriptPending": "編集中の電話メモ",
+  "scriptPrepared": "準備した電話メモ",
+  "scriptLocal": "編集内容は、ログイン中のこの画面に残っています。離れる前にコピーするか、相談用紙にまとめてください。",
+  "discardScript": "このメモを閉じる",
+  "discardScriptConfirm": "編集内容を破棄して、この電話メモを閉じますか？",
+  "progressPending": "相談の進み具合：保存中・結果の確認待ち",
+  "progressDraft": "未保存の相談の進み具合",
+  "sheetDraft": "作成途中の相談用紙",
+  "sheetRecovery": "確認できる相談用紙の下書き",
+  "discardPrevious": "以前の編集内容を破棄する",
+  "discardPreviousConfirm": "ここに表示されている以前の編集内容を破棄しますか？ 現在の相談用紙、設定、アカウントに保存済みの資料はそのまま残ります。"
+}

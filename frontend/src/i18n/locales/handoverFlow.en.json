@@ -1,0 +1,16 @@
+{
+  "draft": "A handover note has unsaved changes",
+  "pending": "A handover note's save result needs checking",
+  "pendingNotice": "The save result has not been confirmed. Your input stays here. Check the current note before saving again; leaving does not cancel an operation already submitted.",
+  "check": "Check the current saved note",
+  "checking": "Checking the handover note…",
+  "failed": "The saved note could not be checked. Your input stays here; try checking again when connected.",
+  "different": "The current saved note does not match the submitted version. Review it below. No save was repeated, and your input has been kept above.",
+  "empty": "No note text",
+  "shared": "Visible to this family",
+  "private": "Only visible to you",
+  "useCurrent": "Use the checked note",
+  "useCurrentConfirm": "Replace your input with the checked note and its sharing choice? This does not cancel a submitted save. A later save may require another check.",
+  "discard": "Discard these changes",
+  "discardConfirm": "Return to the last confirmed note and sharing choice? This only changes your input; it does not save or delete a note."
+}

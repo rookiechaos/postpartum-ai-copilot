@@ -217,19 +217,20 @@ function AuthenticatedApp({ userId, onChooseEntry, registerLeaveGuard, pendingIn
   const navigate = useCallback((tab, detail) => {
     if (tab === 'dashboard' && detail) setDashboardRequest(previous => ({ ...detail, key: previous.key + 1 }))
     if (tab === 'tracking' && detail) { setTrackingRequest(detail); setTrackingRequestKey(value => value + 1) }
-    const chatResume = tab === 'chat' && detail?.action === 'resume'
+    const chatResume = tab === 'chat' && ['resume', 'support'].includes(detail?.action)
     const chatQuestion = tab === 'chat' && typeof detail === 'string' && detail.length > 0
-    const settingsHelp = tab === 'settings' && detail?.view === 'help'
+    const settingsDestination = tab === 'settings' && ['help', 'profile'].includes(detail?.view)
     if (chatQuestion) { setChatDraft(detail); setChatRequestKey(value => value + 1) }
-    if (chatResume) setChatNavigation(previous => ({ key: previous.key + 1, action: 'resume' }))
-    if (settingsHelp) setSettingsNavigation(previous => ({ key: previous.key + 1, view: 'help' }))
+    if (chatResume) setChatNavigation(previous => ({ key: previous.key + 1, action: detail.action,
+      target: detail.target, resume: detail.resume, contactKey: detail.contactKey || '' }))
+    if (settingsDestination) setSettingsNavigation(previous => ({ key: previous.key + 1, view: detail.view }))
     const supportDestination = tab === 'support' && ['contacts', 'sheet'].includes(detail?.view) ? detail : null
     if (supportDestination) setSupportRequest(previous => ({ key: previous.key + 1, view: supportDestination.view,
-      contactKey: supportDestination.contactKey || '',
+      contactKey: supportDestination.contactKey || '', resume: supportDestination.resume,
       contactName: supportDestination.contactName || '',
       question: supportDestination.view === 'sheet' && typeof supportDestination.question === 'string' ? supportDestination.question : '' }))
     // A requested support view or incoming question owns its more specific focus target.
-    pendingPanelFocus.current = !supportDestination && !chatResume && !chatQuestion && !settingsHelp
+    pendingPanelFocus.current = !supportDestination && !chatResume && !chatQuestion && !settingsDestination
       && !(detail && ['tracking', 'dashboard'].includes(tab))
     setNavigationKey(value => value + 1)
     setVisitedTabs(previous => previous.includes(tab) ? previous : [...previous, tab])

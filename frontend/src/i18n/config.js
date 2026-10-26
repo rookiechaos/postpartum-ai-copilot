@@ -30,6 +30,14 @@ import recoveryEnglish from './locales/recovery.en.json'
 import recoveryJapanese from './locales/recovery.ja.json'
 import experienceEnglish from './locales/experience.en.json'
 import experienceJapanese from './locales/experience.ja.json'
+import settingsFlowEnglish from './locales/settingsFlow.en.json'
+import settingsFlowJapanese from './locales/settingsFlow.ja.json'
+import supportFlowEnglish from './locales/supportFlow.en.json'
+import supportFlowJapanese from './locales/supportFlow.ja.json'
+import chatFlowEnglish from './locales/chatFlow.en.json'
+import chatFlowJapanese from './locales/chatFlow.ja.json'
+import handoverFlowEnglish from './locales/handoverFlow.en.json'
+import handoverFlowJapanese from './locales/handoverFlow.ja.json'
 
 i18n
   .use(LanguageDetector)
@@ -37,10 +45,10 @@ i18n
   .init({
     resources: {
       en: {
-        translation: { ...enTranslations, polish: polishEnglish, ui: uiEnglish, flows: flowsEnglish, friendly: friendlyEnglish, localCare: localCareEnglish, interaction: interactionEnglish, continuity: continuityEnglish, reviewFixes: reviewFixesEnglish, workflow: workflowEnglish, foundation: foundationEnglish, findSupport: findSupportEnglish, recovery: recoveryEnglish, experience: experienceEnglish }
+        translation: { ...enTranslations, polish: polishEnglish, ui: uiEnglish, flows: flowsEnglish, friendly: friendlyEnglish, localCare: localCareEnglish, interaction: interactionEnglish, continuity: continuityEnglish, reviewFixes: reviewFixesEnglish, workflow: workflowEnglish, foundation: foundationEnglish, findSupport: findSupportEnglish, recovery: recoveryEnglish, experience: experienceEnglish, settingsFlow: settingsFlowEnglish, supportFlow: supportFlowEnglish, chatFlow: chatFlowEnglish, handoverFlow: handoverFlowEnglish }
       },
       ja: {
-        translation: { ...jaTranslations, polish: polishJapanese, ui: uiJapanese, flows: flowsJapanese, friendly: friendlyJapanese, localCare: localCareJapanese, interaction: interactionJapanese, continuity: continuityJapanese, reviewFixes: reviewFixesJapanese, workflow: workflowJapanese, foundation: foundationJapanese, findSupport: findSupportJapanese, recovery: recoveryJapanese, experience: experienceJapanese }
+        translation: { ...jaTranslations, polish: polishJapanese, ui: uiJapanese, flows: flowsJapanese, friendly: friendlyJapanese, localCare: localCareJapanese, interaction: interactionJapanese, continuity: continuityJapanese, reviewFixes: reviewFixesJapanese, workflow: workflowJapanese, foundation: foundationJapanese, findSupport: findSupportJapanese, recovery: recoveryJapanese, experience: experienceJapanese, settingsFlow: settingsFlowJapanese, supportFlow: supportFlowJapanese, chatFlow: chatFlowJapanese, handoverFlow: handoverFlowJapanese }
       }
     },
     fallbackLng: 'ja',

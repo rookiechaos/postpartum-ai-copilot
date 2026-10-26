@@ -50,8 +50,10 @@ export function CareSessionProvider({ userId, children }) {
 export function useCareSession() { return useContext(CareContext) }
 
 export function useCareWork(key, value) {
-  const { setWork } = useCareSession()
+  // Public previews and institution contact cards share some family components.
+  // They have no care session and must never register private family work.
+  const setWork = useCareSession()?.setWork
   const serialized = value ? JSON.stringify(value) : null
-  useEffect(() => { setWork(key, serialized ? JSON.parse(serialized) : null) }, [key, serialized, setWork])
-  useEffect(() => () => setWork(key, null), [key, setWork])
+  useEffect(() => { setWork?.(key, serialized ? JSON.parse(serialized) : null) }, [key, serialized, setWork])
+  useEffect(() => () => setWork?.(key, null), [key, setWork])
 }

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 import taskManager from '../utils/taskManager'
@@ -10,6 +10,7 @@ import { revealElement } from '../utils/focusView'
 import { publicHttps } from '../utils/publicDirectory'
 import { useCareWork } from '../utils/CareSession'
 import './ChatInterface.css'
+import './ChatFlow.css'
 
 function ChatInterface({ userId, initialDraft = '', draftVersion = 0, navigationRequest, visible = true, onPrepareSheet }) {
   const { t, i18n } = useTranslation()
@@ -20,7 +21,9 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, navigation
       timestamp: new Date()
     }
   ])
-  const [input, setInput] = useState(initialDraft)
+  const [input, setInput] = useState('')
+  const [incomingDraft, setIncomingDraft] = useState(null)
+  const [unreadAnswer, setUnreadAnswer] = useState(null)
   const [includeProfile, setIncludeProfile] = useState(false)
   const [failed, setFailed] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -41,32 +44,61 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, navigation
     setIncludePrevious(false); setIncludeProfile(false)
   })
   const threadRef = useRef(null)
+  const mounted = useRef(true)
   const sending = useRef(false)
   const lastMessageRef = useRef(null)
+  const latestAnswerRef = useRef(null)
+  const answerSequence = useRef(0)
   const inputRef = useRef(null)
   const composerRef = useRef(null)
+  const incomingRef = useRef(null)
+  const supportDetailsRef = useRef(null)
   const stickToLatest = useRef(true)
   const displayedMessageCount = useRef(0)
   const pendingComposerFocus = useRef(false)
   const questionDraftRef = useRef(null)
   const pendingQuestionFocus = useRef(false)
+  const pendingIncomingFocus = useRef(false)
+  const handledDraftVersion = useRef(null)
+  const handledSupportNavigation = useRef(0)
   const handledNavigation = useRef(0)
-  const hasLocalDraft = Boolean(input.trim() || followUp || preparedQuestion)
-  const chatWorkTitle = loading ? 'experience.chatProcessing' : input.trim() || followUp ? 'experience.chatDraft'
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
+  const latestAnswerIndex = messages.reduce((latest, message, index) => message.generated ? index : latest, -1)
+  const hasLocalDraft = Boolean(input.trim() || followUp || preparedQuestion || incomingDraft)
+  const chatWorkTitle = loading ? 'experience.chatProcessing' : incomingDraft ? 'chatFlow.incomingWork' : input.trim() || followUp ? 'experience.chatDraft'
     : preparedQuestion ? 'experience.chatPrepared' : draft.candidate ? 'experience.chatRecovery' : null
   useCareWork('chat', chatWorkTitle ? {
     version: `${chatWorkTitle}:${messages.length}:${draft.candidate?.updated_at || ''}`,
     title: chatWorkTitle, critical: loading, protectLeave: loading || hasLocalDraft,
     priority: loading ? 0 : 2, tab: 'chat', detail: { action: 'resume' }, action: 'experience.trackedWorkOpen',
   } : null)
+  useCareWork('chat-result', unreadAnswer ? {
+    version: `answer:${unreadAnswer}`, title: 'chatFlow.unreadResult', protectLeave: true,
+    priority: 1, tab: 'chat', detail: { action: 'resume', target: 'answer' }, action: 'chatFlow.readLatest',
+  } : null)
+  useLayoutEffect(() => {
+    if (visible && navigationRequest?.key && navigationRequest.action === 'support'
+      && handledSupportNavigation.current !== navigationRequest.key && supportDetailsRef.current) {
+      supportDetailsRef.current.open = true
+      handledSupportNavigation.current = navigationRequest.key
+    }
+  }, [navigationRequest?.key, visible])
   useEffect(() => {
     if (!visible || !navigationRequest?.key || handledNavigation.current === navigationRequest.key) return
+    if (navigationRequest.action === 'support') return
     // Continuing work only changes focus: it must never replace a question or
     // restore consent, send a request, or recover a server draft automatically.
-    const target = loading ? threadRef.current : !input.trim() && !followUp && preparedQuestion
+    if (navigationRequest.target === 'answer' && latestAnswerRef.current) {
+      if (reviewLatestAnswer()) handledNavigation.current = navigationRequest.key
+      return
+    }
+    const target = loading ? threadRef.current : incomingDraft ? incomingRef.current : !input.trim() && !followUp && preparedQuestion
       ? questionDraftRef.current : composerRef.current
     if (revealElement(target)) handledNavigation.current = navigationRequest.key
-  }, [navigationRequest?.key, visible, loading, preparedQuestion, input, followUp])
+  }, [navigationRequest?.key, visible, loading, preparedQuestion, input, followUp, incomingDraft, latestAnswerIndex])
   useEffect(() => {
     if (visible && pendingQuestionFocus.current && preparedQuestion && revealElement(questionDraftRef.current)) pendingQuestionFocus.current = false
   }, [preparedQuestion?.index, visible])
@@ -91,7 +123,20 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, navigation
       previous_answer: [...message.content].slice(0, 4000).join('') })
     if (action) setInput(t(`interaction.chat.drafts.${action}`))
     setIncludePrevious(false); setIncludeProfile(false); setFailed(false); setNextAction(action)
+    if (message.answerKey === unreadAnswer) setUnreadAnswer(null)
     revealComposer()
+  }
+  const reviewLatestAnswer = () => {
+    const thread = threadRef.current
+    const answer = latestAnswerRef.current
+    if (!visible || !thread || !answer || !revealElement(thread)) return false
+    // This explicit review owns the position, even when newer user/error
+    // messages have not yet been displayed after a tab switch.
+    displayedMessageCount.current = messages.length
+    stickToLatest.current = false
+    thread.scrollTop += answer.getBoundingClientRect().top - thread.getBoundingClientRect().top
+    setHasNewMessages(false); setUnreadAnswer(null)
+    return true
   }
   const scrollToLatest = () => {
     const thread = threadRef.current
@@ -111,8 +156,17 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, navigation
     displayedMessageCount.current = messages.length
   }, [messages, visible])
   useEffect(() => {
-    if (initialDraft) { setInput(initialDraft); revealComposer() }
-  }, [draftVersion])
+    if (handledDraftVersion.current === draftVersion) return
+    handledDraftVersion.current = draftVersion
+    if (typeof initialDraft !== 'string' || !initialDraft.trim()) return
+    // A navigation suggestion is only a proposal. It cannot replace an edited
+    // question, change attachments, or reset send consent until it is applied.
+    pendingIncomingFocus.current = true
+    setIncomingDraft({ text: initialDraft.slice(0, 5000), version: draftVersion })
+  }, [draftVersion, initialDraft])
+  useEffect(() => {
+    if (visible && incomingDraft && pendingIncomingFocus.current && revealElement(incomingRef.current)) pendingIncomingFocus.current = false
+  }, [incomingDraft, visible])
   useEffect(() => {
     if (visible && pendingComposerFocus.current) {
       pendingComposerFocus.current = false; revealElement(nextAction ? inputRef.current : composerRef.current)
@@ -173,6 +227,7 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, navigation
             priority,
             timeout: 300000 // 5 minutes
           })
+          if (!mounted.current) return
           if (result.error) throw new Error('AI response unavailable')
           
           const assistantMessage = {
@@ -184,10 +239,12 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, navigation
             red_flags: result.red_flags || [],
             validation: result.validation || null,
             presentation: result.presentation || null,
-            timestamp: new Date()
+            timestamp: new Date(),
+            answerKey: ++answerSequence.current,
           }
           
           setMessages(prev => [...prev, assistantMessage])
+          setUnreadAnswer(assistantMessage.answerKey)
           setTaskStatus('completed')
         } catch (taskError) {
           throw taskError
@@ -202,6 +259,7 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, navigation
           include_previous: Boolean(selectedPrevious),
           previous_exchange: selectedPrevious,
         })
+        if (!mounted.current) return
         if (response.error) throw new Error('AI response unavailable')
 
         const assistantMessage = {
@@ -213,15 +271,18 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, navigation
           red_flags: response.red_flags || [],
           validation: response.validation || null,
           presentation: response.presentation || null,
-          timestamp: new Date()
+          timestamp: new Date(),
+          answerKey: ++answerSequence.current,
         }
 
         setMessages(prev => [...prev, assistantMessage])
+        setUnreadAnswer(assistantMessage.answerKey)
         setTaskStatus('completed')
       }
       setFollowUp(null); setIncludePrevious(false); setIncludeProfile(false); setNextAction('')
       await draft.clear()
     } catch {
+      if (!mounted.current) return
       setTaskStatus('failed')
       setFailed(true)
       setInput(current => current.trim() ? current : queryText)
@@ -233,8 +294,7 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, navigation
       setMessages(prev => [...prev, errorMessage])
     } finally {
       sending.current = false
-      setLoading(false)
-      setTaskStatus(null)
+      if (mounted.current) { setLoading(false); setTaskStatus(null) }
     }
   }
 
@@ -245,15 +305,18 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, navigation
         <p>{t('pilot.guidedChatIntro')}</p>
         <details className="chat-scenes"><summary>{t('ui.chat.exampleQuestions')}</summary><div className="pilot-actions">
           {['crying', 'feeding', 'rest', 'appointment'].map(scene => <button key={scene} type="button"
-            className="pilot-button secondary" disabled={loading} onClick={() => { setInput(t(`pilot.questions.${scene}`)); revealComposer() }}>{t(`pilot.scenes.${scene}`)}</button>)}
+            className="pilot-button secondary" disabled={loading} onClick={() => {
+              pendingIncomingFocus.current = true; setIncomingDraft({ text: t(`pilot.questions.${scene}`), version: `scene:${scene}` })
+            }}>{t(`pilot.scenes.${scene}`)}</button>)}
         </div></details>
         <p>{t('pilot.chatBoundary')}</p>
       </header>
-      <details className="chat-support"><summary>{t('friendly.chat.human')}</summary><SupportDirectory userId={userId} visible={visible} onPrepareSheet={onPrepareSheet} /></details>
+      <details className="chat-support" ref={supportDetailsRef}><summary>{t('friendly.chat.human')}</summary><SupportDirectory userId={userId} visible={visible} onPrepareSheet={onPrepareSheet}
+        workDestination={{ id: 'chat-directory', tab: 'chat', detail: { action: 'support' } }} navigationRequest={navigationRequest} /></details>
       <div className="chat-thread-heading"><h3 id="chat-thread-heading">{t('ui.chat.conversation')}</h3>
-        {hasNewMessages && <button type="button" className="pilot-button secondary" onClick={() => {
-          scrollToLatest(); threadRef.current?.focus({ preventScroll: true })
-        }}>{t('ui.chat.latest')}</button>}
+        {(hasNewMessages || unreadAnswer) && <button type="button" className="pilot-button secondary" onClick={() => {
+          if (!reviewLatestAnswer()) { scrollToLatest(); threadRef.current?.focus({ preventScroll: true }) }
+        }}>{t(unreadAnswer ? 'chatFlow.readLatest' : 'ui.chat.latest')}</button>}
       </div>
       <p className="chat-thread-status" role="status">{loading ? t('work.chatWaiting')
         : messages[messages.length - 1]?.generated ? t('ui.chat.answerReady') : ''}</p>
@@ -264,7 +327,10 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, navigation
           if (stickToLatest.current) setHasNewMessages(false)
         }}>
         {messages.map((msg, idx) => (
-          <article key={idx} ref={idx === messages.length - 1 ? lastMessageRef : null} className={`message ${msg.role}`} aria-label={t(msg.role === 'user' ? 'ui.chat.you' : 'ui.chat.assistant')}>
+          <article key={idx} ref={element => {
+            if (idx === messages.length - 1) lastMessageRef.current = element
+            if (idx === latestAnswerIndex) latestAnswerRef.current = element
+          }} className={`message ${msg.role}`} aria-label={t(msg.role === 'user' ? 'ui.chat.you' : 'ui.chat.assistant')}>
             {msg.red_flags?.length > 0 && <section className="red-flags">
               <h4>⚠️ {t('chat.important')}</h4>
               <ul>{msg.red_flags.map((flag, index) => <li key={index}>{flag}</li>)}</ul>
@@ -321,6 +387,7 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, navigation
               </>}
               {onPrepareSheet && <button type="button" className="pilot-button secondary" onClick={() => {
                 if (preparedQuestion && preparedQuestion.index !== idx && preparedQuestion.text.trim() && !window.confirm(t('flows.ai.replaceQuestion'))) return
+                if (msg.answerKey === unreadAnswer) setUnreadAnswer(null)
                 if (preparedQuestion?.index !== idx) {
                   pendingQuestionFocus.current = true; setPreparedQuestion({ index: idx, text: (msg.question || '').slice(0, 250) })
                 }
@@ -362,7 +429,24 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, navigation
 
       <form className="chat-composer" onSubmit={event => event.preventDefault()} aria-labelledby="chat-composer-heading">
       <h3 id="chat-composer-heading" ref={composerRef} tabIndex={-1}>{t('ui.chat.writeQuestion')}</h3>
-      <DraftRecoveryNotice draft={draft} disabled={loading} compact />
+      <DraftRecoveryNotice draft={{ ...draft, recover: () => {
+        if ((input.trim() || followUp) && !window.confirm(t('chatFlow.restoreReplace'))) return
+        draft.recover()
+      } }} disabled={loading} compact />
+      {incomingDraft && <section className="chat-incoming-draft" aria-labelledby="chat-incoming-heading">
+        <h4 id="chat-incoming-heading" ref={incomingRef} tabIndex={-1}>{t('chatFlow.incomingTitle')}</h4>
+        <p>{t('chatFlow.incomingNotice')}</p>
+        <pre>{incomingDraft.text}</pre>
+        {Boolean(input.trim() || followUp) && <p>{t('chatFlow.replaceNotice')}</p>}
+        {Boolean(draft.candidate) && <p>{t('chatFlow.recoveryFirst')}</p>}
+        <div className="pilot-actions">
+          <button type="button" className="pilot-button secondary" disabled={loading || Boolean(draft.candidate) || ['loading', 'deleting'].includes(draft.status)} onClick={() => {
+            setInput(incomingDraft.text); setFollowUp(null); setIncludePrevious(false); setIncludeProfile(false)
+            setFailed(false); setNextAction(''); setIncomingDraft(null); revealComposer()
+          }}>{t(input.trim() || followUp ? 'chatFlow.replaceWithIncoming' : 'chatFlow.applyIncoming')}</button>
+          <button type="button" className="pilot-button secondary" onClick={() => { setIncomingDraft(null); revealComposer() }}>{t('chatFlow.dismissIncoming')}</button>
+        </div>
+      </section>}
       {loading && <p className="field-hint">{t('work.chatWaiting')}</p>}
       {failed && <p role="alert">{t('work.retryDraft')}</p>}
       {nextAction && <p role="status">{t('interaction.chat.draftNotice')}</p>}

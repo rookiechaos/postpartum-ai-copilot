@@ -4,14 +4,15 @@ import api from '../utils/api'
 import { japanDateTime, japanDateTimeInput } from '../utils/japanTime'
 import useConnection from '../utils/useConnection'
 import { journeysChanged } from '../utils/CareSession'
+import { revealElement } from '../utils/focusView'
 
-const editorFromRow = (row, name = '') => ({
-  form: { state: row?.cleared ? 'preparing' : row?.state || 'preparing',
+const editorFromRow = (row, name = '') => {
+  const form = { state: row?.cleared ? 'preparing' : row?.state || 'preparing',
     contact_response: row?.cleared ? '' : row?.contact_response || '', next_steps: row?.cleared ? '' : row?.next_steps || '',
-    time: row?.next_contact_at && !row.cleared ? japanDateTimeInput(row.next_contact_at) : '' },
-  revision: row?.revision || 0, contact_name: name || row?.contact_name || '',
-  edited: false, busy: false, message: '', conflict: false,
-})
+    time: row?.next_contact_at && !row.cleared ? japanDateTimeInput(row.next_contact_at) : '' }
+  return { form, baseline: form, revision: row?.revision || 0, contact_name: name || row?.contact_name || '',
+    edited: false, busy: false, message: '', conflict: false, unresolved: false }
+}
 
 export function useSupportJourneys(userId, visible) {
   const [rows, setRows] = useState([])
@@ -19,6 +20,7 @@ export function useSupportJourneys(userId, visible) {
   const [editors, setEditors] = useState({})
   const [ready, setReady] = useState(false)
   const [error, setError] = useState(false)
+  const [workVersion, setWorkVersion] = useState(0)
   const { reconnections } = useConnection()
   const generation = useRef(0)
   const writes = useRef(new Set())
@@ -51,8 +53,17 @@ export function useSupportJourneys(userId, visible) {
   }))
   const edit = (key, field, value, name) => {
     if (writes.current.has(key)) return
-    updateEditor(key, editor => editor.conflict ? editor : ({ ...editor, edited: true, message: 'unsaved',
-      contact_name: name || editor.contact_name, form: { ...editor.form, [field]: value } }), name)
+    setWorkVersion(version => version + 1)
+    updateEditor(key, editor => {
+      if (editor.conflict) return editor
+      const form = { ...editor.form, [field]: value }
+      // A transport failure still needs a deliberate result check even if the
+      // user puts the fields back. Editing must not clear that uncertainty.
+      const uncertain = editor.unresolved
+      const edited = uncertain || JSON.stringify(form) !== JSON.stringify(editor.baseline)
+      return { ...editor, edited, message: uncertain ? 'failed' : edited ? 'unsaved' : '',
+        contact_name: name || editor.contact_name, form }
+    }, name)
   }
   const save = async (key, body, name) => {
     if (writes.current.has(key)) return
@@ -68,7 +79,8 @@ export function useSupportJourneys(userId, visible) {
       window.dispatchEvent(new Event(journeysChanged))
     } catch (failure) {
       updateEditor(key, editor => ({ ...editor, edited: true, busy: false,
-        message: failure.status === 409 ? 'conflict' : 'failed', conflict: failure.status === 409 }))
+        message: failure.status === 409 ? 'conflict' : 'failed', conflict: failure.status === 409,
+        unresolved: editor.unresolved || Boolean(failure.resultUnconfirmed) }))
     } finally { writes.current.delete(key); generation.current++ }
   }
   const discard = key => {
@@ -80,13 +92,18 @@ export function useSupportJourneys(userId, visible) {
     updateEditor(key, editor => ({ ...editor, edited: false, message: '' }))
     reload()
   }
-  return { rows, editors, ready, error, reload, save, edit, discard, reloadContact,
+  return { rows, editors, ready, error, reload, save, edit, discard, reloadContact, workVersion,
     saving: Object.values(editors).some(editor => editor.busy),
     setMessage: (key, message, name) => updateEditor(key, editor => ({ ...editor, message }), name) }
 }
 
-export default function SupportProgress({ contactKey, contactName, row, progress, archived = false, expanded = false }) {
+export default function SupportProgress({ contactKey, contactName, row, progress, archived = false, expanded = false, resumeKey, active = true }) {
   const { t, i18n } = useTranslation()
+  const heading = useRef(null)
+  const handledResume = useRef(null)
+  useEffect(() => {
+    if (active && resumeKey && handledResume.current !== resumeKey && revealElement(heading.current)) handledResume.current = resumeKey
+  }, [resumeKey, active])
   const editor = progress.editors[contactKey] || editorFromRow(row, contactName)
   const { form, revision, busy, message, conflict, edited } = editor
   const canSave = !archived || Boolean(row)
@@ -101,7 +118,7 @@ export default function SupportProgress({ contactKey, contactName, row, progress
   }
   const Container = expanded ? 'section' : 'details'
   const Title = expanded ? 'h4' : 'summary'
-  return <Container className="support-progress"><Title>{row && !row.cleared
+  return <Container className="support-progress"><Title ref={heading} tabIndex={-1}>{row && !row.cleared
     ? t('friendly.support.ownProgress', { state: t(['completed', 'paused'].includes(row.state) ? `continuity.journey.states.${row.state}` : `flows.journey.states.${row.state}`) }) : t('flows.journey.title')}
     {edited ? ` · ${t('flows.journey.unsaved')}` : ''}</Title>
     {row && !row.cleared && <p>{t('friendly.support.ownProgressHint')}</p>}
@@ -124,11 +141,11 @@ export default function SupportProgress({ contactKey, contactName, row, progress
       <div className="pilot-actions"><button className="pilot-button secondary" type="submit" disabled={!canSave}>{t('work.saveChanges')}</button>
         {row && !row.cleared && <button className="pilot-button secondary" type="button" onClick={() => save(null, true)}>{t('flows.journey.clear')}</button>}</div>
     </fieldset></form>
-    {archived && edited && <button type="button" className="pilot-button secondary" disabled={busy} onClick={() => {
+    {archived && edited && <button type="button" className="pilot-button secondary" disabled={busy || editor.unresolved} onClick={() => {
       if (window.confirm(t('flows.journey.discardConfirm'))) progress.discard(contactKey)
     }}>{t('flows.journey.discardDraft')}</button>}
     {message && <p role={['failed', 'conflict', 'invalidTime'].includes(message) ? 'alert' : 'status'}>{t(`flows.journey.${message}`)}</p>}
-    {(progress.error || conflict || message === 'failed') && <button type="button" className="pilot-button secondary" disabled={progress.saving} onClick={() => {
+    {(progress.error || conflict || editor.unresolved || message === 'failed') && <button type="button" className="pilot-button secondary" disabled={progress.saving} onClick={() => {
       if (edited && !window.confirm(t('flows.journey.reloadConfirm'))) return
       progress.reloadContact(contactKey)
     }}>{t('friendly.support.reloadProgress')}</button>}

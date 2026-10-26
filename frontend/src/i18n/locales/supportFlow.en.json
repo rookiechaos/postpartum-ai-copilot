@@ -1,0 +1,13 @@
+{
+  "scriptPending": "Edited call memo",
+  "scriptPrepared": "Prepared call memo",
+  "scriptLocal": "Your edits are kept while this account is open. Copy them or prepare a consultation sheet before leaving.",
+  "discardScript": "Close this memo",
+  "discardScriptConfirm": "Discard your edits and close this call memo?",
+  "progressPending": "Support progress: saving or result to confirm",
+  "progressDraft": "Unsaved support progress",
+  "sheetDraft": "Consultation sheet in progress",
+  "sheetRecovery": "Consultation draft available to review",
+  "discardPrevious": "Discard earlier edited versions",
+  "discardPreviousConfirm": "Discard the earlier edited versions shown here? Your current consultation sheet, options, and saved account material will stay as they are."
+}

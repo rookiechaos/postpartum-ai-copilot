@@ -1,0 +1,13 @@
+{
+  "unreadResult": "An AI answer is ready to review",
+  "readLatest": "Read the latest answer",
+  "incomingWork": "A suggested question is waiting for review",
+  "incomingTitle": "Review this suggested question",
+  "incomingNotice": "This suggestion has not replaced your question or changed the information you chose to include. Nothing will be sent until you review and send it yourself.",
+  "replaceNotice": "Using this suggestion replaces the question and follow-up context below. The information to include will be unselected so you can choose it again.",
+  "recoveryFirst": "First choose whether to restore or delete the saved question above. Your current question will stay here while you decide.",
+  "applyIncoming": "Use this question",
+  "replaceWithIncoming": "Replace my question with this suggestion",
+  "dismissIncoming": "Dismiss this suggestion",
+  "restoreReplace": "Replace your current question and follow-up context with the saved draft? The information to include will be unselected so you can choose it again."
+}

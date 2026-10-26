@@ -1,0 +1,19 @@
+.chat-interface .chat-incoming-draft {
+  margin-block: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-inline-start: 3px solid var(--color-brand);
+  border-radius: var(--radius-control);
+  background: var(--color-tint);
+  color: var(--color-text);
+}
+
+.chat-interface .chat-incoming-draft h4 { margin-bottom: .5rem; }
+.chat-interface .chat-incoming-draft p { margin-block: .5rem; line-height: var(--line-height-body); }
+.chat-interface .chat-incoming-draft pre { max-height: 12rem; padding: .75rem; background: var(--color-surface); border-radius: var(--radius-control); }
+.chat-interface .chat-incoming-draft .pilot-actions { margin-bottom: 0; }
+.chat-interface .chat-incoming-draft :focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
+
+@media (max-width: 700px) {
+  .chat-interface .chat-incoming-draft .pilot-actions { flex-direction: column; align-items: stretch; }
+}

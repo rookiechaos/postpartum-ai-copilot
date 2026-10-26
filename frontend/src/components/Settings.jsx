@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
+import { useCareWork } from '../utils/CareSession'
 import { revealElement } from '../utils/focusView'
 import { Save, User, Baby, Shield, HelpCircle, Eye } from 'lucide-react'
 import { useToast } from './Toast'
@@ -11,8 +12,16 @@ import AccessibilitySettings from './AccessibilitySettings'
 import SecuritySettings from './SecuritySettings'
 import LanguageSelector from './LanguageSelector'
 import { InstallInstructions } from './InstallPrompt'
-import { Button, ErrorMessage, FormField, PageHeader } from './ui'
+import { Button, ErrorMessage, FormField, PageHeader, StatusMessage } from './ui'
 import './Settings.css'
+import './SettingsFlow.css'
+
+const profileFields = ['babyName', 'babyAge', 'birthType', 'feedingType']
+const profileValues = context => Object.fromEntries(profileFields.map(key => [key,
+  typeof context?.[key] === 'string' ? context[key] : '']))
+const languageValue = (context, fallback) => typeof context?.language === 'string'
+  && ['ja', 'en'].includes(context.language.split('-')[0]) ? context.language.split('-')[0] : fallback
+const sameProfile = (left, right) => Boolean(left && right) && Object.keys(left).every(key => left[key] === right[key])
 
 function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntrance, navigationRequest, visible = true }) {
   const { t, i18n } = useTranslation()
@@ -23,76 +32,145 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
     birthType: '',
     feedingType: ''
   })
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [saveError, setSaveError] = useState(false)
+  const [saveState, setSaveState] = useState('idle')
+  const [baseline, setBaseline] = useState(null)
+  const [pendingSave, setPendingSave] = useState(null)
+  const [checkedContext, setCheckedContext] = useState(null)
   const [loadState, setLoadState] = useState('loading')
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [activeSubTab, setActiveSubTab] = useState('profile')
   const handledNavigation = useRef(0)
   const helpButton = useRef(null)
+  const profileButton = useRef(null)
+  const operationLock = useRef(false)
+  const generation = useRef(0)
+  const displayLanguageRef = useRef(displayLanguage)
+  displayLanguageRef.current = displayLanguage
   const toast = useToast()
+  const saving = saveState === 'saving'
+  const checking = saveState === 'checking'
+  const dirty = loadState === 'ready' && !sameProfile(baseline, { ...settings, language: displayLanguage })
+  const workTitle = saving ? 'settingsFlow.workSaving' : pendingSave ? 'settingsFlow.workPending'
+    : dirty ? 'settingsFlow.workDraft' : null
+  useCareWork('settings-profile', workTitle ? {
+    version: `${workTitle}:${saveState}`, title: workTitle, critical: saving || Boolean(pendingSave),
+    protectLeave: true, priority: saving || pendingSave ? 0 : 2,
+    tab: 'settings', detail: { view: 'profile' }, action: 'experience.trackedWorkOpen'
+  } : null)
 
   useEffect(() => {
-    if (!visible || !navigationRequest?.key || handledNavigation.current === navigationRequest.key || navigationRequest.view !== 'help') return
-    setActiveSubTab('help')
-    if (revealElement(helpButton.current)) handledNavigation.current = navigationRequest.key
-  }, [navigationRequest?.key, visible])
+    if (!visible || !navigationRequest?.key || handledNavigation.current === navigationRequest.key
+      || !['help', 'profile'].includes(navigationRequest.view)) return
+    setActiveSubTab(navigationRequest.view)
+    if (revealElement(navigationRequest.view === 'help' ? helpButton.current : profileButton.current)) handledNavigation.current = navigationRequest.key
+  }, [navigationRequest?.key, navigationRequest?.view, visible])
 
   useEffect(() => {
-    let active = true
+    const currentGeneration = ++generation.current
+    const isCurrent = () => generation.current === currentGeneration
     const loadSettings = async () => {
       setLoadState('loading')
-      setSaved(false)
-      setSaveError(false)
+      setSaveState('idle')
+      setBaseline(null)
+      setPendingSave(null)
+      setCheckedContext(null)
+      operationLock.current = false
       try {
         const context = await api.getUserContext(userId)
-        if (!active) return
-        setSettings({
-          babyName: context.babyName || '',
-          babyAge: context.babyAge || '',
-          birthType: context.birthType || '',
-          feedingType: context.feedingType || ''
-        })
+        if (!isCurrent()) return
+        const loaded = profileValues(context)
+        setSettings(loaded)
+        setBaseline({ ...loaded, language: languageValue(context, displayLanguageRef.current) })
         setLoadState('ready')
       } catch {
-        if (active) {
+        if (isCurrent()) {
           setLoadState('error')
         }
       }
     }
     loadSettings()
-    return () => { active = false }
+    return () => { generation.current += 1 }
   }, [userId, loadAttempt])
 
-  useEffect(() => { setSaved(false) }, [displayLanguage])
-
   const handleSave = async () => {
-    if (loadState !== 'ready' || saving) return
-    setSaving(true)
-    setSaved(false)
-    setSaveError(false)
+    if (loadState !== 'ready' || operationLock.current || pendingSave || !dirty) return
+    operationLock.current = true
+    const currentGeneration = generation.current
+    // Capture exactly what this explicit save sends. A language change in the
+    // header while this is pending remains an unsaved change afterwards.
+    const submitted = { ...settings, language: displayLanguage }
+    setSaveState('saving')
     try {
-      const savedContext = await api.updateUserContext(userId, {
-        babyName: settings.babyName,
-        babyAge: settings.babyAge,
-        birthType: settings.birthType,
-        feedingType: settings.feedingType,
-        // The display choice is shared with the header. Only this explicit save
-        // writes it to the account; loading a profile never changes the UI language.
-        language: displayLanguage
-      })
-      setSaved((i18n.resolvedLanguage || i18n.language || 'ja').split('-')[0] === displayLanguage)
-      if (onContextUpdate) {
-        onContextUpdate(savedContext.context)
-      }
+      const savedContext = await api.updateUserContext(userId, submitted)
+      if (generation.current !== currentGeneration) return
+      setBaseline(submitted)
+      setSaveState('saved')
+      if (onContextUpdate) onContextUpdate(savedContext?.context || submitted)
       toast.success(i18n.t('settings.saved'))
-      setTimeout(() => setSaved(false), 3000)
-    } catch {
-      setSaveError(true)
+    } catch (error) {
+      if (generation.current !== currentGeneration) return
+      if (error.resultUnconfirmed) {
+        setPendingSave(submitted)
+        setSaveState('unconfirmed')
+      } else setSaveState('failed')
     } finally {
-      setSaving(false)
+      if (generation.current === currentGeneration) operationLock.current = false
     }
+  }
+
+  const checkSaveResult = async () => {
+    if (!pendingSave || operationLock.current) return
+    operationLock.current = true
+    const currentGeneration = generation.current
+    setSaveState('checking')
+    setCheckedContext(null)
+    try {
+      const context = await api.getUserContext(userId)
+      if (generation.current !== currentGeneration) return
+      if (!context || typeof context !== 'object' || Array.isArray(context)) throw new Error('Profile unavailable')
+      const actual = { ...profileValues(context), language: languageValue(context, '') }
+      if (sameProfile(actual, pendingSave)) {
+        setBaseline(pendingSave)
+        setPendingSave(null)
+        setSaveState('saved')
+        if (onContextUpdate) onContextUpdate(context)
+      } else {
+        // A different read does not prove the earlier write cannot still finish.
+        // Keep its uncertainty visible until the user makes a decision.
+        setCheckedContext(context)
+        setSaveState('different')
+      }
+    } catch {
+      if (generation.current === currentGeneration) setSaveState('checkFailed')
+    } finally {
+      if (generation.current === currentGeneration) operationLock.current = false
+    }
+  }
+
+  const continueEditing = () => {
+    if (!checkedContext || operationLock.current || !window.confirm(t('settingsFlow.continueConfirm'))) return
+    setBaseline({ ...profileValues(checkedContext), language: languageValue(checkedContext, displayLanguage) })
+    if (onContextUpdate) onContextUpdate(checkedContext)
+    setPendingSave(null)
+    setCheckedContext(null)
+    setSaveState('idle')
+  }
+
+  const discardChanges = () => {
+    if (!baseline || operationLock.current || pendingSave || !dirty || !window.confirm(t('settingsFlow.discardConfirm'))) return
+    setSettings(profileValues(baseline))
+    i18n.changeLanguage(baseline.language)
+    setSaveState('idle')
+  }
+
+  const profileValueLabel = (key, value) => {
+    if (!value) return t('pilot.notProvided')
+    if (key === 'language') return value === 'ja' ? '日本語' : 'English'
+    if (key === 'babyAge') return t(`pilot.ages.${value}`, { defaultValue: value })
+    if (key === 'birthType') return value === 'vaginal' ? t('pilot.vaginal')
+      : value === 'c-section' ? t('pilot.csection') : value
+    if (key === 'feedingType') return t(`tracking.${value}`, { defaultValue: value })
+    return value
   }
 
   return (
@@ -101,7 +179,7 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
 
       <div className="settings-tabs">
         <button
-          type="button" aria-pressed={activeSubTab === 'profile'}
+          type="button" ref={profileButton} aria-pressed={activeSubTab === 'profile'}
           className={activeSubTab === 'profile' ? 'active' : ''}
           onClick={() => setActiveSubTab('profile')}
         >
@@ -138,6 +216,39 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
       <>
       {loadState === 'loading' && <p role="status">{t('common.loading')}</p>}
       {loadState === 'error' && <ErrorMessage title={t('pilot.loadFailed')} onRetry={() => setLoadAttempt(value => value + 1)} />}
+      {loadState === 'ready' && !pendingSave && (saveState !== 'failed' || !dirty) && (
+        <StatusMessage tone={saveState === 'saved' && !dirty ? 'success' : 'info'}
+          title={t(saving ? 'settingsFlow.saving' : dirty ? 'settingsFlow.unsaved'
+          : saveState === 'saved' ? 'settingsFlow.saved' : 'settingsFlow.unchanged')}>
+          <p>{t('settingsFlow.scopeHint')}</p>
+        </StatusMessage>
+      )}
+      {pendingSave && (
+        <StatusMessage tone={saveState === 'checkFailed' ? 'error' : 'info'}
+          title={t(checking ? 'settingsFlow.checking' : saveState === 'different' ? 'settingsFlow.different'
+            : saveState === 'checkFailed' ? 'settingsFlow.checkFailed' : 'settingsFlow.unconfirmed')}
+          actions={<>
+            <Button variant="secondary" busy={checking} busyLabel={t('settingsFlow.checking')}
+              onClick={checkSaveResult}>{t('settingsFlow.checkResult')}</Button>
+            {saveState === 'different' && checkedContext && <Button variant="secondary"
+              onClick={continueEditing}>{t('settingsFlow.continueEditing')}</Button>}
+          </>}>
+          <p>{t('settingsFlow.pendingHint')}</p>
+          {checkedContext && saveState === 'different' && <details className="settings-save-comparison">
+            <summary>{t('settingsFlow.comparison')}</summary>
+            <div className="settings-save-comparison-scroll" role="region" tabIndex={0} aria-label={t('settingsFlow.comparison')}>
+              <table>
+                <thead><tr><th scope="col">{t('settingsFlow.field')}</th><th scope="col">{t('settingsFlow.submitted')}</th><th scope="col">{t('settingsFlow.onAccount')}</th></tr></thead>
+                <tbody>{[...profileFields, 'language'].map(key => <tr key={key}>
+                  <th scope="row">{t(`settings.${key}`)}</th>
+                  <td>{profileValueLabel(key, pendingSave[key])}</td>
+                  <td>{profileValueLabel(key, key === 'language' ? languageValue(checkedContext, '') : profileValues(checkedContext)[key])}</td>
+                </tr>)}</tbody>
+              </table>
+            </div>
+          </details>}
+        </StatusMessage>
+      )}
       <fieldset className="settings-sections" disabled={loadState !== 'ready' || saving}>
         <div className="settings-section">
           <div className="section-header">
@@ -206,16 +317,19 @@ function Settings({ userId, onContextUpdate, onLogout, onFindHelp, onSwitchEntra
         </div>
       </fieldset>
 
-      {saveError && <ErrorMessage title={t('pilot.saveFailed')} onRetry={handleSave} retryDisabled={saving || loadState !== 'ready'} />}
+      {saveState === 'failed' && dirty && <ErrorMessage title={t('settingsFlow.failed')} onRetry={handleSave}
+        retryDisabled={saving || loadState !== 'ready' || !dirty}><p>{t('settingsFlow.failedHint')}</p></ErrorMessage>}
       <div className="settings-footer">
         <Button
           busy={saving} busyLabel={t('settings.saving')}
           onClick={handleSave}
-          disabled={loadState !== 'ready' || saving}
+          disabled={loadState !== 'ready' || saving || Boolean(pendingSave) || !dirty}
         >
           <Save size={20} />
-          {saving ? t('settings.saving') : saved ? t('settings.saved') : t('settings.save')}
+          {saving ? t('settings.saving') : t('settings.save')}
         </Button>
+        <Button variant="secondary" onClick={discardChanges}
+          disabled={loadState !== 'ready' || saving || Boolean(pendingSave) || !dirty}>{t('settingsFlow.discard')}</Button>
       </div>
       </>
       )}

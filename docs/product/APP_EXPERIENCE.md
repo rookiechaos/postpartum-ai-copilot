@@ -2,6 +2,8 @@
 
 Source revision: 2026-10-22. Implementation and source review only; application, build and runtime acceptance have not been executed.
 
+The 2026-10-25 [interruption-recovery revision](INTERRUPTION_RECOVERY.md) extends draft coverage, new-answer review and save-result handling. Coverage limitations below describe this document's original revision; use the newer guide for the current scope.
+
 ## Plan and implemented scope
 
 The next improvement is to connect the existing features: help a family resume an interrupted task, find a relevant contact, and recover from a page failure. This revision changes the frontend without adding dependencies, APIs, database tables or migrations.

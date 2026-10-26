@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 import { needsReview, phoneHref, publicHttps } from '../utils/publicDirectory'
 import { revealElement } from '../utils/focusView'
+import { useCareWork } from '../utils/CareSession'
 import SupportProgress, { useSupportJourneys } from './SupportProgress'
 import { Button, EmptyState, FormField } from './ui'
 import './SupportDirectorySearch.css'
@@ -14,7 +15,7 @@ const searchableFields = ['name', 'area', 'description', 'audience', 'hours', 'p
 const normalizeSearch = value => String(value || '').normalize('NFKC').toLowerCase().trim()
 
 // National sources remain available when the API or model is unavailable.
-export default function SupportDirectory({ compact = false, previewProfile, visible = true, onPrepareSheet, userId, navigationRequest }) {
+export default function SupportDirectory({ compact = false, previewProfile, visible = true, onPrepareSheet, userId, navigationRequest, workDestination }) {
   const { t } = useTranslation()
   const [profile, setProfile] = useState(null)
   const [unavailable, setUnavailable] = useState(false)
@@ -22,6 +23,8 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
   const [purpose, setPurpose] = useState('all')
   const [query, setQuery] = useState('')
   const [script, setScript] = useState('')
+  const [scriptBaseline, setScriptBaseline] = useState('')
+  const [scriptVersion, setScriptVersion] = useState(0)
   const [scriptError, setScriptError] = useState('')
   const [scriptTarget, setScriptTarget] = useState('')
   const [scriptRequest, setScriptRequest] = useState(0)
@@ -38,11 +41,27 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
   const progress = useSupportJourneys(userId, visible && !compact && !previewProfile)
   const progressEnabled = Boolean(userId && !compact && !previewProfile)
   const wizardEnabled = progressEnabled
+  const trackWork = progressEnabled && Boolean(workDestination?.id)
+  const scriptEdited = Boolean(scriptTarget && script !== scriptBaseline)
+  const unfinishedProgress = Object.entries(progress.editors).filter(([, editor]) => editor.edited || editor.busy || editor.unresolved)
+    .sort(([, a], [, b]) => Number(b.busy || b.unresolved) - Number(a.busy || a.unresolved))
+  const progressTarget = unfinishedProgress[0]
+  const progressUncertain = unfinishedProgress.some(([, editor]) => editor.busy || editor.unresolved)
+  useCareWork(`${workDestination?.id || 'public-directory'}:script`, trackWork && scriptTarget && (scriptEdited || script.trim()) ? {
+    version: scriptVersion, title: scriptEdited ? 'supportFlow.scriptPending' : 'supportFlow.scriptPrepared', priority: 2, protectLeave: scriptEdited,
+    tab: workDestination.tab, detail: { ...workDestination.detail, resume: 'script', contactKey: scriptKey }, action: 'experience.trackedWorkOpen',
+  } : null)
+  useCareWork(`${workDestination?.id || 'public-directory'}:progress`, trackWork && progressTarget ? {
+    version: `${progress.workVersion}:${unfinishedProgress.length}:${progressUncertain}`, title: progressUncertain ? 'supportFlow.progressPending' : 'supportFlow.progressDraft',
+    priority: progressUncertain ? 0 : 2, critical: progressUncertain, protectLeave: true,
+    tab: workDestination.tab, detail: { ...workDestination.detail, resume: 'progress', contactKey: progressTarget[0] }, action: 'experience.trackedWorkOpen',
+  } : null)
   const progressFor = (key, name, archived = false, expanded = false) => <SupportProgress key={key} contactKey={key} contactName={name}
-    row={progress.rows.find(row => row.contact_key === key)} progress={progress} archived={archived} expanded={expanded} />
+    row={progress.rows.find(row => row.contact_key === key)} progress={progress} archived={archived} expanded={expanded} active={visible && journeyStep === 3}
+    resumeKey={navigationRequest?.resume === 'progress' && navigationRequest.contactKey === key ? navigationRequest.key : null} />
   useEffect(() => {
     if (visible && pendingScriptFocus.current && scriptTarget) {
-      pendingScriptFocus.current = false; revealElement(scriptHeading.current)
+      if (revealElement(scriptHeading.current)) pendingScriptFocus.current = false
     }
   }, [scriptRequest, scriptTarget, visible])
   useEffect(() => {
@@ -74,21 +93,33 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
   useEffect(() => {
     if (!visible || !wizardEnabled || !navigationRequest?.contactKey || handledNavigation.current === navigationRequest.key) return
     handledNavigation.current = navigationRequest.key
-    setContactKey(navigationRequest.contactKey); setJourneyStep(3); pendingStepFocus.current = true
+    if (navigationRequest.resume === 'script') {
+      // Returning only reveals this instance's existing memo. It must not create
+      // a template, replace text, or open another instance's working copy.
+      if (!scriptTarget || navigationRequest.contactKey !== scriptKey) return
+      setContactKey(scriptKey); setJourneyStep(2); pendingStepFocus.current = false
+      pendingScriptFocus.current = true; setScriptRequest(value => value + 1)
+    } else {
+      setContactKey(navigationRequest.contactKey); setJourneyStep(3)
+      pendingStepFocus.current = navigationRequest.resume !== 'progress'
+    }
   }, [navigationRequest, visible, wizardEnabled])
   useEffect(() => {
     if (visible && wizardEnabled && pendingStepFocus.current && revealElement(stepHeading.current)) pendingStepFocus.current = false
   }, [journeyStep, visible, contactKey, navigationRequest?.key])
   const retainedContacts = new Map(progress.rows.filter(row => !row.cleared).map(row => [row.contact_key, row]))
   Object.entries(progress.editors).forEach(([key, editor]) => {
-    if (editor.edited || editor.busy) retainedContacts.set(key, { contact_key: key, contact_name: editor.contact_name })
+    if (editor.edited || editor.busy || editor.unresolved) retainedContacts.set(key, { contact_key: key, contact_name: editor.contact_name })
   })
   const archived = [...retainedContacts.values()].filter(row => row.contact_key === 'organization'
     ? !shownProfile?.name : !shownProfile?.resources?.some(resource => resource.resource_key === row.contact_key))
   const hasArchivedDrafts = archived.some(row => progress.editors[row.contact_key]?.edited)
   const prepareCall = (name, key = '') => {
-    if (script && key !== scriptKey && !window.confirm(t('polish.replaceCallScript'))) return
-    if (!script || key !== scriptKey) setScript(t('polish.callScriptTemplate', { name }))
+    if (scriptTarget && key !== scriptKey && !window.confirm(t('polish.replaceCallScript'))) return
+    if (!scriptTarget || key !== scriptKey) {
+      const template = t('polish.callScriptTemplate', { name })
+      setScript(template); setScriptBaseline(template); setScriptVersion(value => value + 1)
+    }
     setContactKey(key); setScriptKey(key); setJourneyStep(2); pendingStepFocus.current = false
     setScriptTarget(name); setScriptError(''); pendingScriptFocus.current = true; setScriptRequest(value => value + 1)
   }
@@ -240,12 +271,17 @@ export default function SupportDirectory({ compact = false, previewProfile, visi
             </>}
           </>}
           <p>{t('polish.callScriptNotice')}</p><textarea aria-label={t('polish.callScript')} rows={7} maxLength={1000}
-            value={script} onChange={event => setScript(event.target.value)} />
+            value={script} onChange={event => { setScript(event.target.value); setScriptVersion(value => value + 1) }} />
+          {scriptEdited && <p role="status">{t('supportFlow.scriptLocal')}</p>}
           <button type="button" className="pilot-button secondary" onClick={async () => {
             try { await navigator.clipboard.writeText(script); setScriptError(t('pilot.copied')) }
             catch { setScriptError(t('pilot.copyFailed')) }
           }}>{t('polish.copyScript')}</button>
           {onPrepareSheet && <button type="button" className="pilot-button secondary" disabled={!script.trim()} onClick={() => onPrepareSheet(script, { key: contactKey, name: selectedName || scriptTarget })}>{t('polish.prepareSheetFromCall')}</button>}
+          <button type="button" className="text-action" onClick={() => {
+            if (scriptEdited && !window.confirm(t('supportFlow.discardScriptConfirm'))) return
+            setScript(''); setScriptBaseline(''); setScriptTarget(''); setScriptKey(''); setScriptError('')
+          }}>{t('supportFlow.discardScript')}</button>
           {scriptError && <p role="status">{scriptError}</p>}
           {wizardEnabled && <div className="pilot-actions"><button type="button" className="pilot-button secondary" onClick={() => openStep(1)}>{t('interaction.support.backChoice')}</button>
             <button type="button" className="pilot-button" onClick={() => openStep(3)}>{t('interaction.support.next')}</button></div>}

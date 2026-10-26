@@ -14,7 +14,7 @@ const mergePackets = (...pages) => {
   return [...records.values()]
 }
 
-export default function ConsultationPackets({ visible, content, canSave, onOpen, onDeleted, onLockChange }) {
+export default function ConsultationPackets({ visible, content, canSave, onOpen, onDeleted, onSaved, onLockChange }) {
   const { t, i18n } = useTranslation()
   const [items, setItems] = useState([])
   const [next, setNext] = useState(null)
@@ -87,6 +87,7 @@ export default function ConsultationPackets({ visible, content, canSave, onOpen,
   const adopt = row => {
     setActive(row); setPending(null); setUnresolved(null); setRemote(null); setError(''); setSaved(true)
     if (row.cleared) { onDeleted(); setActive(null); newId.current = requestKey() }
+    else onSaved?.(row)
   }
   const execute = async operation => {
     if (writing.current) return
