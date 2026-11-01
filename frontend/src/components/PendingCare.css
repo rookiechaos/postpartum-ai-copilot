@@ -1,4 +1,14 @@
 .pending-care { margin-block-end: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-text); line-height: var(--line-height-body); }
+.pending-care-attention { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); padding: var(--space-3) var(--space-4); background: var(--color-tint); border-radius: var(--radius-control); }
+.pending-care-attention > div { flex: 1 1 14rem; min-width: 0; }
+.pending-care-attention p { margin: 0; font-size: var(--font-size-sm); overflow-wrap: anywhere; }
+.pending-care-attention .pending-care-attention-count { font-weight: var(--font-weight-label); }
+.pending-care-filter { display: grid; gap: var(--space-2); padding: 0 var(--space-4) var(--space-3); }
+.pending-care-filter label { font-weight: var(--font-weight-label); font-size: var(--font-size-sm); }
+.pending-care-filter select { width: 100%; max-width: 26rem; min-width: 0; min-height: var(--control-height); padding: var(--space-2) var(--space-3); border: 1px solid var(--color-control-border); border-radius: var(--radius-small); background: var(--color-surface); color: var(--color-text); font: inherit; }
+.pending-care-filter p, .pending-care-empty p { margin: 0; font-size: var(--font-size-sm); color: var(--color-muted); }
+.pending-care-empty { padding: 0 var(--space-4) var(--space-3); }
+.pending-care-filter select:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
 .pending-care > details > summary { min-height: var(--control-height); box-sizing: border-box; padding: var(--space-3) var(--space-4); cursor: pointer; overflow-wrap: anywhere; }
 .pending-care-title { font-weight: var(--font-weight-label); }
 .pending-care-count { display: inline-block; margin-inline-start: var(--space-3); padding-inline: var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-pill); background: var(--color-tint); font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; }

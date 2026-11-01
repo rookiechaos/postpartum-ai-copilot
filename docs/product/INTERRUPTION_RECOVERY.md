@@ -2,6 +2,8 @@
 
 Source revision: 2026-10-25. This revision was implemented and reviewed in source only. App startup, builds, automated tests and browser acceptance were not performed.
 
+The 2026-10-31 [predictable-actions revision](PREDICTABLE_ACTIONS.md) extends coverage to emotional check-in, night support and sharing preferences. The limitations below describe the original revision; use that newer guide for the current scope.
+
 ## Improvement plan
 
 The application already has recording, chat, family handover, local support, institution and operator entrances. The next step is to make those features reliable when a caregiver is interrupted. Extend the existing session-work registry, show the difference between an edited draft and an uncertain save, and require explicit choices when new content would replace an existing question.

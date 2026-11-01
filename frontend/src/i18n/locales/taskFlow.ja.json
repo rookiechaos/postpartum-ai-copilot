@@ -1,0 +1,19 @@
+{
+  "attentionCount": "処理中・確認待ちの操作が{{count}}件あります",
+  "filter": "ページで絞り込む",
+  "all": "すべてのページ（{{count}}件）",
+  "pageCount": "{{page}}（{{count}}件）",
+  "shown": "登録された操作{{total}}件中、{{count}}件を表示",
+  "empty": "このページには登録された操作がありません。上の処理中・確認待ちの案内は、すべてのページが対象です。",
+  "clear": "すべてのページを表示",
+  "pages": {
+    "dashboard": "ホーム",
+    "tracking": "お世話の記録",
+    "chat": "AIへの相談",
+    "support": "相談先を探す",
+    "settings": "設定",
+    "family": "家族の共有設定",
+    "checkin": "気持ちの振り返り",
+    "night": "夜間のサポート"
+  }
+}

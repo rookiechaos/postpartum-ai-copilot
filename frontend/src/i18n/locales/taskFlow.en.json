@@ -1,0 +1,20 @@
+{
+  "attentionCount_one": "{{count}} operation processing or awaiting review",
+  "attentionCount_other": "{{count}} operations processing or awaiting review",
+  "filter": "Show work from",
+  "all": "All pages ({{count}})",
+  "pageCount": "{{page}} ({{count}})",
+  "shown": "Showing {{count}} of {{total}} registered tasks",
+  "empty": "There is no registered work for this page. Processing and review shortcuts above cover all pages.",
+  "clear": "Show all pages",
+  "pages": {
+    "dashboard": "Home",
+    "tracking": "Care records",
+    "chat": "AI questions",
+    "support": "Find support",
+    "settings": "Settings",
+    "family": "Family sharing",
+    "checkin": "Emotional check-in",
+    "night": "Night support"
+  }
+}

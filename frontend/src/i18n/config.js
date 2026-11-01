@@ -38,6 +38,14 @@ import chatFlowEnglish from './locales/chatFlow.en.json'
 import chatFlowJapanese from './locales/chatFlow.ja.json'
 import handoverFlowEnglish from './locales/handoverFlow.en.json'
 import handoverFlowJapanese from './locales/handoverFlow.ja.json'
+import checkinFlowEnglish from './locales/checkinFlow.en.json'
+import checkinFlowJapanese from './locales/checkinFlow.ja.json'
+import nightFlowEnglish from './locales/nightFlow.en.json'
+import nightFlowJapanese from './locales/nightFlow.ja.json'
+import familyFlowEnglish from './locales/familyFlow.en.json'
+import familyFlowJapanese from './locales/familyFlow.ja.json'
+import taskFlowEnglish from './locales/taskFlow.en.json'
+import taskFlowJapanese from './locales/taskFlow.ja.json'
 
 i18n
   .use(LanguageDetector)
@@ -45,10 +53,10 @@ i18n
   .init({
     resources: {
       en: {
-        translation: { ...enTranslations, polish: polishEnglish, ui: uiEnglish, flows: flowsEnglish, friendly: friendlyEnglish, localCare: localCareEnglish, interaction: interactionEnglish, continuity: continuityEnglish, reviewFixes: reviewFixesEnglish, workflow: workflowEnglish, foundation: foundationEnglish, findSupport: findSupportEnglish, recovery: recoveryEnglish, experience: experienceEnglish, settingsFlow: settingsFlowEnglish, supportFlow: supportFlowEnglish, chatFlow: chatFlowEnglish, handoverFlow: handoverFlowEnglish }
+        translation: { ...enTranslations, polish: polishEnglish, ui: uiEnglish, flows: flowsEnglish, friendly: friendlyEnglish, localCare: localCareEnglish, interaction: interactionEnglish, continuity: continuityEnglish, reviewFixes: reviewFixesEnglish, workflow: workflowEnglish, foundation: foundationEnglish, findSupport: findSupportEnglish, recovery: recoveryEnglish, experience: experienceEnglish, settingsFlow: settingsFlowEnglish, supportFlow: supportFlowEnglish, chatFlow: chatFlowEnglish, handoverFlow: handoverFlowEnglish, checkinFlow: checkinFlowEnglish, nightFlow: nightFlowEnglish, familyFlow: familyFlowEnglish, taskFlow: taskFlowEnglish }
       },
       ja: {
-        translation: { ...jaTranslations, polish: polishJapanese, ui: uiJapanese, flows: flowsJapanese, friendly: friendlyJapanese, localCare: localCareJapanese, interaction: interactionJapanese, continuity: continuityJapanese, reviewFixes: reviewFixesJapanese, workflow: workflowJapanese, foundation: foundationJapanese, findSupport: findSupportJapanese, recovery: recoveryJapanese, experience: experienceJapanese, settingsFlow: settingsFlowJapanese, supportFlow: supportFlowJapanese, chatFlow: chatFlowJapanese, handoverFlow: handoverFlowJapanese }
+        translation: { ...jaTranslations, polish: polishJapanese, ui: uiJapanese, flows: flowsJapanese, friendly: friendlyJapanese, localCare: localCareJapanese, interaction: interactionJapanese, continuity: continuityJapanese, reviewFixes: reviewFixesJapanese, workflow: workflowJapanese, foundation: foundationJapanese, findSupport: findSupportJapanese, recovery: recoveryJapanese, experience: experienceJapanese, settingsFlow: settingsFlowJapanese, supportFlow: supportFlowJapanese, chatFlow: chatFlowJapanese, handoverFlow: handoverFlowJapanese, checkinFlow: checkinFlowJapanese, nightFlow: nightFlowJapanese, familyFlow: familyFlowJapanese, taskFlow: taskFlowJapanese }
       }
     },
     fallbackLng: 'ja',

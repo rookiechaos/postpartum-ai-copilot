@@ -149,6 +149,10 @@ function AuthenticatedApp({ userId, onChooseEntry, registerLeaveGuard, pendingIn
   const { work } = useCareSession()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [nightMode, setNightMode] = useState(false)
+  const [nightVisited, setNightVisited] = useState(false)
+  const [nightNavigation, setNightNavigation] = useState({ key: 0 })
+  const [checkinNavigation, setCheckinNavigation] = useState({ key: 0 })
+  const [sharingNavigation, setSharingNavigation] = useState({ key: 0 })
   const [showWelcome, setShowWelcome] = useState(false)
   const [userContext, setUserContext] = useState(null)
   const [trackingRequest, setTrackingRequest] = useState(null)
@@ -215,27 +219,41 @@ function AuthenticatedApp({ userId, onChooseEntry, registerLeaveGuard, pendingIn
   }
 
   const navigate = useCallback((tab, detail) => {
+    if (tab === 'night') {
+      setNightVisited(true); setNightMode(true)
+      setNightNavigation(previous => ({ key: previous.key + 1, action: 'resume', target: detail?.target || 'form' }))
+      return
+    }
+    setNightMode(false)
     if (tab === 'dashboard' && detail) setDashboardRequest(previous => ({ ...detail, key: previous.key + 1 }))
     if (tab === 'tracking' && detail) { setTrackingRequest(detail); setTrackingRequestKey(value => value + 1) }
     const chatResume = tab === 'chat' && ['resume', 'support'].includes(detail?.action)
     const chatQuestion = tab === 'chat' && typeof detail === 'string' && detail.length > 0
     const settingsDestination = tab === 'settings' && ['help', 'profile'].includes(detail?.view)
+    const checkinResume = tab === 'checkin' && detail?.action === 'resume'
+    const sharingResume = tab === 'family' && detail?.action === 'sharing'
     if (chatQuestion) { setChatDraft(detail); setChatRequestKey(value => value + 1) }
     if (chatResume) setChatNavigation(previous => ({ key: previous.key + 1, action: detail.action,
       target: detail.target, resume: detail.resume, contactKey: detail.contactKey || '' }))
     if (settingsDestination) setSettingsNavigation(previous => ({ key: previous.key + 1, view: detail.view }))
+    if (checkinResume) setCheckinNavigation(previous => ({ key: previous.key + 1, action: 'resume', target: detail.target || 'form' }))
+    if (sharingResume) setSharingNavigation(previous => ({ key: previous.key + 1, action: 'sharing' }))
     const supportDestination = tab === 'support' && ['contacts', 'sheet'].includes(detail?.view) ? detail : null
     if (supportDestination) setSupportRequest(previous => ({ key: previous.key + 1, view: supportDestination.view,
       contactKey: supportDestination.contactKey || '', resume: supportDestination.resume,
       contactName: supportDestination.contactName || '',
       question: supportDestination.view === 'sheet' && typeof supportDestination.question === 'string' ? supportDestination.question : '' }))
     // A requested support view or incoming question owns its more specific focus target.
-    pendingPanelFocus.current = !supportDestination && !chatResume && !chatQuestion && !settingsDestination
+    pendingPanelFocus.current = !supportDestination && !chatResume && !chatQuestion && !settingsDestination && !checkinResume && !sharingResume
       && !(detail && ['tracking', 'dashboard'].includes(tab))
     setNavigationKey(value => value + 1)
     setVisitedTabs(previous => previous.includes(tab) ? previous : [...previous, tab])
     setActiveTab(tab)
   }, [])
+
+  const leaveNight = () => {
+    setNightMode(false); pendingPanelFocus.current = true; setNavigationKey(value => value + 1)
+  }
 
   useEffect(() => {
     const handleKeyDown = event => {
@@ -292,7 +310,7 @@ function AuthenticatedApp({ userId, onChooseEntry, registerLeaveGuard, pendingIn
           <LanguageSelector />
           <button
             className="night-mode-btn"
-            onClick={() => setNightMode(true)}
+            onClick={() => navigate('night')}
             title={t('nightMode.title')}
           >
             <Moon size={18} aria-hidden="true" />
@@ -345,12 +363,12 @@ function AuthenticatedApp({ userId, onChooseEntry, registerLeaveGuard, pendingIn
             {tab === 'tracking' && <TrackingPanel userId={userId} initialEntryType={trackingRequest} requestKey={trackingRequestKey}
               visible={activeTab === 'tracking' && familyVisible}
               onRecordsChanged={() => setRecordVersion(value => value + 1)} />}
-            {tab === 'checkin' && <EmotionalCheckIn userId={userId} />}
+            {tab === 'checkin' && <EmotionalCheckIn userId={userId} visible={activeTab === 'checkin' && familyVisible} navigationRequest={checkinNavigation} />}
             {tab === 'support' && <SupportHub userId={userId} visible={activeTab === 'support' && familyVisible}
               refreshKey={recordVersion} navigationRequest={supportRequest}
               onPrepareSheet={(script, contact) => navigate('support', { view: 'sheet', question: script, contactKey: contact?.key, contactName: contact?.name })} />}
             {tab === 'family' && <FamilySharing userId={userId} refreshKey={recordVersion} visible={activeTab === 'family' && familyVisible}
-              initialFamilyId={familyRequest.id} familyRequestKey={familyRequest.key} />}
+              initialFamilyId={familyRequest.id} familyRequestKey={familyRequest.key} navigationRequest={sharingNavigation} />}
             {tab === 'settings' && (
               <Settings
                 userId={userId}
@@ -365,8 +383,8 @@ function AuthenticatedApp({ userId, onChooseEntry, registerLeaveGuard, pendingIn
           </section>)}
         <div className="family-tab-panel" hidden={activeTab !== 'dashboard'}><InstallPrompt ready={recordVersion > 0} /></div>
       </main>
-    </div>{nightMode && <div hidden={Boolean(pendingInvite)}><ErrorBoundary compact label={t('nightMode.title')} onHome={() => setNightMode(false)}>
-      <NightMode userId={userId} onExit={() => setNightMode(false)} /></ErrorBoundary></div>}</>
+    </div>{nightVisited && <div hidden={!nightMode || Boolean(pendingInvite)}><ErrorBoundary compact label={t('nightMode.title')} onHome={leaveNight}>
+      <NightMode userId={userId} visible={nightMode && !pendingInvite} navigationRequest={nightNavigation} onExit={leaveNight} /></ErrorBoundary></div>}</>
   )
 }
 

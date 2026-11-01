@@ -1,0 +1,12 @@
+.family-sharing .family-sharing-flow { margin-block: var(--space-5); min-width: 0; }
+.family-sharing .family-sharing-invite-controls { min-width: 0; padding: 0; margin: 0; border: 0; }
+.family-sharing .family-sharing-flow > h3 { scroll-margin-top: 7rem; }
+.family-sharing .family-sharing-comparison { max-width: 100%; overflow-x: auto; }
+.family-sharing .family-sharing-comparison table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+.family-sharing .family-sharing-comparison caption { padding-block: var(--space-2); text-align: start; font-weight: var(--font-weight-label); }
+.family-sharing .family-sharing-comparison :is(th, td) { min-width: 6rem; padding: var(--space-3); border-block-end: 1px solid var(--color-border); text-align: start; vertical-align: top; overflow-wrap: anywhere; }
+.family-sharing .family-sharing-comparison th { font-weight: var(--font-weight-label); }
+@media (max-width: 700px) {
+  .family-sharing .family-sharing-flow > h3 { scroll-margin-top: 1rem; }
+  .family-sharing .family-sharing-comparison :is(th, td) { padding: var(--space-2); }
+}

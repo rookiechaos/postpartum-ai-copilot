@@ -76,7 +76,7 @@ function ChatInterface({ userId, initialDraft = '', draftVersion = 0, navigation
     priority: loading ? 0 : 2, tab: 'chat', detail: { action: 'resume' }, action: 'experience.trackedWorkOpen',
   } : null)
   useCareWork('chat-result', unreadAnswer ? {
-    version: `answer:${unreadAnswer}`, title: 'chatFlow.unreadResult', protectLeave: true,
+    version: `answer:${unreadAnswer}`, title: 'chatFlow.unreadResult', protectLeave: true, attention: true,
     priority: 1, tab: 'chat', detail: { action: 'resume', target: 'answer' }, action: 'chatFlow.readLatest',
   } : null)
   useLayoutEffect(() => {
