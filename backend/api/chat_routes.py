@@ -20,6 +20,7 @@ from services.task_queue import TaskQueue, TaskPriority
 from services.nsfw_detector import get_nsfw_detector
 from services.ai_data_scope import profile_for_ai, records_for_ai, previous_exchange_for_ai
 from services.chat_presentation import retrieve_for_chat, chat_presentation
+from services.agent_execution import agent_call_scope
 from exceptions import (
     PostpartumException,
     AIServiceError,
@@ -82,14 +83,15 @@ async def chat(
 
             language = message.language or "en"
 
-            response = await ai_service.chat(
-                query=message.query,
-                context=context,
-                rag_context=rag_context,
-                user_id=user_id,
-                language=language,
-                previous_exchange=previous_exchange,
-            )
+            with agent_call_scope(user_id):
+                response = await ai_service.chat(
+                    query=message.query,
+                    context=context,
+                    rag_context=rag_context,
+                    user_id=user_id,
+                    language=language,
+                    previous_exchange=previous_exchange,
+                )
             if response.get("error"):
                 raise AIServiceError("AI response unavailable")
 
@@ -173,15 +175,18 @@ async def chat_stream(
             if rag_service and message.query:
                 rag_context = await rag_service.search(message.query)
 
-            async for chunk in ai_service.chat_stream(
-                query=message.query,
-                context=context,
-                rag_context=rag_context,
-                user_id=user_id,
-                language=language,
-                previous_exchange=previous_exchange,
-            ):
-                yield f"data: {json.dumps(chunk)}\n\n"
+            # Create the context inside the generator so it remains bound to
+            # the streaming task until iteration has actually completed.
+            with agent_call_scope(user_id):
+                async for chunk in ai_service.chat_stream(
+                    query=message.query,
+                    context=context,
+                    rag_context=rag_context,
+                    user_id=user_id,
+                    language=language,
+                    previous_exchange=previous_exchange,
+                ):
+                    yield f"data: {json.dumps(chunk)}\n\n"
         except Exception:
             yield f"data: {json.dumps({'error': 'Failed to stream response'})}\n\n"
 
@@ -208,13 +213,14 @@ async def crisis_mode(
         context = profile_for_ai(await tracking_service.get_user_context(user_id, db), crisis_request.include_profile)
         recent_entries = records_for_ai(await tracking_service.get_recent_entries(user_id, db, hours=6)) if crisis_request.include_records else []
 
-        response = await ai_service.crisis_response(
-            query=crisis_query,
-            context=context,
-            recent_entries=recent_entries,
-            language=language,
-            night_mode=crisis_request.night_mode,
-        )
+        with agent_call_scope(user_id):
+            response = await ai_service.crisis_response(
+                query=crisis_query,
+                context=context,
+                recent_entries=recent_entries,
+                language=language,
+                night_mode=crisis_request.night_mode,
+            )
         if response.get("error"):
             raise AIServiceError("AI response unavailable")
 
@@ -260,17 +266,18 @@ async def personalized_chat(
         base_prompt = ai_service._get_system_prompt(language)
         optimized_prompt = base_prompt
 
-        response = await ai_service.chat(
-            query=message.query,
-            context=context,
-            rag_context=rag_context,
-            user_id=user_id,
-            language=language,
-            system_prompt=optimized_prompt,
-            previous_exchange=previous_exchange_for_ai(
-                message.previous_exchange.model_dump() if message.previous_exchange else None, message.include_previous,
-            ),
-        )
+        with agent_call_scope(user_id):
+            response = await ai_service.chat(
+                query=message.query,
+                context=context,
+                rag_context=rag_context,
+                user_id=user_id,
+                language=language,
+                system_prompt=optimized_prompt,
+                previous_exchange=previous_exchange_for_ai(
+                    message.previous_exchange.model_dump() if message.previous_exchange else None, message.include_previous,
+                ),
+            )
         if response.get("error"):
             raise AIServiceError("AI response unavailable")
 

@@ -4,9 +4,16 @@ import api from '../utils/api'
 
 export function AIProviders({ directory, summaryOnly = false }) {
   const { t } = useTranslation()
-  const names = { openai: 'OpenAI', claude: 'Claude', gemini: 'Gemini' }
+  const names = {
+    openai: 'OpenAI', claude: 'Claude', gemini: 'Gemini',
+    codex: 'OpenAI (Codex)', claude_code: 'Anthropic (Claude Code)',
+    agent: t('work.agentProviderUnknown'),
+  }
   return <>
     <p>{t('work.answerProvider')}: {names[directory?.ai_provider] || directory?.ai_provider || t('pilot.notProvided')}</p>
+    {directory?.ai_transport === 'isolated_runner' && <p>
+      {t(summaryOnly ? 'work.agentRelay' : 'work.agentRelayNotice')}
+    </p>}
     {!summaryOnly && directory?.ai_services?.length > 0 && <div><p>{t('work.processingProviders')}</p><ul>
       {directory.ai_services.map(service => <li key={service.purpose}>{t(`work.servicePurposes.${service.purpose}`)}: {service.provider}</li>)}
     </ul></div>}

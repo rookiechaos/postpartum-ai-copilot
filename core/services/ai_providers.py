@@ -1,5 +1,5 @@
 """
-AI Provider Implementations - Support for OpenAI, Claude, and Gemini
+AI providers for direct model APIs and explicitly configured isolated runners.
 """
 
 from typing import Dict, List, Any, Optional, AsyncGenerator
@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from config.settings import get_settings
 from services.ai_errors import PUBLIC_AI_ERROR
 from services.logging_service import logger
+from exceptions import AIServiceError
 
 
 class AIProvider(ABC):
@@ -276,6 +277,83 @@ class GeminiProvider(AIProvider):
             yield {"type": "error", "content": PUBLIC_AI_ERROR}
 
 
+class AgentRunnerProvider(AIProvider):
+    """Use the same household messages with a Codex/Claude Code/custom runner.
+
+    This adapter never loads records, changes consent, launches a CLI in the API
+    process, or retries. The caller must provide an authenticated call scope.
+    """
+
+    requires_full_response_validation = True
+    automatic_retry = False
+
+    def __init__(self, backend: str):
+        from services.agent_service import AgentService, BACKENDS
+
+        settings = get_settings()
+        if backend not in BACKENDS or not settings.agent_enabled:
+            raise AIServiceError("The selected AI runner is unavailable")
+        self.backend = backend
+        self.service = AgentService(settings)
+        configured = any(
+            item["backend"] == backend and item["configured"]
+            for item in self.service.capabilities()["backends"]
+        )
+        if not configured:
+            raise AIServiceError("The selected AI runner is unavailable")
+
+    async def chat(self, messages: List[Dict[str, str]], **kwargs) -> Dict[str, Any]:
+        import json
+        from services.agent_execution import get_agent_call_context
+        from models.database import SessionLocal
+
+        context = get_agent_call_context()
+        if context is None:
+            raise AIServiceError("An authenticated AI call scope is required")
+        if not isinstance(messages, list) or not messages:
+            raise AIServiceError("AI messages are unavailable")
+        system_messages, conversation = [], []
+        for message in messages:
+            if not isinstance(message, dict) or set(message) != {"role", "content"} \
+                    or message.get("role") not in {"system", "user", "assistant"} \
+                    or not isinstance(message.get("content"), str):
+                raise AIServiceError("AI messages are unavailable")
+            if message["role"] == "system":
+                system_messages.append(message["content"])
+            else:
+                conversation.append({"role": message["role"], "content": message["content"]})
+        if not system_messages or not any(message["role"] == "user" for message in conversation):
+            raise AIServiceError("AI messages are unavailable")
+        # Preserve system text and ordered roles without truncating either safety
+        # instructions or explicitly selected context to fit a provider limit.
+        instructions = "\n\n".join(system_messages)
+        prompt = json.dumps({
+            "format": "postpartum.conversation.v1", "messages": conversation,
+        }, ensure_ascii=False)
+        try:
+            with SessionLocal() as db:
+                result = await self.service.run(
+                    user_id=context.user_id, backend=self.backend,
+                    prompt=prompt, instructions=instructions,
+                    request_id=context.request_id, db=db,
+                )
+        except Exception:
+            raise AIServiceError("AI response unavailable") from None
+        if result.get("status") != "completed" or not isinstance(result.get("output"), str):
+            raise AIServiceError("AI response unavailable")
+        return {"text": result["output"], "provider": self.backend}
+
+    async def chat_stream(self, messages: List[Dict[str, str]], **kwargs) -> AsyncGenerator[Dict[str, Any], None]:
+        # AIService sees requires_full_response_validation and applies its whole
+        # answer pipeline before emitting a chunk to the household client.
+        try:
+            result = await self.chat(messages, **kwargs)
+            yield {"type": "chunk", "content": result["text"]}
+            yield {"type": "done"}
+        except Exception:
+            yield {"type": "error", "content": PUBLIC_AI_ERROR}
+
+
 def get_ai_provider() -> AIProvider:
     """Factory function to get the configured AI provider"""
     settings = get_settings()
@@ -287,5 +365,7 @@ def get_ai_provider() -> AIProvider:
         return ClaudeProvider()
     elif provider_name == "gemini":
         return GeminiProvider()
+    elif provider_name in {"codex", "claude_code", "agent"}:
+        return AgentRunnerProvider(provider_name)
     else:
-        raise ValueError(f"Unknown AI provider: {provider_name}. Supported: openai, claude, gemini")
+        raise ValueError("Unknown AI provider. Supported: openai, claude, gemini, codex, claude_code, agent")

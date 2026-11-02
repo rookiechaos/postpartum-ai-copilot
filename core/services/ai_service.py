@@ -1,6 +1,6 @@
 """
 AI Service - Handles all AI interactions via external API
-Supports multiple providers: OpenAI, Claude, Gemini
+Supports direct model APIs and explicitly configured isolated agent runners.
 """
 
 from typing import Dict, List, Any, Optional, AsyncGenerator
@@ -236,6 +236,21 @@ Please provide a helpful, empathetic response. Include:
         previous_exchange: Optional[Dict[str, str]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Stream AI response for real-time chat"""
+        if getattr(self.provider, "requires_full_response_validation", False):
+            # An isolated runner returns one complete answer. Reuse chat's input
+            # and output checks, suggestion validation and buffering before any
+            # of that answer reaches a streaming household client.
+            response = await self.chat(
+                query=query, context=context, rag_context=rag_context,
+                user_id=user_id, language=language, system_prompt=system_prompt,
+                previous_exchange=previous_exchange,
+            )
+            if response.get("error"):
+                yield {"type": "error", "content": PUBLIC_AI_ERROR}
+                return
+            yield {"type": "chunk", "content": response["text"]}
+            yield {"type": "done"}
+            return
         from services.ai_data_scope import previous_exchange_for_ai
         previous_exchange = previous_exchange_for_ai(previous_exchange, previous_exchange is not None)
         detector = get_nsfw_detector()

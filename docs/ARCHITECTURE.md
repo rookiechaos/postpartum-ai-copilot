@@ -10,6 +10,7 @@ Postpartum AI Copilot uses a server-client architecture with an async task queue
 | Domain logic | `core/services/` | Business services |
 | Workers | `workers/` | Async task processing |
 | Task queue | SQL-backed custom queue | Priority, retries, timeouts |
+| Agent providers | `core/services/ai_providers.py`, `core/services/agent_service.py`, `integrations/agent_runner/` | Optional household AI providers; isolated CLI adapters |
 | Database | SQLite (dev) / PostgreSQL (prod) | Users, tracking, tasks |
 | Frontend | React + Vite | Web UI |
 
@@ -52,6 +53,14 @@ Workers live in the top-level `workers/` directory (outside `backend/`) to keep 
 ```bash
 python workers/worker.py
 ```
+
+### Agent providers and execution gateway
+
+`AI_PROVIDER=codex|claude_code|agent` selects an optional `AgentRunnerProvider` behind the existing household `AIService`. It receives the same selected system/user/previous-answer messages and does not fetch extra records. Its result continues through the existing answer checks. Streaming aggregates a completed, checked answer before emitting one chunk. `AGENT_ENABLED` defaults to false. A call-local `ContextVar` binds the authenticated owner and request ID; workers derive a stable ID from the persisted task ID and do not automatically retry failures for these providers. No per-user state is placed on singleton service instances.
+
+The shared gateway reserves `agent_runs` metadata before one bounded HTTP attempt to a fixed endpoint, including a unique active slot per account. Reused request IDs return conflict metadata, never another execution or output replay. Separate `/api/agents/*` routes remain admin-only and provide explicit operational calls and owner-scoped metadata queries; household users use the existing chat/task endpoints. Unknown results require operational reconciliation.
+
+The optional CLI runner is deployed separately, with a fresh scratch home, application system instructions in a temporary private file, fixed CLI options, bounded streams, process-group cleanup and persistent SQLite reservations. Its network/filesystem isolation is an operator deployment requirement; it cannot mount application data or host credentials. API/worker containers do not install or invoke coding CLIs. Execution receipts omit text; existing family task storage still retains its questions and processed results. This revision adds a table to startup schema initialization; migration and runtime acceptance have not been executed. See [Agent contracts and rollout](integrations/AGENTS.md) and the [reference runner](../integrations/agent_runner/README.md).
 
 ### Localization
 

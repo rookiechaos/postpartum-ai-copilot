@@ -23,6 +23,19 @@ x-backend-environment: &backend_environment
   PAYPAL_CLIENT_SECRET: ${PAYPAL_CLIENT_SECRET:-}
   PAYPAL_ENVIRONMENT: ${PAYPAL_ENVIRONMENT:-sandbox}
 
+# The family AI provider may execute in either API or worker. Migration does not
+# receive runner secrets; CLI/provider API keys belong only to isolated runners.
+x-agent-environment: &agent_environment
+  AGENT_ENABLED: ${AGENT_ENABLED:-false}
+  AGENT_CODEX_RUNNER_URL: ${AGENT_CODEX_RUNNER_URL:-}
+  AGENT_CODEX_RUNNER_TOKEN: ${AGENT_CODEX_RUNNER_TOKEN:-}
+  AGENT_CLAUDE_CODE_RUNNER_URL: ${AGENT_CLAUDE_CODE_RUNNER_URL:-}
+  AGENT_CLAUDE_CODE_RUNNER_TOKEN: ${AGENT_CLAUDE_CODE_RUNNER_TOKEN:-}
+  AGENT_CUSTOM_RUNNER_URL: ${AGENT_CUSTOM_RUNNER_URL:-}
+  AGENT_CUSTOM_RUNNER_TOKEN: ${AGENT_CUSTOM_RUNNER_TOKEN:-}
+  AGENT_TIMEOUT_SECONDS: ${AGENT_TIMEOUT_SECONDS:-120}
+  AGENT_MAX_OUTPUT_CHARS: ${AGENT_MAX_OUTPUT_CHARS:-20000}
+
 services:
   # PostgreSQL Database
   postgres:
@@ -64,7 +77,8 @@ services:
   api:
     build: *backend_build
     container_name: postpartum_api
-    environment: *backend_environment
+    environment:
+      <<: [*backend_environment, *agent_environment]
     ports:
       - "8000:8000"
     depends_on:
@@ -93,7 +107,7 @@ services:
     build: *backend_build
     container_name: postpartum_worker
     environment:
-      <<: *backend_environment
+      <<: [*backend_environment, *agent_environment]
       NUM_WORKERS: ${NUM_WORKERS:-2}
     depends_on:
       postgres:

@@ -57,6 +57,14 @@ class HealthCheckService:
         try:
             settings = get_settings()
             provider = settings.ai_provider.lower()
+
+            if provider in {"codex", "claude_code", "agent"}:
+                # Configuration presence only: health checks never invoke a model.
+                return {
+                    "status": "configured" if settings.is_ai_configured() else "not_configured",
+                    "provider": provider,
+                    "runner_configured": settings.is_ai_configured(),
+                }
             
             # Check if API key is set
             api_key = settings.get_ai_api_key()

@@ -1,6 +1,12 @@
 # AI Providers Configuration Guide
 
-Postpartum AI Copilot 支持多种 AI 服务提供商：OpenAI、Anthropic Claude 和 Google Gemini。
+Postpartum AI Copilot 的家庭问答支持直接调用 OpenAI、Anthropic Claude、Google Gemini，也可选择隔离部署的 Codex、Claude Code 或自定义 Agent runner。
+
+## Agent / Codex / Claude Code 家庭问答接口
+
+运营者可设置 `AI_PROVIDER=codex`、`claude_code` 或 `agent`，并显式启用 `AGENT_ENABLED=true`、填写对应 runner 的完整 HTTPS 地址与 token。厂商密钥只保存在独立 runner 中；家庭仍使用现有资料选择和发送确认，不需要 CLI 或密钥设置。既有系统提示、已选前文与回答检查继续生效；同一任务的失败不会自动重试，新提供方的流式入口会等待完整检查后再返回。
+
+详细配置、隔离要求、自定义接口、资料处理说明、存储与防重边界见 [Agent 接入指南](../../integrations/AGENTS.md) 和 [独立 runner](../../../integrations/agent_runner/README.md)。功能默认关闭，未执行 CLI、应用、构建、迁移或测试。下面保留既有直接 API 的配置示例；示例模型名不代表当前可用性或本次的新推荐。
 
 ## 配置方法
 
@@ -9,7 +15,7 @@ Postpartum AI Copilot 支持多种 AI 服务提供商：OpenAI、Anthropic Claud
 在 `backend/.env` 文件中设置：
 
 ```bash
-AI_PROVIDER=openai  # 可选: openai, claude, gemini
+AI_PROVIDER=openai  # 可选: openai, claude, gemini, codex, claude_code, agent
 ```
 
 ### 2. OpenAI 配置

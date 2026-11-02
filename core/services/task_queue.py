@@ -101,6 +101,11 @@ class TaskQueue:
             from services.care_subjects import analysis_record_scope
             scope = analysis_record_scope(db, user_id, task_data.get("subject_id"), task_data.get("unassigned"))
             task_data = {**task_data, **scope}
+        if task_type in self.WORKER_TASK_TYPES:
+            from config.settings import get_settings
+            # The server selects and snapshots the answer provider. A client
+            # cannot redirect a queued request by supplying this private field.
+            task_data = {**task_data, "_answer_provider": get_settings().ai_provider.lower()}
         task_id = f"{task_type}_{uuid.uuid4().hex[:12]}"
         timeout = timeout or self.default_timeout
         
@@ -222,6 +227,7 @@ class TaskQueue:
         error: Optional[str] = None,
         worker_id: Optional[str] = None,
         started_at: Optional[datetime] = None,
+        retryable: bool = True,
     ) -> bool:
         """
         Update task status
@@ -232,6 +238,7 @@ class TaskQueue:
             db: Database session
             result: Task result (if completed)
             error: Error message (if failed)
+            retryable: Server-controlled provider retry policy; never client task data
         
         Returns:
             True if updated successfully
@@ -254,7 +261,7 @@ class TaskQueue:
             elif status == TaskStatus.FAILED:
                 retries = (task.retry_count or 0) + 1
                 values.update(error=error, retry_count=retries)
-                if retries < self.max_retries:
+                if retryable and retries < self.max_retries:
                     values.update(status=TaskStatus.PENDING.value, worker_id=None, started_at=None)
             rows_updated = db.execute(update(TaskDB).where(*conditions).values(**values)).rowcount
             db.commit()

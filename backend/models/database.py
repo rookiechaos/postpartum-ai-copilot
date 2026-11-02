@@ -598,3 +598,34 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     from utils.tracking_migrations import migrate_tracking_identity
     migrate_tracking_identity(engine)
+
+
+class AgentRunDB(Base):
+    """One-dispatch receipts for isolated AI runners; no prompts or outputs."""
+    __tablename__ = "agent_runs"
+
+    run_id = Column(String(36), primary_key=True)
+    user_id = Column(String, nullable=False, index=True)
+    request_id = Column(String(36), nullable=False)
+    backend = Column(String(24), nullable=False)
+    state = Column(String(16), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    finished_at = Column(DateTime, nullable=True)
+    # A unique nullable slot prevents concurrent dispatches for one operator,
+    # including when API requests land on different processes. A lease expiry
+    # only permits a new run; it does not cancel the previous runner execution.
+    active_user_id = Column(String, nullable=True, unique=True)
+    active_until = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("uq_agent_runs_user_request", "user_id", "request_id", unique=True),
+        CheckConstraint(
+            "backend IN ('codex', 'claude_code', 'agent')", name="ck_agent_run_backend"),
+        CheckConstraint(
+            "state IN ('reserved', 'running', 'completed', 'failed', 'unknown')",
+            name="ck_agent_run_state"),
+        CheckConstraint(
+            "(active_user_id IS NULL AND active_until IS NULL) OR "
+            "(active_user_id IS NOT NULL AND active_user_id = user_id AND active_until IS NOT NULL)",
+            name="ck_agent_run_lease"),
+    )

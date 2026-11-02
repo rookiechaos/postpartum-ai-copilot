@@ -1,0 +1,4 @@
+# Independent runner pins checked against PyPI on 2026-11-01; not installed here.
+fastapi==0.162.0
+uvicorn==0.54.0
+pydantic==2.14.2

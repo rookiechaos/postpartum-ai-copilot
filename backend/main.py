@@ -22,6 +22,7 @@ from middleware.admin import require_admin
 from models.schemas import User
 from api.auth_routes import router as auth_router
 from api.task_routes import router as task_router
+from api.agent_routes import router as agent_router
 from api.monitoring_routes import router as monitoring_router
 from api.feedback_routes import router as feedback_router
 from api.onboarding_routes import router as onboarding_router
@@ -98,6 +99,7 @@ rag_service = container.get("rag_service")
 # Register API routers
 app.include_router(auth_router)
 app.include_router(task_router)
+app.include_router(agent_router)
 app.include_router(monitoring_router)
 app.include_router(feedback_router)
 app.include_router(onboarding_router)
@@ -203,7 +205,7 @@ async def get_ai_provider_info():
     provider_name = settings.ai_provider.lower()
     return {
         "provider": provider_name,
-        "supported_providers": ["openai", "claude", "gemini"],
+        "supported_providers": ["openai", "claude", "gemini", "codex", "claude_code", "agent"],
         "configured": settings.is_ai_configured()
     }
 

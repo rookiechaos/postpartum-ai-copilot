@@ -6,6 +6,17 @@
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 const DEFAULT_REQUEST_TIMEOUT_MS = 30000
+const AI_REQUEST_TIMEOUT_MS = 330000
+const AI_POST_PATHS = new Set([
+  '/api/chat', '/api/chat/personalized', '/api/crisis', '/api/emotional-checkin', '/api/agents/runs',
+])
+
+function requestTimeoutMs(endpoint, method) {
+  const path = endpoint.split('?')[0]
+  const waitsForAI = method === 'POST' ? AI_POST_PATHS.has(path) :
+    method === 'GET' && /^\/api\/tracking\/[^/]+\/summary$/.test(path)
+  return waitsForAI ? AI_REQUEST_TIMEOUT_MS : DEFAULT_REQUEST_TIMEOUT_MS
+}
 
 // Token management
 const getToken = () => {
@@ -97,6 +108,41 @@ async function responseError(response, session) {
   const message = data?.error?.message ?? data?.detail
   const error = new Error(typeof message === 'string' ? message : `API error: ${response.status}`)
   error.status = response.status
+  // The existing HTTP exception handler wraps structured conflicts in message.
+  // Keep only this integration's fixed codes and validated, content-free receipt.
+  const conflictCodes = ['AGENT_REQUEST_ALREADY_RESERVED', 'AGENT_RUN_ACTIVE', 'AGENT_RUN_STATE_CHANGED']
+  if (response.status === 409 && message && typeof message === 'object' && !Array.isArray(message) &&
+      conflictCodes.includes(message.code)) {
+    const run = message.run
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const validTime = value => typeof value === 'string' &&
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/.test(value) &&
+      Number.isFinite(Date.parse(value))
+    const backendAllowed = ['codex', 'claude_code', 'agent']
+    const statusAllowed = ['reserved', 'running', 'completed', 'failed', 'unknown']
+    if (run && typeof run === 'object' && !Array.isArray(run) &&
+        typeof run.run_id === 'string' && uuid.test(run.run_id) &&
+        typeof run.request_id === 'string' && uuid.test(run.request_id) &&
+        backendAllowed.includes(run.backend) && statusAllowed.includes(run.status) &&
+        validTime(run.created_at) && (run.finished_at === null || validTime(run.finished_at)) &&
+        run.output_retained === false) {
+      const expectedError = run.status === 'failed' ? 'AGENT_RUN_FAILED' :
+        run.status === 'unknown' ? 'AGENT_RESULT_UNKNOWN' : null
+      if (expectedError ? run.error_code === expectedError : run.error_code == null) {
+        error.code = message.code
+        error.agentRun = {
+          run_id: run.run_id,
+          request_id: run.request_id,
+          backend: run.backend,
+          status: run.status,
+          created_at: run.created_at,
+          finished_at: run.finished_at,
+          output_retained: false,
+          ...(expectedError ? { error_code: expectedError } : {}),
+        }
+      }
+    }
+  }
   const validation = data?.error?.details?.errors
   if (response.status === 422 && Array.isArray(validation)) {
     error.validation = validation.filter(item => Array.isArray(item?.loc)).map(item => ({
@@ -200,7 +246,7 @@ export const api = {
   clearLegacyOfflineStorage,
   async get(endpoint, options = {}, isRetry = false) {
     const session = getAuthSession()
-    const { signal, cleanup } = withTimeout(options)
+    const { signal, cleanup } = withTimeout(options, requestTimeoutMs(endpoint, 'GET'))
     try {
       const response = await fetch(`${API_BASE}${endpoint}`, {
         ...options,
@@ -246,7 +292,7 @@ export const api = {
 
   async post(endpoint, data, options = {}, isRetry = false) {
     const session = getAuthSession()
-    const { signal, cleanup } = withTimeout(options)
+    const { signal, cleanup } = withTimeout(options, requestTimeoutMs(endpoint, 'POST'))
     try {
       const response = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
@@ -442,6 +488,23 @@ export const api = {
   },
   getAccountRequests() {
     return this.get('/api/account/requests')
+  },
+  // Operator-only agents use a separate gateway, never the household task queue.
+  getAgentCapabilities(options = {}) {
+    return this.get('/api/agents/capabilities', options)
+  },
+  runAgent(payload, options = {}) {
+    // Callers supply a stable request_id and explicit confirmed:true themselves.
+    // A connection failure must be checked, not retried with a new request ID.
+    return this.post('/api/agents/runs', payload, { ...options, timeout: options.timeout ?? AI_REQUEST_TIMEOUT_MS })
+  },
+  getAgentRun(runId, options = {}) {
+    // Metadata only: output is returned once by the original run request.
+    return this.get(`/api/agents/runs/${encodeURIComponent(runId)}`, options)
+  },
+  getAgentRunByRequest(requestId, options = {}) {
+    // The caller's stable ID is available even if the submission response was lost.
+    return this.get(`/api/agents/requests/${encodeURIComponent(requestId)}`, options)
   },
   createAccountRequest(kind, language) {
     return this.post('/api/account/requests', { kind, language })

@@ -88,15 +88,18 @@ async def require_institution_staff(current_user: User = Depends(get_current_use
 def read_profile(db: Session):
     record = db.get(PilotProfileDB, "local")
     settings = get_settings()
+    provider = settings.ai_provider.lower()
     services = []
-    if settings.nsfw_detection_enabled and settings.ai_provider.lower() == "openai" and settings.openai_api_key:
+    if settings.nsfw_detection_enabled and provider == "openai" and settings.openai_api_key:
         services.append({"purpose": "input_check", "provider": "OpenAI"})
     if settings.rag_enabled:
         services.append({"purpose": "reference_search", "provider": "OpenAI"})
     return {
         "profile": record.profile if record else PilotProfile().model_dump(mode="json"),
         "updated_at": record.updated_at.isoformat() + "Z" if record else None,
-        "ai_provider": settings.ai_provider,
+        "ai_provider": provider,
+        # Public handling information only; do not reveal runner endpoints or tokens.
+        "ai_transport": "isolated_runner" if provider in {"codex", "claude_code", "agent"} else "direct_api",
         # Configuration only; this is not a live availability check or a credential.
         "ai_services": services,
     }

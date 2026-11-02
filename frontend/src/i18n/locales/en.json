@@ -418,6 +418,9 @@
       "crisis": "Your current concern is used to prepare an AI reply and may undergo external input checking. Previous records and notes are not attached automatically. Use the listed phone services for urgent help."
     },
     "answerProvider": "AI answer service", "aiAttachments": "Check what to attach to this AI request",
+    "agentProviderUnknown": "AI service configured by the operator; see their handling notice",
+    "agentRelay": "This request passes through a relay configured by the operator.",
+    "agentRelayNotice": "The content of this AI request passes through a relay configured by the operator. Check the operator's notice for how the AI service and the relay handle it.",
     "attachProfile": "Attach baby's age, birth and feeding method, and average sleep (no names)", "attachHistory": "Attach mood categories from the last 7 days (no free-text notes)",
     "beforeRegistration": "Review data handling before registration", "processingProviders": "Configured additional services (used depending on the feature)", "servicePurposes": { "input_check": "Input and output content checking", "reference_search": "Search for references related to your question" },
     "dataPrivacy": "Data and privacy", "dataLocation": "Your account and saved records are stored on this service's server. Screen drafts stay in memory during this login session. Consultation files are not sent automatically.",

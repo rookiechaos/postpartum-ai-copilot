@@ -187,6 +187,14 @@ The interface supports Japanese and English. Support contacts target **Japan in 
 AI responses are labeled as generated content; rule checks and heuristic scores are not presented as medical certification or clinical confidence.
 This is a care companion for everyday support, not a diagnosis, treatment or emergency-response service.
 
+### Agent / Codex / Claude Code · 家庭向けAIの追加提供方法
+
+The operator can select `AI_PROVIDER=codex`, `claude_code` or `agent` for the existing family AI questions, alongside OpenAI, Claude and Gemini. These opt-in providers use the same selected materials, Japanese/English system instructions and answer checks. Families continue to use the current question/confirmation screen without entering keys or CLI settings. The optional runner deployment remains disabled by default (`AGENT_ENABLED=false`).
+
+Codex/Claude Code run in separate isolated infrastructure, with the application's system instructions replacing the CLI's coding-assistant instructions. Same-task execution is protected by durable receipts; failed agent tasks are not automatically retried. Answers return through the existing checks, including before a single completed chunk in streaming mode. The main API/worker do not launch CLIs. Existing household task storage still applies; only the separate execution receipts and reference runner omit question/answer content.
+
+See the [family provider integration and optional operator API](docs/integrations/AGENTS.md) and [isolated runner](integrations/agent_runner/README.md) for setup, actual provider disclosures, isolation and pending acceptance. The implementation adds `agent_runs` to schema initialization. **No runner deployment, CLI execution, migration, build or test was performed.**
+
 ## Run locally · 運営者向けセットアップ
 
 Families do not need API keys or model settings. The operator configures the server once.
@@ -206,7 +214,7 @@ python -c 'import secrets; print(secrets.token_hex(32))'
 ```
 
 Edit the ignored `do-not-upload/local/backend.env`: replace `JWT_SECRET_KEY` with a new random secret and configure your chosen provider's API key.
-Do not reuse the example values. Set `AI_PROVIDER` to `openai`, `claude` or `gemini`; use the corresponding API-key field.
+Do not reuse the example values. For direct model APIs, set `AI_PROVIDER` to `openai`, `claude` or `gemini` and use the corresponding API-key field. For opt-in `codex`, `claude_code` or `agent`, follow the [runner provider setup](docs/integrations/AGENTS.md#configuration); provider credentials stay in the isolated runner.
 Then start the API:
 
 ```bash
@@ -284,7 +292,7 @@ See [setup](docs/deployment/SETUP.md), [deployment](docs/deployment/DEPLOYMENT.m
 ## Architecture and APIs
 
 React/Vite/i18next → FastAPI → SQLAlchemy (SQLite locally, PostgreSQL with Compose).
-Background workers process AI tasks through OpenAI, Claude or Gemini.
+Background workers process AI tasks through direct OpenAI/Claude/Gemini APIs or an opt-in isolated Agent/Codex/Claude Code text runner. Failed runner tasks do not automatically requeue.
 
 | Endpoint | Access | Purpose |
 | --- | --- | --- |
@@ -299,6 +307,7 @@ Background workers process AI tasks through OpenAI, Claude or Gemini.
 | `GET /api/tracking/{user_id}/summary`, `POST /api/tasks` with `tracking_analysis` | Authenticated owner | Analyze one selected accessible baby, or unassigned records by default; adult health remains a separate opt-in |
 | `GET /api/account/requests`, `POST /api/account/requests` | Authenticated owner | Own account/privacy requests |
 | `GET /api/admin/account-requests`, `POST /api/admin/account-requests/{reference}` | Admin allowlist | Private support queue and public replies |
+| `GET /api/agents/capabilities`, `POST /api/agents/runs`, `GET /api/agents/runs/{run_id}`, `GET /api/agents/requests/{request_id}` | Admin allowlist; own receipts | Optional confirmed Agent/Codex/Claude Code text dispatch; read-only recovery, no automatic retry or retained output |
 | Existing tracking / context / chat APIs | Authenticated owner | Personal data and AI requests |
 
 The `pilot_profiles` and new `account_requests` tables use the existing startup table-initialization mechanism. Tracking records now have an immutable `record_key` and an incrementing `revision`. API initialization includes an idempotent SQLite/PostgreSQL migration that backfills identities on existing records without changing their care content. Updates/deletes require both values from a fresh read; outdated clients receive validation/conflict errors rather than overwriting records. Start workers only after API initialization has finished. No application startup or migration was executed during this edit; migration validation remains pending.
@@ -335,6 +344,7 @@ Production build, browser and full integration checks require their correspondin
 
 - [Japan pilot guide](docs/product/JAPAN_PILOT.md): scope, access, privacy and acceptance scenarios.
 - [Architecture](docs/ARCHITECTURE.md) · [Project structure](docs/PROJECT_STRUCTURE.md) · [Testing](docs/testing/TESTING.md).
+- [Agent interfaces](docs/integrations/AGENTS.md) · [Isolated Codex / Claude Code runner](integrations/agent_runner/README.md).
 - [Security review fixes](docs/security/SECURITY_FIXES_2026-10-10.md) · [Local-only files](do-not-upload/README.md).
 - Run `./check-privacy.sh` before publishing. Secrets, live contact information and real family data belong in ignored runtime files, not Git.
 - [Apache License 2.0](LICENSE) · [Contributing](CONTRIBUTING.md).

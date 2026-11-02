@@ -24,6 +24,10 @@ def register_all_services(container=None):
     def create_ai_service():
         from services.ai_service import AIService
         return AIService()
+
+    def create_agent_service():
+        from services.agent_service import AgentService
+        return AgentService()
     
     def create_tracking_service():
         from services.tracking_service import TrackingService
@@ -141,6 +145,7 @@ def register_all_services(container=None):
     services_to_register = [
         # Core services
         ("ai_service", create_ai_service),
+        ("agent_service", create_agent_service),
         ("tracking_service", create_tracking_service),
         ("personalization_service", create_personalization_service),
         ("task_queue", create_task_queue),

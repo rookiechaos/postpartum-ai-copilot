@@ -3,9 +3,10 @@ Application Settings - Centralized configuration management
 """
 
 from pydantic_settings import BaseSettings
-from pydantic import Field, ConfigDict, field_validator
+from pydantic import Field, ConfigDict, SecretStr, ValidationInfo, field_validator
 from typing import Optional, List
 from functools import lru_cache
+from urllib.parse import urlsplit
 from utils.runtime_paths import PROJECT_ROOT
 import warnings
 
@@ -17,7 +18,8 @@ class Settings(BaseSettings):
         env_file=(PROJECT_ROOT / "backend/.env", PROJECT_ROOT / "do-not-upload/local/backend.env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
-        extra="ignore"
+        extra="ignore",
+        hide_input_in_errors=True,
     )
     
     # Application
@@ -37,7 +39,16 @@ class Settings(BaseSettings):
     )
     
     # AI Provider Configuration
-    ai_provider: str = Field(default="openai", validation_alias="AI_PROVIDER")  # openai, claude, gemini
+    ai_provider: str = Field(default="openai", validation_alias="AI_PROVIDER")
+
+    @field_validator("ai_provider")
+    @classmethod
+    def validate_ai_provider(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in {"openai", "claude", "gemini", "codex", "claude_code", "agent"}:
+            raise ValueError("Select a supported AI provider")
+        return value
+
     openai_api_key: Optional[str] = Field(default=None, validation_alias="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4", validation_alias="OPENAI_MODEL")
     openai_embedding_model: str = Field(default="text-embedding-ada-002", validation_alias="OPENAI_EMBEDDING_MODEL")
@@ -45,6 +56,50 @@ class Settings(BaseSettings):
     claude_model: str = Field(default="claude-3-5-sonnet-20241022", validation_alias="CLAUDE_MODEL")
     google_api_key: Optional[str] = Field(default=None, validation_alias="GOOGLE_API_KEY")
     gemini_model: str = Field(default="gemini-pro", validation_alias="GEMINI_MODEL")
+
+    # Isolated text runners for optional family AI providers and operator calls.
+    agent_enabled: bool = Field(default=False, validation_alias="AGENT_ENABLED")
+    agent_codex_runner_url: Optional[str] = Field(default=None, max_length=2048, validation_alias="AGENT_CODEX_RUNNER_URL")
+    agent_codex_runner_token: Optional[SecretStr] = Field(default=None, min_length=32, max_length=4096, validation_alias="AGENT_CODEX_RUNNER_TOKEN")
+    agent_claude_code_runner_url: Optional[str] = Field(default=None, max_length=2048, validation_alias="AGENT_CLAUDE_CODE_RUNNER_URL")
+    agent_claude_code_runner_token: Optional[SecretStr] = Field(default=None, min_length=32, max_length=4096, validation_alias="AGENT_CLAUDE_CODE_RUNNER_TOKEN")
+    agent_custom_runner_url: Optional[str] = Field(default=None, max_length=2048, validation_alias="AGENT_CUSTOM_RUNNER_URL")
+    agent_custom_runner_token: Optional[SecretStr] = Field(default=None, min_length=32, max_length=4096, validation_alias="AGENT_CUSTOM_RUNNER_TOKEN")
+    agent_timeout_seconds: int = Field(default=120, ge=5, le=300, validation_alias="AGENT_TIMEOUT_SECONDS")
+    agent_max_output_chars: int = Field(default=20000, ge=100, le=20000, validation_alias="AGENT_MAX_OUTPUT_CHARS")
+
+    @field_validator(
+        "agent_codex_runner_url", "agent_claude_code_runner_url", "agent_custom_runner_url",
+        "agent_codex_runner_token", "agent_claude_code_runner_token", "agent_custom_runner_token",
+        mode="before",
+    )
+    @classmethod
+    def empty_agent_configuration(cls, value):
+        return None if value == "" else value
+
+    @field_validator("agent_codex_runner_token", "agent_claude_code_runner_token", "agent_custom_runner_token")
+    @classmethod
+    def validate_agent_runner_token(cls, value: Optional[SecretStr]) -> Optional[SecretStr]:
+        if value is not None and any(not 33 <= ord(character) <= 126 for character in value.get_secret_value()):
+            raise ValueError("Agent runner tokens must use printable ASCII without spaces")
+        return value
+
+    @field_validator("agent_codex_runner_url", "agent_claude_code_runner_url", "agent_custom_runner_url")
+    @classmethod
+    def validate_agent_runner_url(cls, value: Optional[str], info: ValidationInfo) -> Optional[str]:
+        if value is None:
+            return None
+        try:
+            parts = urlsplit(value)
+            _ = parts.port
+        except ValueError:
+            raise ValueError("Use a valid fixed agent runner endpoint") from None
+        loopback_development = info.data.get("debug") is True and parts.scheme == "http" and parts.hostname in {"localhost", "127.0.0.1", "::1"}
+        if (not parts.hostname or (parts.scheme != "https" and not loopback_development)
+            or parts.username is not None or parts.password is not None or parts.query or parts.fragment
+            or any(character.isspace() or ord(character) < 32 for character in value)):
+            raise ValueError("Agent runner endpoints require HTTPS without credentials, query or fragment")
+        return value
     
     # JWT Authentication
     jwt_secret_key: str = Field(
@@ -151,6 +206,11 @@ class Settings(BaseSettings):
     
     def is_ai_configured(self) -> bool:
         """Check if AI provider is configured"""
+        provider = self.ai_provider.lower()
+        if provider in {"codex", "claude_code", "agent"}:
+            prefix = "agent_custom" if provider == "agent" else f"agent_{provider}"
+            return bool(self.agent_enabled and getattr(self, f"{prefix}_runner_url") and
+                        getattr(self, f"{prefix}_runner_token"))
         return self.get_ai_api_key() is not None
 
 

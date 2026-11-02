@@ -5,6 +5,7 @@ AI Worker - processes AI-related tasks from the queue
 import asyncio
 from datetime import datetime
 from typing import Dict, Any
+from uuid import NAMESPACE_URL, uuid5
 
 from dotenv import load_dotenv
 
@@ -21,6 +22,7 @@ from services.rag_service import RAGService  # noqa: E402
 from services.personalization_service import PersonalizationService  # noqa: E402
 from services.logging_service import logger  # noqa: E402
 from services.ai_errors import PUBLIC_AI_ERROR  # noqa: E402
+from services.agent_execution import agent_call_scope  # noqa: E402
 from services.chat_presentation import retrieve_for_chat, chat_presentation  # noqa: E402
 from models.database import SessionLocal, engine  # noqa: E402
 from utils.schema_readiness import worker_schema_ready  # noqa: E402
@@ -73,20 +75,41 @@ class AIWorker:
 
         db = SessionLocal()
         claimed_started_at = None
+        retryable = getattr(self.ai_service.provider, "automatic_retry", True) is not False
         try:
             if not self.task_queue.claim_task(task_id, self.worker_id, db):
                 return {"error": "Failed to claim task"}
             claimed = self.task_queue.get_task(task_id, db)
             claimed_started_at = datetime.fromisoformat(claimed["started_at"])
 
-            if task_type == "ai_chat":
-                result = await self._process_chat_task(task_data, user_id, db)
-            elif task_type == "tracking_analysis":
-                result = await self._process_tracking_analysis(task_data, user_id, db)
-            elif task_type == "personalized_chat":
-                result = await self._process_personalized_chat(task_data, user_id, db)
-            else:
-                raise ValueError(f"Unknown task type: {task_type}")
+            # Never silently redirect queued family content to a newly selected
+            # service. Legacy tasks without a snapshot cannot enter a CLI runner.
+            snapshot = task_data.get("_answer_provider")
+            current_provider = self.ai_service.provider_name
+            if current_provider == "test":
+                from config.settings import get_settings
+                server_settings = get_settings()
+                if server_settings.test_mode:
+                    # The mock has no external provider, but queued requests
+                    # still obey the server's configured provider snapshot.
+                    current_provider = server_settings.ai_provider.lower()
+            if ((snapshot is not None and snapshot != current_provider) or
+                    (snapshot is None and current_provider in {"codex", "claude_code", "agent"})):
+                retryable = False
+                raise ValueError("Queued AI provider changed; a newly confirmed request is required")
+
+            # Keep one logical runner ID for this persisted task across workers,
+            # restarts and provider configuration changes. No prompt is hashed.
+            request_id = str(uuid5(NAMESPACE_URL, f"postpartum.agent.worker.v1:{user_id}:{task_id}"))
+            with agent_call_scope(user_id, request_id):
+                if task_type == "ai_chat":
+                    result = await self._process_chat_task(task_data, user_id, db)
+                elif task_type == "tracking_analysis":
+                    result = await self._process_tracking_analysis(task_data, user_id, db)
+                elif task_type == "personalized_chat":
+                    result = await self._process_personalized_chat(task_data, user_id, db)
+                else:
+                    raise ValueError(f"Unknown task type: {task_type}")
 
             updated = self.task_queue.update_task_status(
                 task_id=task_id,
@@ -109,6 +132,9 @@ class AIWorker:
                     error=PUBLIC_AI_ERROR,
                     worker_id=self.worker_id,
                     started_at=claimed_started_at,
+                    # CLI agents can have an unknown external outcome. Requeueing
+                    # is not safe even when the family task reports a failure.
+                    retryable=retryable,
                 )
             except Exception:
                 pass

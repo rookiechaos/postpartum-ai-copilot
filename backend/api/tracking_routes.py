@@ -16,6 +16,7 @@ from models.schemas import User, TrackingEntry, TrackingEntryCreate, TrackingEnt
 from models.database import TrackingEntryDB, TrackingWriteDB
 from services.task_queue import TaskPriority
 from services.ai_data_scope import analysis_profile_for_ai, records_for_ai
+from services.agent_execution import agent_call_scope
 from services.care_subjects import accessible_subjects, analysis_record_scope
 from exceptions import (
     PostpartumException,
@@ -208,11 +209,12 @@ async def get_tracking_summary(
             entries = records_for_ai(entries, include_parent, include_notes)
             context = analysis_profile_for_ai(await tracking_service.get_user_context(user_id, db), include_profile)
 
-            summary = await ai_service.analyze_tracking(
-                entries=entries,
-                context=context,
-                language=language
-            )
+            with agent_call_scope(user_id):
+                summary = await ai_service.analyze_tracking(
+                    entries=entries,
+                    context=context,
+                    language=language
+                )
             if summary.get("error"):
                 raise AIServiceError("AI analysis unavailable")
 
@@ -330,10 +332,11 @@ async def emotional_checkin(
     try:
         recent_moods = await tracking_service.get_mood_history(user_id, db, days=7) if checkin.include_history else []
 
-        analysis = await ai_service.analyze_emotional_state(
-            current_checkin={**checkin.model_dump(mode="json"), "user_id": user_id},
-            mood_history=recent_moods
-        )
+        with agent_call_scope(user_id):
+            analysis = await ai_service.analyze_emotional_state(
+                current_checkin={**checkin.model_dump(mode="json"), "user_id": user_id},
+                mood_history=recent_moods
+            )
 
         return {
             "assessment": analysis.get("assessment", ""),
